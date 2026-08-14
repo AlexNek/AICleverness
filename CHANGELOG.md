@@ -7,10 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+
 ## [1.0.0] - 2026-08-14
 
 ### Added
-
 - Provider-neutral AI execution runtime with `IAgentRuntime` orchestrator
 - `ILlmClient` abstraction for any AI provider adapter
 - `ITool` interface with `ToolDefinition`, `ToolInvocation`, and `ToolResult` models
@@ -36,3 +38,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests with xUnit and FluentAssertions
 - Benchmarks project with BenchmarkDotNet
 - Developer manual published as a documentation site via MkDocs Material and GitHub Pages
+- NuGet package ships a compact README with use cases and prominent links to the developer manual and the full repository README

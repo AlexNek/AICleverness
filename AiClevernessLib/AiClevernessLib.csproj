@@ -39,7 +39,7 @@
 
   <!-- Pack README and icon -->
   <ItemGroup>
-    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\README-NuGet.md" Pack="true" PackagePath="\README.md" />
     <None Include="assets\icon.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 
