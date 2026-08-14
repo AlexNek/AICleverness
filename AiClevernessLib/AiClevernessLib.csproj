@@ -22,8 +22,8 @@
     <!-- Repository metadata -->
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <RepositoryUrl>https://github.com/AlexNek/AiCleverness</RepositoryUrl>
-    <PackageProjectUrl>https://github.com/AlexNek/AiCleverness</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/AlexNek/AICleverness</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/AlexNek/AICleverness</PackageProjectUrl>
 
     <!-- Symbols / CI -->
     <IncludeSymbols>true</IncludeSymbols>

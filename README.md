@@ -63,7 +63,7 @@ Console.WriteLine(result.Output);
 ## Documentation
 
 The developer manual is published at
-[alexnek.github.io/AiCleverness](https://alexnek.github.io/AiCleverness/).
+[alexnek.github.io/AICleverness](https://alexnek.github.io/AICleverness/).
 
 For the full reference in one file — all interfaces, models, streaming,
 memory tiers, security, workflows, and DI setup — see the

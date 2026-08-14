@@ -1,8 +1,8 @@
 site_name: AiCleverness Developer Manual
 site_description: Developer manual for AiCleverness — provider-neutral AI execution runtime for .NET
-site_url: https://alexnek.github.io/AiCleverness/
-repo_url: https://github.com/AlexNek/AiCleverness
-repo_name: AlexNek/AiCleverness
+site_url: https://alexnek.github.io/AICleverness/
+repo_url: https://github.com/AlexNek/AICleverness
+repo_name: AlexNek/AICleverness
 
 theme:
   name: material
@@ -100,4 +100,4 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/AlexNek/AiCleverness
+      link: https://github.com/AlexNek/AICleverness

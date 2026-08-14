@@ -3,36 +3,36 @@
 ## Project Structure
 
 ```
-WebTools.NET_private/
-├── WebTools.NET/            (main library — NuGet package)
-├── WebTools.NET.Demo/       (demo console app)
-├── WebTools.NET.Tests/      (unit tests)
-└── WebTools.NET.sln
+AICleverness_private/
+├── AiClevernessLib/          (main library — NuGet package)
+├── AiClevernessLib.Demo/     (demo console app)
+├── AiClevernessLib.Tests/    (unit tests)
+└── AiCleverness.slnx
 ```
 
 ## Layer Dependency Direction (strict one-way)
 
 ```
-WebTools.NET.Demo   →  WebTools.NET  ←  WebTools.NET.Tests
-                        (library)
+AiClevernessLib.Demo   →  AiClevernessLib  ←  AiClevernessLib.Tests
+                             (library)
 ```
 
-- **WebTools.NET** — abstractions, models, service implementations, search providers, browser wrappers. This is the published NuGet package.
-- **WebTools.NET.Demo** — references WebTools.NET. Demonstrates all library features. Not published.
-- **WebTools.NET.Tests** — references WebTools.NET. Unit tests only. Not published.
+- **AiClevernessLib** — abstractions, models, service implementations, search providers, browser wrappers. This is the published NuGet package.
+- **AiClevernessLib.Demo** — references AiClevernessLib. Demonstrates all library features. Not published.
+- **AiClevernessLib.Tests** — references AiClevernessLib. Unit tests only. Not published.
 
-## Forbidden in WebTools.NET.Demo
+## Forbidden in AiClevernessLib.Demo
 
 - ❌ Production logic — demo is for demonstration only
-- ❌ Test assertions — tests belong in WebTools.NET.Tests
+- ❌ Test assertions — tests belong in AiClevernessLib.Tests
 
-## Forbidden in WebTools.NET.Tests
+## Forbidden in AiClevernessLib.Tests
 
-- ❌ References to WebTools.NET.Demo (no dependency)
+- ❌ References to AiClevernessLib.Demo (no dependency)
 - ❌ Live network calls in unit tests — use `FakeHttpMessageHandler` or NSubstitute mocks
 - ✅ Integration tests that hit the network must be in a separate category/trait
 
-## Forbidden in WebTools.NET (library)
+## Forbidden in AiClevernessLib (library)
 
 - ❌ References to Demo or Tests projects (circular dependency)
 - ❌ Console.WriteLine or any UI output
@@ -68,7 +68,7 @@ WebTools.NET.Demo   →  WebTools.NET  ←  WebTools.NET.Tests
 - Each release is a level-2 heading: `## [X.Y.Z] - YYYY-MM-DD`
 - Work-in-progress lives under: `## [Unreleased]`
 - Change categories (level-3 headings): `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`
-- Bottom of the file has reference links: `[X.Y.Z]: https://github.com/AlexNek/WebTools.NET/releases/tag/vX.Y.Z`
+- Bottom of the file has reference links: `[X.Y.Z]: https://github.com/AlexNek/AICleverness/releases/tag/vX.Y.Z`
 
 ### Algorithm: when making code changes
 
@@ -87,7 +87,7 @@ The `[Unreleased]` section must always describe the **final user-facing state re
 2. Add a new empty `## [Unreleased]` section above it
 3. Update the reference links at the bottom:
    - Change `[Unreleased]` link to compare `vX.Y.Z...HEAD`
-   - Add `[X.Y.Z]: https://github.com/AlexNek/WebTools.NET/releases/tag/vX.Y.Z`
+   - Add `[X.Y.Z]: https://github.com/AlexNek/AICleverness/releases/tag/vX.Y.Z`
 4. The release workflow (`.github/workflows/release.yml`) will automatically:
    - Build, test, and pack the NuGet package
    - Publish to NuGet.org
