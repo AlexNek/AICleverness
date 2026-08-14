@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="AiClevernessLib/AiClevernessLib.csproj" />
+  <Project Path="AiClevernessLib.Demo/AiClevernessLib.Demo.csproj" />
+  <Project Path="AiClevernessLib.Tests/AiClevernessLib.Tests.csproj" />
+  <Project Path="AiClevernessLib.Benchmarks/AiClevernessLib.Benchmarks.csproj" />
+</Solution>

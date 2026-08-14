@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>AiCleverness</RootNamespace>
+    <AssemblyName>AiCleverness</AssemblyName>
+
+    <!-- AOT and trimming support -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+
+    <!-- NuGet metadata -->
+    <PackageId>AiCleverness</PackageId>
+    <Title>AiCleverness</Title>
+    <Description>Provider-neutral AI execution runtime for .NET: agents, tools, policies, planning, quality gates, observers, and extensible orchestration.</Description>
+    <Authors>AlexNek</Authors>
+    <PackageTags>ai;agent;execution;orchestration;quality-gates;tools;runtime;abstractions</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+
+    <!-- Repository metadata -->
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <RepositoryUrl>https://github.com/AlexNek/AiCleverness</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/AlexNek/AiCleverness</PackageProjectUrl>
+
+    <!-- Symbols / CI -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AiClevernessLib.Tests" />
+    <InternalsVisibleTo Include="AiClevernessLib.Benchmarks" />
+  </ItemGroup>
+
+  <!-- Pack README and icon -->
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="assets\icon.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+  </ItemGroup>
+
+</Project>
