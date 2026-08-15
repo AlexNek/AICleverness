@@ -399,7 +399,7 @@ var request = new AgentRequest(
 
 | Type | Properties |
 |------|-----------|
-| `AgentRequest` | `Goal`, `AllowedToolNames`, `Parameters`, `AgentName` |
+| `AgentRequest` | `Goal`, `AllowedToolNames` (`null` = all tools, empty = no tools), `Parameters`, `AgentName` |
 | `AgentResult` | `Success`, `Output`, `Reasoning`, `Steps`, `Usage`, `Metadata` |
 | `DecisionResult` | `Decision`, `Approved`, `Confidence`, `Reasoning` |
 | `PolicyResult` | `Applied`, `Score`, `Recommendation`, `Reasoning` |

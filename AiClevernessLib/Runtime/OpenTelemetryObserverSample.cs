@@ -122,7 +122,7 @@ public sealed class OpenTelemetryObserverSample : IAgentObserver
         _logger.LogInformation(
             "AI execution started: goal={Goal}, tool_count={ToolCount}",
             request.Goal,
-            request.AllowedToolNames.Count);
+            request.AllowedToolNames?.Count ?? 0);
         return Task.CompletedTask;
     }
 

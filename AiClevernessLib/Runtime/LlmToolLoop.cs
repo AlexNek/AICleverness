@@ -92,9 +92,11 @@ internal sealed class LlmToolLoop
             ?? _options.DefaultCompletionTimeoutSeconds;
         var options = new LlmCompletionOptions(temperature, null, model);
 
+        // null = unrestricted (every registered tool); an explicit list — including
+        // an empty one — restricts the run to exactly the named tools.
         var allowedToolNames = request.AllowedToolNames;
         var availableTools = _tools.GetAvailableTools(context);
-        if (allowedToolNames.Count > 0)
+        if (allowedToolNames is not null)
         {
             availableTools = availableTools
                 .Where(t => allowedToolNames.Contains(t.Name, StringComparer.OrdinalIgnoreCase))

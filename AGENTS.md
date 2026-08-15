@@ -102,3 +102,9 @@ The `[Unreleased]` section must always describe the **final user-facing state re
 - Make surgical edits only: change exactly what the task requires.
 - Never refactor, "simplify", or restructure adjacent working code unless explicitly asked.
 - If a change seems to require touching unrelated structure, stop and ask first.
+
+## Git discipline (MANDATORY)
+
+- ❌ NEVER run `git commit`, `git push`, `git tag`, or any history-rewriting command — commits are made by the user only, with the user's own commit text
+- ✅ Leave finished changes in the working tree for the user to review, stage, and commit
+- ✅ You may suggest commit message text when asked, but never execute the commit yourself

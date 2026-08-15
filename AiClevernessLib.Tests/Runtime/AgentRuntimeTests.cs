@@ -2,6 +2,8 @@ using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Runtime;
 
+using AiClevernessLib.Tests.Testing;
+
 using FluentAssertions;
 
 namespace AiClevernessLib.Tests.Runtime;
@@ -64,6 +66,43 @@ public sealed class AgentRuntimeTests
 
         result.Success.Should().BeTrue();
         result.Output.Should().Be("Direct answer");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithEmptyAllowedToolNames_OffersNoTools()
+    {
+        // Arrange — an explicit empty list means "no tools"; only null is unrestricted
+        var llm = new FakeChatClient().SetDefaultResponse("final answer");
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+        var request = new AgentRequest("Test", AllowedToolNames: []);
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert — the registered tool must not be offered to the LLM
+        result.Success.Should().BeTrue();
+        llm.Calls.Should().NotBeEmpty();
+        llm.Calls.Should().OnlyContain(c => c.Tools == null || c.Tools.Count == 0);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithoutAllowedToolNames_OffersAllRegisteredTools()
+    {
+        // Arrange — null (the default) means unrestricted
+        var llm = new FakeChatClient().SetDefaultResponse("final answer");
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+        var request = new AgentRequest("Test");
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert — every registered tool is offered to the LLM
+        result.Success.Should().BeTrue();
+        llm.Calls.Should().OnlyContain(c => c.Tools != null && c.Tools.Count == 1);
     }
 
     [Fact]
