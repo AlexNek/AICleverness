@@ -56,6 +56,8 @@ Or register a tool directly on the registry:
 registry.Register(new WeatherTool(...));
 ```
 
-A registered tool is not automatically used. For one run, only the tools
-listed in `AgentRequest.AllowedToolNames` are offered to the model — see
+A registered tool is not automatically used. `AgentRequest.AllowedToolNames`
+decides which tools are offered to the model for one run: `null` (the
+default) allows all registered tools, an empty list allows none, and a list
+of names allows only the matching tools — see
 [Runtime Pipeline](../concepts/runtime-pipeline.md).

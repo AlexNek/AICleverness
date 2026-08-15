@@ -17,10 +17,10 @@ await foreach (var evt in runtime.RunStreamingAsync(request))
         case ModelChunkEvent chunk:
             Console.Write(chunk.Content);
             break;
-        case ToolCompletedEvent tool:
-            Console.WriteLine($"[Tool] {tool.ToolName}: {tool.Output}");
+        case ToolCompletedAgentEvent tool:
+            Console.WriteLine($"[Tool] {tool.ToolName}: {tool.Result.Output}");
             break;
-        case ExecutionCompletedEvent done:
+        case RunCompletedEvent done:
             Console.WriteLine($"\nDone: {done.Result.Output}");
             break;
     }
@@ -33,8 +33,8 @@ All events are subtypes of the `AgentEvent` record. The most important
 ones:
 
 - `ModelChunkEvent` — a part of the model's text output.
-- `ToolCompletedEvent` — a tool call has finished; contains its output.
-- `ExecutionCompletedEvent` — the run is done; contains the final
+- `ToolCompletedAgentEvent` — a tool call has finished; contains its output.
+- `RunCompletedEvent` — the run is done; contains the final
   `AgentResult`.
 
 Every event carries the execution id. If several runs stream at the same

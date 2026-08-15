@@ -36,8 +36,8 @@ public sealed class JsonSchemaGate : IAgentQualityGate
 services.AddAgentQualityGate<JsonSchemaGate>();
 ```
 
-The gate returns a `QualityGateResult` with three fields: `Approved` (is
-the answer acceptable?), `Retry` (should the model try again?), and
+The gate returns a `QualityGateResult` with three core fields: `Approved`
+(is the answer acceptable?), `Retry` (should the model try again?), and
 `Reason` (the explanation for the model).
 
 ## Retry Behavior

@@ -17,8 +17,8 @@ pipeline:
 | `IOutputGuard` | Checks the output: leaked secrets, dangerous content |
 | `IApprovalService` | Pauses the run so a human can approve or reject it, then continues |
 | `IScopeValidator` | Limits what a tool can touch (paths, hosts, size, writes) |
-| `IAgentInputValidator` | Checks the agent input before the run (can be registered for one agent only) |
-| `IIdempotencyCache` | Stops the same tool call from running twice during retries |
+| `IAgentInputValidator` | Checks the agent input before the run; registered for all agents by default, or for one agent via an `appliesTo` condition |
+| `IIdempotencyCache` | Stores results of successful tool calls and replays them during retries, so a successful call does not run twice |
 
 ## Approval Flow
 

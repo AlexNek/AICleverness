@@ -86,7 +86,7 @@ var request = new AgentRequest(
     {
         ["system_prompt"] = "You are a URL research specialist.",
         ["max_turns"] = 10,               // max LLM turns
-        ["temperature"] = 0.0f,            // 0 = always the same answer
+        ["temperature"] = 0.0f,            // 0 = less variation between answers
         ["model"] = "gpt-4o",              // model name for this run
         ["completion_timeout_seconds"] = 120,  // max wait for one LLM call
         ["tool_timeout_seconds"] = 30,         // max wait for one tool call

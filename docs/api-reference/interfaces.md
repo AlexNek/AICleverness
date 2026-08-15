@@ -28,7 +28,7 @@ them grouped by topic.
 | Interface | What it does |
 | --- | --- |
 | `IAgentPolicy` | A guard before the run; can stop the run |
-| `IAgentInputValidator` | Checks the input (can be registered for one agent only) |
+| `IAgentInputValidator` | Checks the input; registered for all agents by default, or for one agent via an `appliesTo` condition |
 | `IAgentPlanner` / `INamedAgentPlanner` | Splits the goal into steps |
 | `IPlannerRegistry` | Finds a named planner |
 | `IAgentStrategy` / `IStrategyRegistry` | Answers the goal without the LLM |

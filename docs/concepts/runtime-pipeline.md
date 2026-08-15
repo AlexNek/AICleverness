@@ -91,7 +91,9 @@ of the request:
 
 The model reads this list and can only choose a tool from this list. If a tool
 is not in the list, the model does not know that it exists — so it can never
-call it.
+call it. This restriction is also checked a second time, when the tool call
+comes back: if the model names an excluded tool anyway, the runtime refuses
+to run it and tells the model so.
 
 There are two layers:
 
@@ -100,7 +102,7 @@ There are two layers:
 2. **`AllowedToolNames`** — a filter on top of the registry. It never adds
    tools. It only reduces which tools are sent with the request for this run.
 
-```
+```text
 Registered tools:   search_web, fetch_url, verify_url
          │
          ▼   AllowedToolNames filter (applied before the call)

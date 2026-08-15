@@ -24,8 +24,9 @@ services.AddAgentResultTransformer<PiiRedactor>();
 
 Implement `IAgentResultTransformer` to rewrite the output. Typical uses:
 remove personal data, fix the formatting, unify the output format. If you
-register several transformers, they run in the same order as you registered
-them.
+register several transformers, they run in descending `Priority` order —
+the highest `Priority` runs first. When two transformers have the same
+`Priority`, they run in the order you registered them.
 
 ## Output Guards
 

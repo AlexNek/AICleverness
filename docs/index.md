@@ -31,9 +31,9 @@ your code.
 
 ## Architecture at a Glance
 
-Every feature is a small interface in the `AiCleverness.Abstractions`
-namespace. The runtime puts them together and does not need to know any
-details about your AI provider:
+Most extension points are small interfaces in the
+`AiCleverness.Abstractions` namespace. The runtime puts them together and
+does not need to know any details about your AI provider:
 
 ```mermaid
 graph LR

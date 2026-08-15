@@ -7,7 +7,9 @@ every public type and its properties.
 
 | Type | Properties |
 | --- | --- |
-| `AgentRequest` | `Goal`, `AllowedToolNames`, `Parameters`, `AgentName` |
+| `AgentRequest` | `Goal`, `AllowedToolNames`, `Parameters`, `AgentName`, `CapabilityRequirements` |
+| `CapabilityRequirements` | `Capabilities`, `Properties` — what the run needs from the model/provider; used to pick a suitable model |
+| `Capabilities` | `CapabilityFlags`, `CostTier`, `MaxLatencyMs`, `MinContextWindow`, `QualityTier` (all optional — `null` means no constraint) |
 | `AgentResult` | `Success`, `Output`, `Reasoning`, `Steps`, `Usage`, `Metadata` |
 | `DecisionResult` | `Decision`, `Approved`, `Confidence`, `Reasoning` |
 | `PolicyResult` | `Applied`, `Score`, `Recommendation`, `Reasoning` |
@@ -53,7 +55,7 @@ every public type and its properties.
 | `ExecutionStatus` | `Created`, `Validating`, `Planning`, `Executing`, `Completed`, `Failed`, `Cancelled`, ... |
 | `AgentExecutionState` | `ExecutionId`, `Status`, `Metadata`, `State`, `Items`, `Artifacts` |
 | `ExecutionEvent` | `ExecutionId`, `EventType`, `Timestamp`, `Data` |
-| `AgentEvent` (and subtypes) | Streaming events: `ModelChunkEvent`, `ToolCompletedEvent`, etc. |
+| `AgentEvent` (and subtypes) | Streaming events: `ModelChunkEvent`, `ToolCompletedAgentEvent`, etc. |
 | `ExecutionManifest` | `ExecutionId`, `Status`, `Duration`, `Events`, `Artifacts` |
 | `ExecutionSnapshot` | `SchemaVersion`, `ExecutionId`, `Status`, `Goal`, counters, result |
 | `ExecutionGraph` | `Nodes`, `Edges`, `ToMermaid()` export |

@@ -31,7 +31,7 @@ The package already contains working defaults for the most common parts:
 | Part | What the package provides |
 | --- | --- |
 | The runtime | `IAgentRuntime` / `IStreamingAgentRuntime` with a default implementation |
-| Tool execution | A default executor with timeout, retries, and protection against running the same tool call twice |
+| Tool execution | A default executor with timeout and retries. Protection against running the same tool call twice is not part of the default — it is opt-in with `AddIdempotencyCache()` and `IdempotentToolExecutor` (see [Tool Idempotency](../tools/tool-idempotency.md)) |
 | Memory | In-memory implementations for all memory tiers |
 | Persistence | In-memory checkpoint store and execution journal |
 | Observability | Collectors for metrics, diagnostics, and startup analysis |

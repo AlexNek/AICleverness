@@ -47,9 +47,11 @@ services.AddAgentInputValidator<ValidUrlInputValidator>(
     appliesTo: ctx => ctx.AgentName == "UrlResearchAgent");
 ```
 
-Input validators run after the policies and before the planning. If one
-fails, the run stops immediately and returns an `InputValidationResult`
-with `IsValid` and `Error`.
+Input validators run after the policies and before the planning. Each
+validator answers with an `InputValidationResult` that has two fields:
+`IsValid` and `Error`. If one fails, the run stops immediately. The run
+then returns an unsuccessful `AgentResult` that contains the validation
+error — it does not return the `InputValidationResult` itself.
 
 ## Implementation Note
 

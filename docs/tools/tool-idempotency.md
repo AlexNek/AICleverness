@@ -1,15 +1,23 @@
 # Tool Idempotency
 
-Idempotency here means: **the same tool call never runs twice**.
+Idempotency here means: **a successful tool call never runs twice in the
+same run**.
 
 Why is this needed? A quality gate can reject the model's answer and force
 a retry. During the retry, the model may ask for the same tool call again.
 For tools with real side effects — sending mail, creating records, charging
 money — this is dangerous.
 
-The idempotency layer solves this. It remembers the result of every
-successful tool call. If the same call comes again, it returns the stored
-result instead of running the tool a second time.
+The idempotency layer solves this for successful calls. It remembers the
+result of every successful tool call. If the same call comes again, it
+returns the stored result instead of running the tool a second time.
+
+**Failed calls are different.** A failed call is never stored, so it may
+run again. Usually this is what you want. But a call can fail *after* its
+side effect already happened — for example: the mail was sent, but the
+confirmation timed out. If your tool has this risk, make the tool itself
+safe: give the call its own idempotency key (a business transaction id),
+or check the outcome transactionally before doing the work again.
 
 ## Wiring
 

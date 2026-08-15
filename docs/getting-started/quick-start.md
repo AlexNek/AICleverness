@@ -1,10 +1,13 @@
 # Quick Start
 
-You need three things to run an agent:
+You need two things to run an agent, and one optional thing:
 
 1. An `ILlmClient` — the connection to your AI provider.
-2. At least one `ITool` — something the agent can do.
-3. DI registration — connect both to the runtime.
+2. DI registration — connect everything to the runtime.
+3. *(Optional)* At least one `ITool` — something the agent can do. Tools
+   are only needed for runs where the model may call tools. For an
+   explicit tool-free run, pass `AllowedToolNames: []` — the model then
+   answers directly with text.
 
 ## 1. Implement ILlmClient — talk to your AI provider
 
@@ -30,9 +33,10 @@ public sealed class MyLlmClient : ILlmClient
 }
 ```
 
-## 2. Implement ITool — something the agent can do
+## 2. Implement ITool — something the agent can do (optional)
 
-A tool has a name, a description, and a parameter schema. The model reads
+Skip this step if your run needs no tools. A tool has a name, a
+description, and a parameter schema. The model reads
 these three things and decides when to call the tool.
 
 ```csharp
