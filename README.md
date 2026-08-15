@@ -399,7 +399,7 @@ var request = new AgentRequest(
 
 | Type | Properties |
 |------|-----------|
-| `AgentRequest` | `Goal`, `AllowedToolNames`, `Parameters`, `AgentName` |
+| `AgentRequest` | `Goal`, `AllowedToolNames` (`null` = all tools, empty = no tools), `Parameters`, `AgentName`, `CapabilityRequirements` |
 | `AgentResult` | `Success`, `Output`, `Reasoning`, `Steps`, `Usage`, `Metadata` |
 | `DecisionResult` | `Decision`, `Approved`, `Confidence`, `Reasoning` |
 | `PolicyResult` | `Applied`, `Score`, `Recommendation`, `Reasoning` |
@@ -490,7 +490,7 @@ services.AddVectorMemory<PgVectorMemory>();
 | `IApprovalService` | Human-in-the-loop pause/approve/reject/resume |
 | `IScopeValidator` | Enforce tool input scope isolation |
 | `IAgentInputValidator` | Validate agent input before execution (per-agent scoped) |
-| `IIdempotencyCache` | Prevent duplicate tool execution during retries |
+| `IIdempotencyCache` | Prevent duplicate execution of successful tool calls during retries |
 
 Tools can declare `RequiresApproval = true` and `DangerLevel` in their `ToolDefinition`. The runtime respects these via the approval service and danger-level validation.
 

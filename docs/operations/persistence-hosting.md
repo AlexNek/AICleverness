@@ -1,16 +1,18 @@
 # Persistence, Replay, and Hosting
 
-Execution state can be persisted, replayed, and scheduled — all opt-in.
+By default, a run lives only in memory. If you need more — saving the state
+of a run, running it again later, or scheduling many runs — you can add it.
+Nothing of this is active unless you register it.
 
 ## The Persistence Interfaces
 
-| Interface | Purpose |
+| Interface | What it does |
 | --- | --- |
-| `ICheckpointStore` | Persist execution checkpoints |
-| `IExecutionJournal` | Append-only execution event journal |
-| `IExecutionReplayer` | Replay executions from checkpoints |
-| `IExecutionScheduler` | Queue, prioritize, and schedule executions |
-| `IShutdownCoordinator` | Graceful shutdown with drain |
+| `ICheckpointStore` | Saves the state of a run, so it can continue later |
+| `IExecutionJournal` | A log of all run events; entries are only added, never changed |
+| `IExecutionReplayer` | Runs a saved execution again |
+| `IExecutionScheduler` | Puts runs in a queue and decides their order |
+| `IShutdownCoordinator` | Clean shutdown: let running work finish first |
 
 ## Registration
 
@@ -24,19 +26,19 @@ services.AddHostedAgentRuntime(options =>
 });
 ```
 
-The in-memory implementations are suitable for development and testing;
-implement the interfaces for durable stores.
+The in-memory versions are good for development and testing. For
+production, implement the same interfaces with a real database.
 
 ## Hosting
 
-`AddHostedAgentRuntime()` registers `HostedAgentRuntimeService`, an
-`IHostedService` that:
+`AddHostedAgentRuntime()` registers `HostedAgentRuntimeService`. This is an
+`IHostedService` (a standard .NET background service) that:
 
-- Limits concurrent executions (`MaxConcurrentExecutions`)
-- Drains in-flight executions on shutdown (`GracePeriodSeconds`) via
-  `IShutdownCoordinator`
-- Integrates with the execution scheduler for queued work
+- Limits how many runs go at the same time (`MaxConcurrentExecutions`)
+- On shutdown, waits for running work to finish before stopping
+  (`GracePeriodSeconds`), through `IShutdownCoordinator`
+- Works together with the execution scheduler for queued runs
 
 Execution artifacts (`IExecutionArtifact` / `IExecutionArtifactCollection`)
-and snapshots (`ExecutionSnapshot`) capture the state needed for replay and
-auditing.
+and snapshots (`ExecutionSnapshot`) save the state of a run. You need them
+for replay and for auditing.

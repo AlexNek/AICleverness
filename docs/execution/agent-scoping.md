@@ -1,17 +1,18 @@
 # Agent Scoping
 
-Every extension point supports two registration modes: **global** (runs on
-all agents, the default) and **agent-scoped** (runs only on agents matching
-a predicate).
+You can have several agents in one application. By default, every
+registered component (policy, gate, validator, ...) runs for **all**
+agents. With scoping, you can say: "this component runs only for *this*
+agent".
 
-## Registration Modes
+## Two Ways to Register
 
 ```csharp
-// GLOBAL — runs on ALL agents (default, backward compatible)
+// GLOBAL — runs on ALL agents (this is the default)
 services.AddAgentQualityGate<JsonQualityGate>();
 services.AddAgentResultValidator<MyValidator>();
 
-// AGENT-SCOPED — runs only on agents matching the predicate
+// SCOPED — runs only on agents that match the condition
 services.AddAgentQualityGate<UrlStructureGate>(
     appliesTo: ctx => ctx.AgentName == "UrlResearchAgent");
 services.AddAgentInputValidator<PricingFormatValidator>(
@@ -20,35 +21,40 @@ services.AddAgentResultValidator<DomainValidator>(
     appliesTo: ctx => ctx.AgentName == "DataAgent");
 ```
 
-The `appliesTo` predicate receives the `IAgentContext`, so scoping can match
-on any context property, not just the agent name.
+The `appliesTo` argument is a small function that returns `true` or
+`false`. It receives the `IAgentContext`, so you can match on any context
+property — not only the agent name.
 
 ## Selecting the Agent
 
-Pass `AgentName` in the request — it drives the scoping predicates:
+The request decides which agent runs, through `AgentName`. The scoped
+components compare their condition against this name:
 
 ```csharp
 var request = new AgentRequest(
     Goal: "Find pricing URL",
-    AgentName: "UrlResearchAgent",      // matches scoping predicates
+    AgentName: "UrlResearchAgent",      // scoped components match against this
     AllowedToolNames: ["search_web"]);
 ```
 
 ## Input Validation
 
-A dedicated pipeline stage validates input before execution begins:
+Input validation is its own step in the pipeline. It checks the input
+before any work starts:
 
 ```csharp
 services.AddAgentInputValidator<ValidUrlInputValidator>(
     appliesTo: ctx => ctx.AgentName == "UrlResearchAgent");
 ```
 
-Input validators run after policies, before planning. They short-circuit
-execution on failure and return an `InputValidationResult`
-(`IsValid`, `Error`).
+Input validators run after the policies and before the planning. Each
+validator answers with an `InputValidationResult` that has two fields:
+`IsValid` and `Error`. If one fails, the run stops immediately. The run
+then returns an unsuccessful `AgentResult` that contains the validation
+error — it does not return the `InputValidationResult` itself.
 
 ## Implementation Note
 
-Scoping is implemented with filter wrappers (`FilteredPolicy`,
-`FilteredGate`, etc.) in `Runtime/Filtering` — the runtime itself stays
-agnostic of scoping rules.
+Scoping works with small wrapper classes (`FilteredPolicy`, `FilteredGate`,
+and so on) in `Runtime/Filtering`. The runtime itself contains no scoping
+rules.

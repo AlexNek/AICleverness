@@ -1,18 +1,19 @@
 # Memory Tiers
 
-AiCleverness supports three memory tiers behind the aggregate interface
-`IAggregateMemory`:
+Agents can store and read data through memory. AiCleverness has three
+types of memory. `IAggregateMemory` gives you one entry point to all three:
 
-| Tier | Interface | Purpose |
+| Type | Interface | What it is for |
 | --- | --- | --- |
-| Working | `IWorkingMemory` | Per-execution ephemeral state |
-| Long-term | `ILongTermMemory` | Persistent cross-execution storage |
-| Vector | `IVectorMemory` | Semantic search with embeddings |
+| Working | `IWorkingMemory` | Temporary data for one run; gone when the run ends |
+| Long-term | `ILongTermMemory` | Data that stays, also between different runs |
+| Vector | `IVectorMemory` | Search by meaning (embeddings), not by exact words |
 
 ## Registration
 
-`AddAiClevernessRuntime()` includes an in-memory default
-(`InMemoryAgentMemory`). Register individual tiers to swap backends:
+`AddAiClevernessRuntime()` already registers an in-memory default
+(`InMemoryAgentMemory`). If you want a real database or cache behind one
+type, register your own implementation for that type:
 
 ```csharp
 services.AddWorkingMemory<RedisWorkingMemory>();
@@ -22,8 +23,9 @@ services.AddVectorMemory<PgVectorMemory>();
 
 ## Simple Key-Value Memory
 
-`IAgentMemory` is the flat key-value storage available to agents during
-execution. Default is in-memory; swap for Redis, SQLite, etc.:
+`IAgentMemory` is the simplest form: a key-value store that an agent can
+use during a run. The default lives in memory, but you can replace it with
+Redis, SQLite, or anything else:
 
 ```csharp
 public class RedisAgentMemory : IAgentMemory

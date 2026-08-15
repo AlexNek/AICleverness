@@ -1,7 +1,8 @@
 # Defining Tools
 
-Tools are **executors, not deciders**. They never decide what to do — they
-only perform work when called by the runtime.
+A tool performs work — it never decides anything. The model decides *what*
+to do; the tool only does what the model asks for, when the runtime calls
+it.
 
 ## The ITool Interface
 
@@ -15,29 +16,32 @@ public interface ITool
 }
 ```
 
-The `Definition` exposes a JSON schema describing the tool's arguments, so
-the LLM knows how to call it. `ToolInvocation` carries the `Name`,
-`Arguments`, and an optional `InvocationId`; the tool returns a `ToolResult`
-with `Success`, `Output`, and `Error`.
+The `Definition` contains a JSON schema that describes the tool's
+arguments. The model reads this schema to know how to call the tool.
+
+When the runtime calls your tool, it passes a `ToolInvocation` with the
+`Name`, the `Arguments`, and an optional `InvocationId`. Your tool returns
+a `ToolResult` with `Success`, `Output`, and `Error`.
 
 ## Tool Metadata
 
-`ToolDefinition` supports metadata beyond name, description, and schema:
+A `ToolDefinition` can carry more information than name, description, and
+schema. The runtime and other components use this metadata:
 
-| Property | Purpose |
+| Property | What it is for |
 | --- | --- |
-| `Category` | Grouping for registries and UI |
-| `Version` | Tool versioning |
-| `CostPerCall` | Budgeting and resource estimates |
-| `RequiresApproval` | Route through the [approval service](../security/security-approval.md) |
-| `DefaultTimeout` | Per-tool timeout for the executor |
-| `Parallelizable` | Whether concurrent calls are safe |
+| `Category` | Group tools together, for example in a UI |
+| `Version` | The version of the tool |
+| `CostPerCall` | Estimate the cost and budget of a run |
+| `RequiresApproval` | If true, the call first goes through the [approval service](../security/security-approval.md) |
+| `DefaultTimeout` | The timeout for this tool, used by the executor |
+| `Parallelizable` | Whether two calls of this tool can run at the same time |
 | `DangerLevel` | `Safe`, `Low`, `Medium`, `High`, `Critical` |
-| `Authentication` | Credential requirements |
-| `Tags` | Free-form labels |
+| `Authentication` | What credentials the tool needs |
+| `Tags` | Any labels you want to add |
 
-The runtime respects `RequiresApproval` and `DangerLevel` through the
-approval service and danger-level validation.
+The runtime checks `RequiresApproval` and `DangerLevel` before a tool call
+runs.
 
 ## Registration
 
@@ -46,11 +50,14 @@ services.AddAgentTool<WeatherTool>();
 services.AddAgentTool<SearchTool>();
 ```
 
-Or manually against the registry:
+Or register a tool directly on the registry:
 
 ```csharp
 registry.Register(new WeatherTool(...));
 ```
 
-Only tools listed in `AgentRequest.AllowedToolNames` are offered to the LLM
-for a given run — see [Runtime Pipeline](../concepts/runtime-pipeline.md).
+A registered tool is not automatically used. `AgentRequest.AllowedToolNames`
+decides which tools are offered to the model for one run: `null` (the
+default) allows all registered tools, an empty list allows none, and a list
+of names allows only the matching tools — see
+[Runtime Pipeline](../concepts/runtime-pipeline.md).

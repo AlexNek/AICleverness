@@ -119,10 +119,18 @@ public sealed class OpenTelemetryObserverSample : IAgentObserver
         IAgentContext context,
         CancellationToken cancellationToken)
     {
+        // null = unrestricted (every registered tool); an explicit list —
+        // including an empty one (no tools) — restricts the run.
+        var toolSelection = request.AllowedToolNames is null
+                                ? "unrestricted"
+                                : request.AllowedToolNames.Count == 0
+                                    ? "none"
+                                    : "named";
         _logger.LogInformation(
-            "AI execution started: goal={Goal}, tool_count={ToolCount}",
+            "AI execution started: goal={Goal}, tool_selection={ToolSelection}, tool_count={ToolCount}",
             request.Goal,
-            request.AllowedToolNames.Count);
+            toolSelection,
+            request.AllowedToolNames?.Count ?? -1);
         return Task.CompletedTask;
     }
 

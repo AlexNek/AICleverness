@@ -10,8 +10,12 @@ public sealed record AgentRequest(
     string? AgentName = null,
     CapabilityRequirements? CapabilityRequirements = null)
 {
-    public IReadOnlyList<string> AllowedToolNames { get; init; } =
-        AllowedToolNames ?? Array.Empty<string>();
+    /// <summary>
+    /// Names of the tools this run may use. <c>null</c> (the default) means
+    /// unrestricted — every registered tool is available. An empty list means
+    /// no tools at all.
+    /// </summary>
+    public IReadOnlyList<string>? AllowedToolNames { get; init; } = AllowedToolNames;
 
     public IReadOnlyDictionary<string, object> Parameters { get; init; } =
         Parameters ?? new Dictionary<string, object>();

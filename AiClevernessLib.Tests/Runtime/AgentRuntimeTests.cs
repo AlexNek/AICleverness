@@ -2,6 +2,8 @@ using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Runtime;
 
+using AiClevernessLib.Tests.Testing;
+
 using FluentAssertions;
 
 namespace AiClevernessLib.Tests.Runtime;
@@ -64,6 +66,89 @@ public sealed class AgentRuntimeTests
 
         result.Success.Should().BeTrue();
         result.Output.Should().Be("Direct answer");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithEmptyAllowedToolNames_OffersNoTools()
+    {
+        // Arrange — an explicit empty list means "no tools"; only null is unrestricted
+        var llm = new FakeChatClient().SetDefaultResponse("final answer");
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+        var request = new AgentRequest("Test", AllowedToolNames: []);
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert — the registered tool must not be offered to the LLM
+        result.Success.Should().BeTrue();
+        llm.Calls.Should().NotBeEmpty();
+        llm.Calls.Should().OnlyContain(c => c.Tools == null || c.Tools.Count == 0);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithoutAllowedToolNames_OffersAllRegisteredTools()
+    {
+        // Arrange — null (the default) means unrestricted
+        var llm = new FakeChatClient().SetDefaultResponse("final answer");
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+        var request = new AgentRequest("Test");
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert — every registered tool is offered to the LLM
+        result.Success.Should().BeTrue();
+        llm.Calls.Should().OnlyContain(c => c.Tools != null && c.Tools.Count == 1);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithEmptyAllowedToolNames_NeverExecutesToolCall()
+    {
+        // Arrange — even if the LLM names a tool, an empty list must block execution
+        var llm = new FakeChatClient()
+            .EnqueueToolCallResponse(new LlmToolCall("call-1", "echo", "{\"message\":\"hi\"}"))
+            .SetDefaultResponse("final answer");
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var observer = new SpyObserver();
+        var runtime = new AgentRuntime(llm, tools, observers: [observer]);
+        var request = new AgentRequest("Test", AllowedToolNames: []);
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert — the excluded tool never runs; the model is told it is not allowed
+        result.Success.Should().BeTrue();
+        result.Output.Should().Be("final answer");
+        observer.ToolInvoked.Should().BeFalse();
+        result.Steps.Should().Contain(s => s.Contains("Tool 'echo' is not allowed for this run."));
+    }
+
+    [Fact]
+    public async Task RunAsync_WithExplicitAllowedToolNames_NeverExecutesExcludedTool()
+    {
+        // Arrange — the model names a registered tool that is not in the allowed list
+        var llm = new FakeChatClient()
+            .EnqueueToolCallResponse(new LlmToolCall("call-1", "echo", "{\"message\":\"hi\"}"))
+            .SetDefaultResponse("final answer");
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var observer = new SpyObserver();
+        var runtime = new AgentRuntime(llm, tools, observers: [observer]);
+        var request = new AgentRequest("Test", AllowedToolNames: ["some_other_tool"]);
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert — the excluded tool never runs
+        result.Success.Should().BeTrue();
+        result.Output.Should().Be("final answer");
+        observer.ToolInvoked.Should().BeFalse();
+        result.Steps.Should().Contain(s => s.Contains("Tool 'echo' is not allowed for this run."));
     }
 
     [Fact]

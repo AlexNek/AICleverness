@@ -1,20 +1,21 @@
 # DI Extensions
 
-All extension methods live in `AiCleverness.DependencyInjection`.
+These methods connect the library's parts to DI (dependency injection).
+They all live in `AiCleverness.DependencyInjection`.
 
 ## Core Runtime
 
 | Method | Registers |
 | --- | --- |
-| `AddAiClevernessRuntime()` | Runtime, default executor, registries, in-memory memory; optional `AgentRuntimeOptions` |
+| `AddAiClevernessRuntime()` | The runtime, the default tool executor, the registries, and the in-memory memory. Optionally takes `AgentRuntimeOptions` |
 | `AddAiClevernessLlmClient<T>()` | Your `ILlmClient` implementation |
 
-`AgentRuntimeOptions` defaults:
+The defaults you can set in `AgentRuntimeOptions`:
 
-- `DefaultMaxTurns`
-- `DefaultCompletionTimeoutSeconds`
-- `DefaultMaxQualityRetries`
-- `DefaultToolMaxRetries`
+- `DefaultMaxTurns` — maximum number of LLM turns per run
+- `DefaultCompletionTimeoutSeconds` — maximum wait time for one LLM call
+- `DefaultMaxQualityRetries` — how often the model may retry after a gate rejects
+- `DefaultToolMaxRetries` — how often a failed tool call is repeated
 
 ## Extension Points
 
@@ -28,24 +29,24 @@ All extension methods live in `AiCleverness.DependencyInjection`.
 | `AddAgentResultTransformer<T>()` | `IAgentResultTransformer` |
 | `AddAgentObserver<T>()` | `IAgentObserver` |
 
-All of the above accept an optional `appliesTo` predicate for
-[agent-scoped registration](../execution/agent-scoping.md).
+Every method above also accepts an optional `appliesTo` condition, so it
+runs for [one agent only](../execution/agent-scoping.md).
 
 ## Planning
 
 | Method | Registers |
 | --- | --- |
-| `AddDefaultPlanner()` | LLM-based planner |
-| `AddSequentialPlanner()` | Deterministic sequential planner |
-| `AddNamedPlanner<T>()` | Named planner via `IPlannerRegistry` |
+| `AddDefaultPlanner()` | A planner that asks the LLM to build the plan |
+| `AddSequentialPlanner()` | A planner with a fixed list of steps (no LLM needed) |
+| `AddNamedPlanner<T>()` | A planner with a name, selectable per request |
 
 ## Tools
 
 | Method | Registers |
 | --- | --- |
-| `AddAgentTool<T>()` | `ITool` into the registry |
-| `AddAgentToolExecutor<T>()` | Custom `IToolExecutor` |
-| `AddIdempotencyCache()` | `IIdempotencyCache` (in-memory default) |
+| `AddAgentTool<T>()` | An `ITool` in the tool registry |
+| `AddAgentToolExecutor<T>()` | Your own `IToolExecutor` |
+| `AddIdempotencyCache()` | An `IIdempotencyCache` (in-memory by default) |
 
 ## Memory
 
@@ -59,9 +60,9 @@ All of the above accept an optional `appliesTo` predicate for
 
 | Method | Registers |
 | --- | --- |
-| `AddInMemoryCheckpointStore()` | `ICheckpointStore` |
-| `AddInMemoryExecutionJournal()` | `IExecutionJournal` |
-| `AddHostedAgentRuntime()` | `HostedAgentRuntimeService` with concurrency/grace options |
+| `AddInMemoryCheckpointStore()` | An `ICheckpointStore` that lives in memory |
+| `AddInMemoryExecutionJournal()` | An `IExecutionJournal` that lives in memory |
+| `AddHostedAgentRuntime()` | `HostedAgentRuntimeService` with options for how many runs go at the same time and how long to wait on shutdown |
 
 ## Observability
 
@@ -70,7 +71,7 @@ All of the above accept an optional `appliesTo` predicate for
 | `AddMetricsCollector()` | `IMetricsCollector` |
 | `AddDiagnosticCollector()` | `IDiagnosticCollector` |
 | `AddStartupAnalyzer()` | `IStartupAnalyzer` |
-| `AddOpenTelemetryObserver()` | Sample OpenTelemetry `IAgentObserver` |
+| `AddOpenTelemetryObserver()` | An example `IAgentObserver` that sends data to OpenTelemetry |
 
 ## Workflows and Routing
 

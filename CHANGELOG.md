@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
 
+
+## [1.1.0] - 2026-08-15
+
+### Fixed
+- Tool calls are now enforced at execution time, not only when the tool list is sent to the model: a tool excluded by `AllowedToolNames` can no longer run even if the model names it anyway (the call is rejected and reported back to the model)
+- `OpenTelemetryObserverSample` no longer logs an unrestricted `AllowedToolNames` (`null`) as `tool_count=0`; the run-start log now carries a `tool_selection` state (`unrestricted` / `none` / `named`) alongside the count
+
+### Changed
+- `AgentRequest.AllowedToolNames` now distinguishes `null` (unrestricted — every registered tool is available) from an empty list (no tools at all); previously both meant unrestricted — callers building the list dynamically who want unrestricted access when nothing is added should pass `null` instead of an empty list
 
 ## [1.0.0] - 2026-08-14
 

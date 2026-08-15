@@ -1,10 +1,14 @@
 # Dependency Injection
 
-AiCleverness is DI-first. `AddAiClevernessRuntime()` registers the runtime,
-default executor, registries, and in-memory defaults; every other concern is
-opt-in.
+AiCleverness is built for DI (dependency injection). One call —
+`AddAiClevernessRuntime()` — registers the runtime, the default tool
+executor, the registries, and the in-memory defaults. Everything else is
+added only if you call its `Add...` method yourself.
 
 ## Full Setup
+
+This example shows all available registrations. In a real application you
+only use the ones you need.
 
 ```csharp
 // Core runtime
@@ -33,18 +37,18 @@ services.AddNamedPlanner<CustomPlanner>();
 services.AddAgentTool<WeatherTool>();
 services.AddAgentTool<SearchTool>();
 
-// Persistence (opt-in)
+// Persistence (only if you need it)
 services.AddInMemoryCheckpointStore();
 services.AddInMemoryExecutionJournal();
 
-// Hosting (opt-in)
+// Hosting (only if you need it)
 services.AddHostedAgentRuntime(options =>
 {
     options.MaxConcurrentExecutions = 4;
     options.GracePeriodSeconds = 30;
 });
 
-// Observability (opt-in)
+// Observability (only if you need it)
 services.AddMetricsCollector();
 services.AddDiagnosticCollector();
 services.AddStartupAnalyzer();
@@ -53,7 +57,8 @@ services.AddOpenTelemetryObserver();
 
 ## Without DI
 
-All runtime pieces are constructible directly:
+You do not have to use DI. You can create every part yourself with `new`
+and put them together:
 
 ```csharp
 var tools = new ToolRegistry();
@@ -67,9 +72,11 @@ var runtime = new AgentRuntime(
     new DefaultPlanner(new MyLlmClient(...)));
 ```
 
-## Per-Request Tuning
+## Change the Settings for One Run
 
-Runtime defaults can be overridden per request through `AgentRequest.Parameters`:
+The values you set in `AddAiClevernessRuntime(options => ...)` are the
+defaults for all runs. You can change them for a single run through
+`AgentRequest.Parameters`. The most common keys:
 
 ```csharp
 var request = new AgentRequest(
@@ -78,17 +85,17 @@ var request = new AgentRequest(
     Parameters: new Dictionary<string, object>
     {
         ["system_prompt"] = "You are a URL research specialist.",
-        ["max_turns"] = 10,
-        ["temperature"] = 0.0f,
-        ["model"] = "gpt-4o",
-        ["completion_timeout_seconds"] = 120,
-        ["tool_timeout_seconds"] = 30,
-        ["tool_max_retries"] = 2,
-        ["max_quality_retries"] = 1
+        ["max_turns"] = 10,               // max LLM turns
+        ["temperature"] = 0.0f,            // 0 = less variation between answers
+        ["model"] = "gpt-4o",              // model name for this run
+        ["completion_timeout_seconds"] = 120,  // max wait for one LLM call
+        ["tool_timeout_seconds"] = 30,         // max wait for one tool call
+        ["tool_max_retries"] = 2,          // retry a failed tool call
+        ["max_quality_retries"] = 1        // retries when a quality gate rejects
     });
 ```
 
-See [Runtime Pipeline](../concepts/runtime-pipeline.md) for what each stage
+See [Runtime Pipeline](../concepts/runtime-pipeline.md) for what each step
 does with these parameters, and
 [DI Extensions](../api-reference/di-extensions.md) for the full list of
 registration methods.

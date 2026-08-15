@@ -1,36 +1,39 @@
 # AiCleverness Developer Manual
 
-AiCleverness is a provider-neutral execution runtime for .NET — policies,
-planning, deterministic strategies, tool execution, quality gates,
-transformations, and observability around any LLM provider adapter.
+AiCleverness is a .NET library that runs AI agents. You give it a goal,
+and it does the work: it calls your LLM, lets the model use tools, checks
+the answer, and returns the result. It works with **any** AI provider,
+because you bring your own connection through one small interface.
 
-AiCleverness is a NuGet library. Agents are one execution pattern; the core
-value is orchestration. Every extension point sits behind a small interface,
-so you can test policies, strategies, and tools in isolation and swap
-providers without touching calling code.
+Around this core, the library gives you: guards that run before the work,
+planning, checks on the answer, transformations, memory, and monitoring.
+
+Every part sits behind a small interface. This means you can test each part
+alone, and you can change your AI provider without changing the rest of
+your code.
 
 ## Feature Overview
 
-| Capability | Entry point | Description |
+| Feature | Entry point | What it does |
 | --- | --- | --- |
-| Orchestration | `IAgentRuntime` | Middleware pipeline: policies → planning → strategies → LLM loop → quality gates → validators → transformers |
-| Streaming | `IStreamingAgentRuntime` | Real-time execution events via `IAsyncEnumerable<AgentEvent>` |
-| Tools | `ITool`, `IToolExecutor` | Register tools, the runtime handles discovery and invocation |
-| Policies | `IAgentPolicy` | Pre-execution guardrails that can block runs |
-| Strategies | `IAgentStrategy` | Deterministic shortcuts bypassing the LLM |
-| Planning | `IAgentPlanner` | Goal decomposition into steps before execution |
-| Quality Gates | `IAgentQualityGate` | Output evaluation with retry support |
-| Memory | `IWorkingMemory`, `ILongTermMemory`, `IVectorMemory` | Tiered memory behind `IAggregateMemory` |
-| Security | `IPromptGuard`, `IApprovalService`, `IScopeValidator` | Input/output guards, human-in-the-loop approval |
-| Workflows | `WorkflowDefinition` | DAG-based multi-agent workflows |
-| Observability | `IMetricsCollector`, `IDiagnosticCollector` | Structured metrics and diagnostic traces |
-| DI | `AddAiClevernessRuntime()` | One-line `IServiceCollection` integration |
+| The runtime | `IAgentRuntime` | The main pipeline: policies → input check → planning → strategies → LLM loop → quality gates → validators → transformers |
+| Streaming | `IStreamingAgentRuntime` | See what happens while the run is working, event by event |
+| Tools | `ITool`, `IToolExecutor` | Register tools; the runtime finds them and calls them |
+| Policies | `IAgentPolicy` | Guards before the run; can stop the run |
+| Strategies | `IAgentStrategy` | Answer the goal with plain code, without the LLM |
+| Planning | `IAgentPlanner` | Split the goal into steps before starting |
+| Quality Gates | `IAgentQualityGate` | Check the answer; can ask the model to try again |
+| Memory | `IWorkingMemory`, `ILongTermMemory`, `IVectorMemory` | Three memory types behind `IAggregateMemory` |
+| Security | `IPromptGuard`, `IApprovalService`, `IScopeValidator` | Checks on input and output, and approval by a human |
+| Workflows | `WorkflowDefinition` | Several connected steps and agents |
+| Observability | `IMetricsCollector`, `IDiagnosticCollector` | Numbers and traces about your runs |
+| DI | `AddAiClevernessRuntime()` | Connect everything to DI with one line |
 
 ## Architecture at a Glance
 
-All capabilities sit behind small abstractions in the `AiCleverness.Abstractions`
-namespace. The runtime orchestrates them without knowing provider-specific
-implementation details:
+Most extension points are small interfaces in the
+`AiCleverness.Abstractions` namespace. The runtime puts them together and
+does not need to know any details about your AI provider:
 
 ```mermaid
 graph LR
@@ -50,7 +53,7 @@ graph LR
 
 - New to the library? Read [Installation](getting-started/installation.md)
   and the [Quick Start](getting-started/quick-start.md).
-- Wiring up a real application? See
+- Building a real application? See
   [Dependency Injection](getting-started/dependency-injection.md) and the
   [Runtime Pipeline](concepts/runtime-pipeline.md).
 - Looking for a specific type? See the

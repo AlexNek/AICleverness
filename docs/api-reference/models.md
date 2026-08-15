@@ -1,12 +1,15 @@
 # Models
 
-All records and DTOs live in `AiCleverness.Models`.
+All data types (records) live in `AiCleverness.Models`. This page lists
+every public type and its properties.
 
 ## Request and Result
 
 | Type | Properties |
 | --- | --- |
-| `AgentRequest` | `Goal`, `AllowedToolNames`, `Parameters`, `AgentName` |
+| `AgentRequest` | `Goal`, `AllowedToolNames`, `Parameters`, `AgentName`, `CapabilityRequirements` |
+| `CapabilityRequirements` | `Capabilities`, `Properties` — what the run needs from the model/provider; used to pick a suitable model |
+| `Capabilities` | `CapabilityFlags`, `CostTier`, `MaxLatencyMs`, `MinContextWindow`, `QualityTier` (all optional — `null` means no constraint) |
 | `AgentResult` | `Success`, `Output`, `Reasoning`, `Steps`, `Usage`, `Metadata` |
 | `DecisionResult` | `Decision`, `Approved`, `Confidence`, `Reasoning` |
 | `PolicyResult` | `Applied`, `Score`, `Recommendation`, `Reasoning` |
@@ -16,6 +19,14 @@ All records and DTOs live in `AiCleverness.Models`.
 | `ValidationResult` | `IsValid`, `Error` |
 | `InputValidationResult` | `IsValid`, `Error` |
 
+### Tool selection contract (`AgentRequest.AllowedToolNames`)
+
+| Value | Meaning |
+| --- | --- |
+| `null` (default) | All tools — every registered tool is offered to the model |
+| Empty list | No tools at all — the model answers with text only |
+| Named list | Only these tools are offered; names that match no registered tool are ignored |
+
 ## Tools
 
 | Type | Properties |
@@ -24,8 +35,8 @@ All records and DTOs live in `AiCleverness.Models`.
 | `ToolInvocation` | `Name`, `Arguments`, `InvocationId` |
 | `ToolResult` | `Success`, `Output`, `Error` |
 | `ToolExecutionPolicy` | `MaxRetries`, `Timeout`, `LogEnabled`, `MetricsEnabled` |
-| `CompletedToolCall` | `Id`, `Name`, `Arguments` — flushed from streaming buffer |
-| `StreamingToolCallUpdate` | `ToolCallId`, `FunctionName`, `ArgumentsChunk` — partial streaming input |
+| `CompletedToolCall` | `Id`, `Name`, `Arguments` — a complete tool call, built from the streaming parts |
+| `StreamingToolCallUpdate` | `ToolCallId`, `FunctionName`, `ArgumentsChunk` — one part of a tool call received while streaming |
 | `DangerLevel` | `Safe`, `Low`, `Medium`, `High`, `Critical` |
 | `ToolInputScope` | `AllowedPaths`, `AllowedHosts`, `MaxInputSizeBytes`, `AllowWrites`, etc. |
 
@@ -44,7 +55,7 @@ All records and DTOs live in `AiCleverness.Models`.
 | `ExecutionStatus` | `Created`, `Validating`, `Planning`, `Executing`, `Completed`, `Failed`, `Cancelled`, ... |
 | `AgentExecutionState` | `ExecutionId`, `Status`, `Metadata`, `State`, `Items`, `Artifacts` |
 | `ExecutionEvent` | `ExecutionId`, `EventType`, `Timestamp`, `Data` |
-| `AgentEvent` (and subtypes) | Streaming events: `ModelChunkEvent`, `ToolCompletedEvent`, etc. |
+| `AgentEvent` (and subtypes) | Streaming events: `ModelChunkEvent`, `ToolCompletedAgentEvent`, etc. |
 | `ExecutionManifest` | `ExecutionId`, `Status`, `Duration`, `Events`, `Artifacts` |
 | `ExecutionSnapshot` | `SchemaVersion`, `ExecutionId`, `Status`, `Goal`, counters, result |
 | `ExecutionGraph` | `Nodes`, `Edges`, `ToMermaid()` export |
