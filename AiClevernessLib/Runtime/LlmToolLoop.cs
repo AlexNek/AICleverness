@@ -239,10 +239,17 @@ internal sealed class LlmToolLoop
 
                 foreach (var toolCall in response.ToolCalls)
                 {
-                    var tool = _tools.GetTool(toolCall.Name);
+                    // Resolve only from the tools allowed for this run — a
+                    // tool excluded by AllowedToolNames must never execute,
+                    // even if the model names it anyway.
+                    var tool = availableTools.FirstOrDefault(
+                        t => string.Equals(t.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase));
                     if (tool is null)
                     {
-                        var err = $"Tool '{toolCall.Name}' is not registered.";
+                        var err = allowedToolNames is not null
+                                      && !allowedToolNames.Contains(toolCall.Name, StringComparer.OrdinalIgnoreCase)
+                                      ? $"Tool '{toolCall.Name}' is not allowed for this run."
+                                      : $"Tool '{toolCall.Name}' is not registered.";
                         steps.Add(err);
                         messages.Add(new LlmMessage("tool", err) { ToolCallId = toolCall.Id });
                         continue;
