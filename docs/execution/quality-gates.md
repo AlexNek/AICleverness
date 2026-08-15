@@ -1,9 +1,17 @@
 # Quality Gates
 
-Quality gates evaluate the final result before it is returned. A gate can
-approve, reject, request a retry, or provide a replacement result.
+A quality gate checks the model's answer before it goes back to you. A gate
+has four options:
+
+- **Approve** the answer — the run continues.
+- **Reject with a retry** — the runtime sends the reason back to the model
+  and tries again.
+- **Replace** the answer — the gate returns its own result instead.
+- **Reject without a retry** — the run fails.
 
 ## Implementing a Gate
+
+This example checks that the answer is valid JSON:
 
 ```csharp
 public sealed class JsonSchemaGate : IAgentQualityGate
@@ -28,17 +36,21 @@ public sealed class JsonSchemaGate : IAgentQualityGate
 services.AddAgentQualityGate<JsonSchemaGate>();
 ```
 
+The gate returns a `QualityGateResult` with three fields: `Approved` (is
+the answer acceptable?), `Retry` (should the model try again?), and
+`Reason` (the explanation for the model).
+
 ## Retry Behavior
 
-When a gate sets `Retry`, the runtime feeds the gate's `Reason` back into
-the next LLM attempt, so the model can correct the output. Control the retry
-budget with the `max_quality_retries` request parameter or the
-`DefaultMaxQualityRetries` runtime option.
+When a gate sets `Retry = true`, the runtime sends the gate's `Reason` to
+the model with the next attempt. This tells the model what to fix. The
+number of retries is limited by the `max_quality_retries` request parameter
+or by the `DefaultMaxQualityRetries` runtime option.
 
-A gate may also return a `ReplacementResult` to substitute the output
-outright instead of retrying.
+A gate can also return a `ReplacementResult`. Then its own output replaces
+the model's answer, and there is no retry.
 
 ## Scoping
 
-Gates support [agent-scoped registration](agent-scoping.md) — e.g. a URL
-structure gate that only runs for `UrlResearchAgent` executions.
+Gates support [agent-scoped registration](agent-scoping.md). For example, a
+URL structure gate can run only for runs of the `UrlResearchAgent`.

@@ -1,29 +1,29 @@
 # Planning
 
-Planning is optional. If a planner is registered, the runtime asks it to
-decompose the goal into steps before execution begins.
+Planning is optional. If you register a planner, the runtime first splits
+the goal into steps, and then starts the work.
+
+A plan is a list of `PlannedStep` records. Each step has a `Name`, a
+`Type`, a `Description`, and `Parameters`.
 
 ## Built-in Planners
 
 ```csharp
-services.AddDefaultPlanner();     // uses the LLM to produce the plan
-services.AddSequentialPlanner();  // deterministic sequential plan
+services.AddDefaultPlanner();     // asks the LLM to build the plan
+services.AddSequentialPlanner();  // a fixed list of steps, no LLM needed
 ```
-
-Plans are lists of `PlannedStep` records: `Name`, `Type`, `Description`, and
-`Parameters`.
 
 ## Named Planners
 
-Register multiple planners and select one per request through the planner
-registry:
+You can register several planners and choose one for each request:
 
 ```csharp
 services.AddNamedPlanner<CustomPlanner>();
 ```
 
-`IPlannerRegistry` resolves the planner by name at execution time;
-`INamedAgentPlanner` is the interface for planners that identify themselves.
+The `IPlannerRegistry` finds the right planner by name when the run starts.
+A planner that identifies itself with a name implements
+`INamedAgentPlanner`.
 
 ## Custom Planners
 
@@ -37,11 +37,11 @@ public sealed class CustomPlanner : IAgentPlanner
         IAgentContext context,
         CancellationToken cancellationToken = default)
     {
-        // Decompose request.Goal into steps
+        // Split request.Goal into steps
         ...
     }
 }
 ```
 
-If no planner is registered, the runtime skips the stage and proceeds
-directly to strategies and the LLM tool loop.
+If no planner is registered, the runtime skips this step completely and
+goes directly to the strategies and the LLM tool loop.

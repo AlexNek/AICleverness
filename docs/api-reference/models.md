@@ -1,6 +1,7 @@
 # Models
 
-All records and DTOs live in `AiCleverness.Models`.
+All data types (records) live in `AiCleverness.Models`. This page lists
+every public type and its properties.
 
 ## Request and Result
 
@@ -16,6 +17,14 @@ All records and DTOs live in `AiCleverness.Models`.
 | `ValidationResult` | `IsValid`, `Error` |
 | `InputValidationResult` | `IsValid`, `Error` |
 
+### Tool selection contract (`AgentRequest.AllowedToolNames`)
+
+| Value | Meaning |
+| --- | --- |
+| `null` (default) | All tools — every registered tool is offered to the model |
+| Empty list | No tools at all — the model answers with text only |
+| Named list | Only these tools are offered; names that match no registered tool are ignored |
+
 ## Tools
 
 | Type | Properties |
@@ -24,8 +33,8 @@ All records and DTOs live in `AiCleverness.Models`.
 | `ToolInvocation` | `Name`, `Arguments`, `InvocationId` |
 | `ToolResult` | `Success`, `Output`, `Error` |
 | `ToolExecutionPolicy` | `MaxRetries`, `Timeout`, `LogEnabled`, `MetricsEnabled` |
-| `CompletedToolCall` | `Id`, `Name`, `Arguments` — flushed from streaming buffer |
-| `StreamingToolCallUpdate` | `ToolCallId`, `FunctionName`, `ArgumentsChunk` — partial streaming input |
+| `CompletedToolCall` | `Id`, `Name`, `Arguments` — a complete tool call, built from the streaming parts |
+| `StreamingToolCallUpdate` | `ToolCallId`, `FunctionName`, `ArgumentsChunk` — one part of a tool call received while streaming |
 | `DangerLevel` | `Safe`, `Low`, `Medium`, `High`, `Critical` |
 | `ToolInputScope` | `AllowedPaths`, `AllowedHosts`, `MaxInputSizeBytes`, `AllowWrites`, etc. |
 

@@ -1,48 +1,50 @@
 # Tool Execution
 
-Tools stay focused on work. `IToolExecutor` owns the cross-cutting runtime
-behavior around every invocation: timeouts, retries, and validation.
+A tool only does its own work. Everything around the call — the timeout,
+the retries, the checks — belongs to the `IToolExecutor`. This keeps your
+tools simple.
 
 ## Default Executor
 
-`AddAiClevernessRuntime()` registers the default tool executor. Request
-parameters tune it per run:
+`AddAiClevernessRuntime()` registers the default tool executor. You can
+change its behavior for one run with request parameters:
 
 ```csharp
-["tool_timeout_seconds"] = 30,
-["tool_max_retries"] = 2
+["tool_timeout_seconds"] = 30,   // stop a tool call after 30 seconds
+["tool_max_retries"] = 2         // repeat a failed tool call up to 2 times
 ```
 
-Global defaults come from the runtime options
-(`DefaultToolMaxRetries`) and per-tool defaults from
-`ToolDefinition.DefaultTimeout`.
+If you set nothing, the runtime uses its global defaults (for example
+`DefaultToolMaxRetries` from the runtime options). A single tool can also
+set its own timeout with `ToolDefinition.DefaultTimeout`.
 
 ## Custom Executor
 
-Replace the boundary entirely:
+You can replace the whole executor with your own class:
 
 ```csharp
 services.AddAgentToolExecutor<MyToolExecutor>();
 ```
 
-A custom executor can add circuit breaking, auditing, or cost accounting
-around `ITool.InvokeAsync` without touching any tool implementation.
+A custom executor can add its own behavior around every tool call — for
+example: stop calling a service that keeps failing (circuit breaking),
+write an audit log, or count costs. The tools themselves stay unchanged.
 
 ## Validation Before Execution
 
-Two guards run around tool calls:
+Two checks run before a tool call executes:
 
-- `IToolCallValidator` — validates tool calls before execution (arguments,
-  scope, danger level)
-- `IScopeValidator` — enforces tool input scope isolation
-  (`ToolInputScope`: allowed paths, allowed hosts, max input size, write
-  permission)
+- `IToolCallValidator` — checks the tool call itself: are the arguments
+  correct, is the tool allowed, is the danger level acceptable?
+- `IScopeValidator` — checks what the tool may touch. The scope
+  (`ToolInputScope`) defines the allowed file paths, the allowed hosts, the
+  maximum input size, and whether writing is allowed.
 
 See [Security and Approval](../security/security-approval.md) for how they
-fit together.
+work together.
 
-## Idempotent Execution
+## Protection Against Duplicate Calls
 
-Side-effecting tools can be protected against duplicate execution during
-quality-gate retries by wrapping the executor — see
-[Tool Idempotency](tool-idempotency.md).
+Some tools have real side effects — sending mail, creating records. During
+a retry, the model may ask for the same tool call again. To prevent
+running it twice, see [Tool Idempotency](tool-idempotency.md).

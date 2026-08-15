@@ -1,12 +1,15 @@
 # Workflows and Multi-Agent
 
-For pipelines that go beyond a single goal-and-tools run, AiCleverness
-provides DAG-based workflow definitions and a router agent for dispatch.
+A normal run is one goal plus tools. Sometimes you need more: several steps
+after each other, or several specialized agents. For this, AiCleverness has
+workflows and a router agent.
 
 ## Defining a Workflow
 
+A workflow is a list of connected steps (nodes):
+
 ```csharp
-// Sequential workflow
+// A workflow where one step runs after the other
 var workflow = new WorkflowDefinition(
     Name: "research-pipeline",
     Nodes: [
@@ -16,9 +19,12 @@ var workflow = new WorkflowDefinition(
     ]);
 ```
 
-Nodes carry a name, a type (`tool-execution` runs a registered tool,
-`agent-execution` runs a nested agent goal), and parameters. `WorkflowResult`
-collects the per-node outputs.
+Each node has a name, a type, and parameters. There are two node types:
+
+- `tool-execution` — the node runs one registered tool.
+- `agent-execution` — the node runs a complete agent run with its own goal.
+
+`WorkflowResult` collects the output of every node.
 
 ## Execution
 
@@ -26,19 +32,21 @@ collects the per-node outputs.
 services.AddWorkflowExecutor<SequentialWorkflowExecutor>();
 ```
 
-`IWorkflowExecutor` is the abstraction; the library ships a sequential
-executor, and the node graph can express DAG dependencies for custom
-executors.
+`IWorkflowExecutor` is the interface. The library contains a sequential
+executor (one node after the other). If your nodes have dependencies
+(node B needs the result of node A), you can express this in the node
+graph and write your own executor.
 
 ## Router Agent
 
-Dispatch to specialized agents from a single entry point:
+If you have several specialized agents, one router can decide which one
+gets the request:
 
 ```csharp
 services.AddRouterAgent<MyRouterAgent>();
 ```
 
-Implement `IRouterAgent` to inspect the request and route it to the
-appropriate named agent — combined with
-[agent scoping](../execution/agent-scoping.md), each routed agent keeps its
-own policies, gates, and validators.
+Implement `IRouterAgent`: it looks at the request and sends it to the
+right named agent. Together with
+[agent scoping](../execution/agent-scoping.md), every agent keeps its own
+policies, gates, and validators.

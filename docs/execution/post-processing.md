@@ -1,9 +1,10 @@
 # Validators and Transformers
 
-Two lightweight post-processing stages run after the quality gates:
+After the quality gates, two simple steps run on the final result:
 
-- **Validators** — simple pass/fail checks on the final result
-- **Transformers** — ordered final formatting and redaction
+- **Validators** — check the result: is it acceptable? Yes or no.
+- **Transformers** — change the result into its final form, for example
+  formatting or removing private data.
 
 ## Result Validators
 
@@ -11,8 +12,9 @@ Two lightweight post-processing stages run after the quality gates:
 services.AddAgentResultValidator<MyValidator>();
 ```
 
-Implement `IAgentResultValidator` and return a `ValidationResult`
-(`IsValid`, `Error`). A failed validation marks the run unsuccessful.
+Implement `IAgentResultValidator` and return a `ValidationResult` with
+`IsValid` and `Error`. If the validator fails, the whole run is marked as
+unsuccessful.
 
 ## Result Transformers
 
@@ -20,15 +22,17 @@ Implement `IAgentResultValidator` and return a `ValidationResult`
 services.AddAgentResultTransformer<PiiRedactor>();
 ```
 
-Implement `IAgentResultTransformer` to rewrite the output — PII redaction,
-formatting, normalization. Transformers run in registration order.
+Implement `IAgentResultTransformer` to rewrite the output. Typical uses:
+remove personal data, fix the formatting, unify the output format. If you
+register several transformers, they run in the same order as you registered
+them.
 
 ## Output Guards
 
-For security-focused output checks (secret leakage, unsafe content),
-implement `IOutputGuard` instead — see
-[Security and Approval](../security/security-approval.md). Guards are the
-security boundary; transformers are for shaping content.
+For security checks on the output — for example: does the answer contain a
+secret, or dangerous content — implement `IOutputGuard` instead. See
+[Security and Approval](../security/security-approval.md). The rule of
+thumb: guards protect security, transformers shape content.
 
 Both validators and transformers support
 [agent-scoped registration](agent-scoping.md).

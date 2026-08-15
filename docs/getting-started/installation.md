@@ -1,36 +1,42 @@
 # Installation
 
-AiCleverness is distributed as a single NuGet package:
+AiCleverness is one NuGet package:
 
 ```bash
 dotnet add package AiCleverness
 ```
 
-Requires .NET 10.0 or later.
+You need .NET 10.0 or later.
 
 ## Dependencies
 
-The library keeps the dependency footprint minimal:
+The package has very few dependencies:
 
 - `Microsoft.Extensions.DependencyInjection.Abstractions`
 - `Microsoft.Extensions.Logging.Abstractions`
-- `Microsoft.Extensions.Hosting.Abstractions` (opt-in via `AddHostedAgentRuntime`)
-- `Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions` (opt-in)
+- `Microsoft.Extensions.Hosting.Abstractions` (only needed if you use
+  `AddHostedAgentRuntime`)
+- `Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions` (only needed
+  if you use health checks)
 
-Zero external AI provider SDKs — bring your own. AiCleverness never talks to
-a provider directly; it calls your [ILlmClient](../concepts/llm-client.md)
-implementation, which can wrap OpenAI, Anthropic, Ollama, or a local model.
+The package contains **no AI provider SDK**. AiCleverness never talks to a
+provider directly. Instead it calls your own
+[ILlmClient](../concepts/llm-client.md) implementation. Your client can use
+OpenAI, Anthropic, Ollama, a local model — anything.
 
 ## What You Get
 
-| Concern | Provided by |
+The package already contains working defaults for the most common parts:
+
+| Part | What the package provides |
 | --- | --- |
-| Orchestration | `IAgentRuntime` / `IStreamingAgentRuntime` with a default implementation |
-| Tool execution | Default executor with timeout, retries, and idempotency |
+| The runtime | `IAgentRuntime` / `IStreamingAgentRuntime` with a default implementation |
+| Tool execution | A default executor with timeout, retries, and protection against running the same tool call twice |
 | Memory | In-memory implementations for all memory tiers |
 | Persistence | In-memory checkpoint store and execution journal |
-| Observability | Metrics, diagnostics, and startup analysis collectors |
+| Observability | Collectors for metrics, diagnostics, and startup analysis |
 
-Everything is replaceable through the interfaces in
-`AiCleverness.Abstractions` — see
-[Dependency Injection](dependency-injection.md) for the full wiring picture.
+You can replace every one of these parts with your own implementation —
+they are all interfaces in `AiCleverness.Abstractions`. See
+[Dependency Injection](dependency-injection.md) for how everything is
+connected.

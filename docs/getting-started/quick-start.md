@@ -1,9 +1,15 @@
 # Quick Start
 
-Three pieces — an `ILlmClient`, at least one `ITool`, and DI wiring — and you
-have a working execution runtime.
+You need three things to run an agent:
 
-## 1. Implement ILlmClient — talk to any AI provider
+1. An `ILlmClient` — the connection to your AI provider.
+2. At least one `ITool` — something the agent can do.
+3. DI registration — connect both to the runtime.
+
+## 1. Implement ILlmClient — talk to your AI provider
+
+This class sends messages to your AI and returns the answer. Write it once;
+the runtime never talks to the provider itself.
 
 ```csharp
 using AiCleverness.Abstractions;
@@ -25,6 +31,9 @@ public sealed class MyLlmClient : ILlmClient
 ```
 
 ## 2. Implement ITool — something the agent can do
+
+A tool has a name, a description, and a parameter schema. The model reads
+these three things and decides when to call the tool.
 
 ```csharp
 public sealed class WeatherTool : ITool
@@ -49,7 +58,10 @@ public sealed class WeatherTool : ITool
 }
 ```
 
-## 3. Wire it up and run
+## 3. Connect everything and run
+
+Register the runtime, your client, and your tool in DI. Then take the runtime
+and give it a goal:
 
 ```csharp
 var services = new ServiceCollection();
@@ -69,8 +81,9 @@ Console.WriteLine(result.Output);                  // "Temperature in Tokyo: 22�
 Console.WriteLine(string.Join("\n", result.Steps)); // execution log
 ```
 
-The runtime sends the goal and tool definitions to your LLM client, executes
-the tool calls it requests, and loops until the goal is answered. See
-[Runtime Pipeline](../concepts/runtime-pipeline.md) for every stage of that
-loop, and [Defining Tools](../tools/defining-tools.md) for richer tool
-metadata.
+What happens inside `RunAsync`: the runtime sends the goal and the tool
+definitions to your LLM client, runs the tool calls the model asks for, and
+repeats this until the goal is answered. See
+[Runtime Pipeline](../concepts/runtime-pipeline.md) for every step of this
+loop, and [Defining Tools](../tools/defining-tools.md) for more ways to
+describe a tool.

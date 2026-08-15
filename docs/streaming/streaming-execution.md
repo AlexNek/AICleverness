@@ -1,8 +1,11 @@
 # Streaming Execution
 
-`IStreamingAgentRuntime` provides real-time execution events via
-`IAsyncEnumerable<AgentEvent>` — model text chunks, completed tool calls,
-and lifecycle events as they happen.
+Normally you call `RunAsync` and wait for the final answer. With streaming,
+you see what happens **while** the run is still working: parts of the
+model's text, finished tool calls, and the final result — one event after
+the other.
+
+Use `IStreamingAgentRuntime` and loop over the events:
 
 ```csharp
 var runtime = provider.GetRequiredService<IStreamingAgentRuntime>();
@@ -26,18 +29,20 @@ await foreach (var evt in runtime.RunStreamingAsync(request))
 
 ## Event Types
 
-`AgentEvent` is the base record; concrete subtypes cover the execution
-lifecycle, including:
+All events are subtypes of the `AgentEvent` record. The most important
+ones:
 
-- `ModelChunkEvent` — partial model output text
-- `ToolCompletedEvent` — a tool call finished with its output
-- `ExecutionCompletedEvent` — the run finished with the final `AgentResult`
+- `ModelChunkEvent` — a part of the model's text output.
+- `ToolCompletedEvent` — a tool call has finished; contains its output.
+- `ExecutionCompletedEvent` — the run is done; contains the final
+  `AgentResult`.
 
-All events carry the execution id, so concurrent streams can be
-demultiplexed.
+Every event carries the execution id. If several runs stream at the same
+time, you can tell their events apart by this id.
 
 ## Streaming Providers
 
-If your `ILlmClient` implementation receives tool calls as partial JSON
-chunks, use the [streaming tool buffer](tool-call-buffer.md) to accumulate
-them into complete invocations before returning the response.
+Some providers send tool calls as many small JSON parts. If your
+`ILlmClient` receives such parts, use the
+[streaming tool buffer](tool-call-buffer.md) to put them back together
+before you return the response.

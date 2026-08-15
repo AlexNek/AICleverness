@@ -1,40 +1,42 @@
 # Security and Approval
 
-Security checks are distributed across the pipeline — input guards before
-execution, tool-call validation before every invocation, output guards after,
-and human approval in the middle when a tool demands it.
+Security checks do not sit in one place. They are spread over the whole
+pipeline:
+
+- **Before the run** — guards check the input prompt.
+- **Before every tool call** — validators check the call.
+- **During a tool call** — a human approves it, if the tool requires it.
+- **After the run** — guards check the output.
 
 ## The Security Interfaces
 
-| Interface | Purpose |
+| Interface | What it does |
 | --- | --- |
-| `IPromptGuard` | Validate input prompts (injection, jailbreak, PII) |
-| `IToolCallValidator` | Validate tool calls before execution |
-| `IOutputGuard` | Validate output (secret leakage, unsafe content) |
-| `IApprovalService` | Human-in-the-loop pause/approve/reject/resume |
-| `IScopeValidator` | Enforce tool input scope isolation |
-| `IAgentInputValidator` | Validate agent input before execution (per-agent scoped) |
-| `IIdempotencyCache` | Prevent duplicate tool execution during retries |
+| `IPromptGuard` | Checks incoming prompts: injection attacks, jailbreak attempts, private data |
+| `IToolCallValidator` | Checks a tool call before it runs |
+| `IOutputGuard` | Checks the output: leaked secrets, dangerous content |
+| `IApprovalService` | Pauses the run so a human can approve or reject it, then continues |
+| `IScopeValidator` | Limits what a tool can touch (paths, hosts, size, writes) |
+| `IAgentInputValidator` | Checks the agent input before the run (can be registered for one agent only) |
+| `IIdempotencyCache` | Stops the same tool call from running twice during retries |
 
 ## Approval Flow
 
-Tools can declare `RequiresApproval = true` and a `DangerLevel` in their
-`ToolDefinition`. The runtime respects both:
+A tool can say two things about itself in its `ToolDefinition`:
 
-- `DangerLevel` (`Safe`, `Low`, `Medium`, `High`, `Critical`) drives
-  danger-level validation
-- `RequiresApproval` routes the invocation through `IApprovalService`,
-  which can pause the execution, wait for a human decision, then resume or
-  reject
+- `DangerLevel` (`Safe`, `Low`, `Medium`, `High`, `Critical`) — the runtime
+  uses this for its danger-level checks.
+- `RequiresApproval = true` — the runtime sends the call to the
+  `IApprovalService` first. The service pauses the run, waits for a human
+  decision, and then continues (approved) or stops (rejected).
 
 ## Tool Input Scopes
 
-`IScopeValidator` enforces `ToolInputScope` constraints per tool:
+`IScopeValidator` checks a `ToolInputScope` for each tool:
 
-- `AllowedPaths` / `AllowedHosts`
-- `MaxInputSizeBytes`
-- `AllowWrites`
+- `AllowedPaths` / `AllowedHosts` — what the tool may reach
+- `MaxInputSizeBytes` — how big the input may be
+- `AllowWrites` — whether the tool may write anything
 
-This isolates what each tool may touch, independent of what the LLM asks
-for. See [Tool Execution](../tools/tool-execution.md) for where these
-checks sit in the executor boundary.
+These limits apply no matter what the model asks for. See
+[Tool Execution](../tools/tool-execution.md) for where these checks happen.
