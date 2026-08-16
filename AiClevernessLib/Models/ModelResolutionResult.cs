@@ -8,6 +8,13 @@ public sealed record ModelResolutionResult
     /// <summary>How many profiles were tried before succeeding.</summary>
     public int Attempts { get; init; }
 
+    /// <summary>
+    /// Ordered alternate models for the same capability requirements.
+    /// Built by <see cref="Runtime.Capabilities.DefaultModelManager"/> during resolution.
+    /// Empty by default (no fallbacks available).
+    /// </summary>
+    public IReadOnlyList<ModelDefinition> Fallbacks { get; init; } = Array.Empty<ModelDefinition>();
+
     /// <summary>Whether this result used a fallback profile.</summary>
     public bool IsFallback { get; init; }
 

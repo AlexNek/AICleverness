@@ -71,6 +71,24 @@ public sealed class OpenTelemetryObserverSample : IAgentObserver
     }
 
     /// <inheritdoc />
+    public Task OnLlmCallCompletedAsync(LlmCallInfo info, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "AI LLM call completed: model={Model}, turn={Turn}, attempt={Attempt}, "
+            + "is_fallback={IsFallback}, success={Success}, duration_ms={DurationMs}, "
+            + "input_tokens={InputTokens}, output_tokens={OutputTokens}",
+            info.Model,
+            info.Turn,
+            info.Attempt,
+            info.IsFallback,
+            info.Success,
+            info.Duration.TotalMilliseconds,
+            info.Usage?.PromptTokens ?? 0,
+            info.Usage?.CompletionTokens ?? 0);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     public Task OnLlmRespondedAsync(
         LlmResponse response,
         TimeSpan duration,
@@ -83,6 +101,21 @@ public sealed class OpenTelemetryObserverSample : IAgentObserver
             response.ToolCalls?.Count ?? 0,
             response.Usage?.PromptTokens ?? 0,
             response.Usage?.CompletionTokens ?? 0);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task OnModelSwitchedAsync(
+        string fromModel,
+        string toModel,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogWarning(
+            "AI model switched: from={FromModel}, to={ToModel}, reason={Reason}",
+            fromModel,
+            toModel,
+            reason);
         return Task.CompletedTask;
     }
 

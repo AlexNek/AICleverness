@@ -16,11 +16,15 @@ namespace AiCleverness.Runtime;
 /// </summary>
 internal sealed class LlmToolLoop
 {
+    private readonly ILlmErrorClassifier _errorClassifier;
+
     private readonly IExecutionEventPublisher? _eventPublisher;
 
     private readonly ILlmClient _llm;
 
     private readonly ILogger? _logger;
+
+    private readonly IModelCatalog? _modelCatalog;
 
     private readonly IEnumerable<IAgentObserver> _observers;
 
@@ -37,7 +41,9 @@ internal sealed class LlmToolLoop
         AgentRuntimeOptions options,
         IEnumerable<IAgentObserver> observers,
         IExecutionEventPublisher? eventPublisher,
-        ILogger? logger)
+        ILogger? logger,
+        ILlmErrorClassifier? errorClassifier = null,
+        IModelCatalog? modelCatalog = null)
     {
         _llm = llm;
         _tools = tools;
@@ -46,6 +52,8 @@ internal sealed class LlmToolLoop
         _observers = observers;
         _eventPublisher = eventPublisher;
         _logger = logger;
+        _errorClassifier = errorClassifier ?? new DefaultLlmErrorClassifier();
+        _modelCatalog = modelCatalog;
     }
 
     /// <summary>
@@ -92,6 +100,22 @@ internal sealed class LlmToolLoop
             ?? _options.DefaultCompletionTimeoutSeconds;
         var options = new LlmCompletionOptions(temperature, null, model);
 
+        // Set when a failover retry rewinds the loop to the same logical turn —
+        // the retry must not increment the state turn counter or emit a second
+        // TurnStartedEvent for that turn.
+        var retryingSameTurn = false;
+
+        // Failover handler — resolves the effective chain (validating explicit
+        // names against the catalog) and manages candidate consumption.
+        var failoverHandler = await ModelFailoverHandler.CreateAsync(
+            context,
+            _options,
+            _observers,
+            _eventPublisher,
+            _logger,
+            _modelCatalog,
+            cancellationToken);
+
         // null = unrestricted (every registered tool); an explicit list — including
         // an empty one — restricts the run to exactly the named tools.
         var allowedToolNames = request.AllowedToolNames;
@@ -134,10 +158,16 @@ internal sealed class LlmToolLoop
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
-            executionContext.State.IncrementTurn();
-            emit?.Invoke(new TurnStartedEvent { ExecutionId = executionId, Turn = turn });
+            if (!retryingSameTurn)
+            {
+                executionContext.State.IncrementTurn();
+                emit?.Invoke(new TurnStartedEvent { ExecutionId = executionId, Turn = turn });
+            }
+
+            retryingSameTurn = false;
 
             LlmResponse response;
+            var llmCallStarted = DateTimeOffset.UtcNow;
             try
             {
                 using var turnCts =
@@ -148,48 +178,145 @@ internal sealed class LlmToolLoop
                     observer => observer.OnLlmCalledAsync(messages, turnCts.Token),
                     _logger,
                     turnCts.Token);
-                var started = DateTimeOffset.UtcNow;
+                llmCallStarted = DateTimeOffset.UtcNow;
                 response = await _llm.CompleteAsync(
                                messages,
                                toolDefinitions.Count > 0 ? toolDefinitions : null,
                                options,
                                turnCts.Token);
+                var callDuration = DateTimeOffset.UtcNow - llmCallStarted;
                 await ObserverNotifier.NotifyAllAsync(
                     _observers,
                     observer => observer.OnLlmRespondedAsync(
                         response,
-                        DateTimeOffset.UtcNow - started,
+                        callDuration,
                         turnCts.Token),
                     _logger,
                     turnCts.Token);
 
-                // Publish LLM call completed event.
+                // Emit OnLlmCallCompletedAsync — success.
+                var successInfo = new LlmCallInfo
+                {
+                    ExecutionId = executionId,
+                    Model = options.Model ?? "unknown",
+                    Turn = turn,
+                    Attempt = failoverHandler.Attempt,
+                    IsFallback = failoverHandler.IsOnFallback,
+                    Duration = callDuration,
+                    Usage = response.Usage is not null
+                        ? new LlmTokenUsage(response.Usage.PromptTokens, response.Usage.CompletionTokens)
+                        : null,
+                    Success = true,
+                    StartedAt = llmCallStarted
+                };
+                await ObserverNotifier.NotifyAllAsync(
+                    _observers,
+                    observer => observer.OnLlmCallCompletedAsync(successInfo, cancellationToken),
+                    _logger,
+                    cancellationToken);
+
+                // Publish LLM call completed event — success.
                 if (_eventPublisher is not null)
                 {
                     await _eventPublisher.PublishAsync(
                         new LlmCallCompletedBusEvent(
                             executionId,
-                            DateTimeOffset.UtcNow - started,
-                            response.Usage),
+                            callDuration,
+                            response.Usage,
+                            Success: true,
+                            Turn: turn),
                         turnCts.Token);
                 }
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException ocEx) when (!cancellationToken.IsCancellationRequested)
             {
-                var timeoutMsg =
+                var timeoutDuration = DateTimeOffset.UtcNow - llmCallStarted;
+                var classification = _errorClassifier.Classify(ocEx, cancellationToken);
+                var timeoutError =
                     $"LLM completion timed out after {completionTimeoutSeconds}s on turn {turn}";
-                _logger?.LogWarning("Agent: {Message}", timeoutMsg);
-                steps.Add(timeoutMsg);
-                report(timeoutMsg);
+
+                // Emit OnLlmCallCompletedAsync — timeout.
+                var timeoutInfo = new LlmCallInfo
+                {
+                    ExecutionId = executionId,
+                    Model = options.Model ?? "unknown",
+                    Turn = turn,
+                    Attempt = failoverHandler.Attempt,
+                    IsFallback = failoverHandler.IsOnFallback,
+                    Duration = timeoutDuration,
+                    Success = false,
+                    Error = timeoutError,
+                    Classification = classification,
+                    StartedAt = llmCallStarted
+                };
+                await ObserverNotifier.NotifyAllAsync(
+                    _observers,
+                    observer => observer.OnLlmCallCompletedAsync(timeoutInfo, cancellationToken),
+                    _logger,
+                    cancellationToken);
+
+                // Publish LLM call completed event — timeout.
+                if (_eventPublisher is not null)
+                {
+                    await _eventPublisher.PublishAsync(
+                        new LlmCallCompletedBusEvent(
+                            executionId,
+                            timeoutDuration,
+                            null,
+                            Success: false,
+                            Turn: turn,
+                            Error: timeoutError),
+                        cancellationToken);
+                }
+
+                // Failover path: advance to the next candidate when available.
+                if (classification == FailureClassification.TransientAdvance)
+                {
+                    var nextOptions = await failoverHandler.TryFailoverAsync(
+                        executionId,
+                        turn,
+                        options,
+                        context,
+                        timeoutError,
+                        "timed out",
+                        $"timeout after {completionTimeoutSeconds}s",
+                        steps,
+                        report,
+                        emit,
+                        cancellationToken);
+                    if (nextOptions is not null)
+                    {
+                        options = nextOptions;
+
+                        // Rewind turn counter — the failed attempt does not
+                        // count against maxTurns, and the retry keeps the same
+                        // logical turn in state and events.
+                        turn--;
+                        retryingSameTurn = true;
+                        continue;
+                    }
+                }
+
+                // Chain exhaustion or failover disabled — existing failure path.
+                var errorPhase = failoverHandler.IsEnabled && classification == FailureClassification.TransientAdvance
+                    ? "ModelFailover"
+                    : "LlmCompletion";
+                var exhaustionMsg = failoverHandler.IsEnabled && classification == FailureClassification.TransientAdvance
+                    ? $"LLM failover chain exhausted after {failoverHandler.Attempt} attempts; last model tried: '{options.Model ?? "unknown"}' on turn {turn}"
+                    : timeoutError;
+
+                _logger?.LogWarning("Agent: {Message}", exhaustionMsg);
+                steps.Add(exhaustionMsg);
+                report(exhaustionMsg);
                 emit?.Invoke(new FailureEvent
                                  {
                                      ExecutionId = executionId,
-                                     Error = timeoutMsg,
-                                     Phase = "LlmCompletion",
-                                     IsTransient = true
+                                     Error = exhaustionMsg,
+                                     Phase = errorPhase,
+                                     IsTransient = errorPhase == "LlmCompletion"
                                  });
                 var timeoutUsage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
-                return new AgentResult(false, null, timeoutMsg, steps, timeoutUsage);
+                return new AgentResult(false, null, exhaustionMsg, steps, timeoutUsage);
             }
             catch (OperationCanceledException)
             {
@@ -213,6 +340,72 @@ internal sealed class LlmToolLoop
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "LLM completion failed on turn {Turn}", turn);
+
+                var classification = _errorClassifier.Classify(ex, cancellationToken);
+
+                // Emit OnLlmCallCompletedAsync — error.
+                var errorInfo = new LlmCallInfo
+                {
+                    ExecutionId = executionId,
+                    Model = options.Model ?? "unknown",
+                    Turn = turn,
+                    Attempt = failoverHandler.Attempt,
+                    IsFallback = failoverHandler.IsOnFallback,
+                    Duration = DateTimeOffset.UtcNow - llmCallStarted,
+                    Success = false,
+                    Error = ex.Message,
+                    Classification = classification,
+                    StartedAt = llmCallStarted
+                };
+                await ObserverNotifier.NotifyAllAsync(
+                    _observers,
+                    observer => observer.OnLlmCallCompletedAsync(errorInfo, cancellationToken),
+                    _logger,
+                    cancellationToken);
+
+                // Publish LLM call completed event — error.
+                if (_eventPublisher is not null)
+                {
+                    await _eventPublisher.PublishAsync(
+                        new LlmCallCompletedBusEvent(
+                            executionId,
+                            errorInfo.Duration,
+                            null,
+                            Success: false,
+                            Turn: turn,
+                            Error: ex.Message),
+                        cancellationToken);
+                }
+
+                // Failover path: advance to the next candidate when available
+                // (future: rate-limit signals via the classifier).
+                if (classification == FailureClassification.TransientAdvance)
+                {
+                    var nextOptions = await failoverHandler.TryFailoverAsync(
+                        executionId,
+                        turn,
+                        options,
+                        context,
+                        ex.Message,
+                        "failed",
+                        ex.Message,
+                        steps,
+                        report,
+                        emit,
+                        cancellationToken);
+                    if (nextOptions is not null)
+                    {
+                        options = nextOptions;
+
+                        // Rewind turn counter — the failed attempt does not
+                        // count against maxTurns, and the retry keeps the same
+                        // logical turn in state and events.
+                        turn--;
+                        retryingSameTurn = true;
+                        continue;
+                    }
+                }
+
                 var errorMsg = $"LLM error on turn {turn}: {ex.Message}";
                 steps.Add(errorMsg);
                 report(errorMsg);

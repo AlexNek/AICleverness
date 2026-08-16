@@ -18,6 +18,7 @@ services.AddAiClevernessRuntime(options =>
     options.DefaultCompletionTimeoutSeconds = 120;
     options.DefaultMaxQualityRetries = 2;
     options.DefaultToolMaxRetries = 1;
+    options.EnableModelFailover = true;  // opt-in: failover to next model on timeout
 });
 services.AddAiClevernessLlmClient<MyLlmClient>();
 
@@ -91,7 +92,9 @@ var request = new AgentRequest(
         ["completion_timeout_seconds"] = 120,  // max wait for one LLM call
         ["tool_timeout_seconds"] = 30,         // max wait for one tool call
         ["tool_max_retries"] = 2,          // retry a failed tool call
-        ["max_quality_retries"] = 1        // retries when a quality gate rejects
+        ["max_quality_retries"] = 1,       // retries when a quality gate rejects
+        ["enable_model_failover"] = true,  // failover to next model on timeout
+        ["model_fallback_chain"] = new[] { "gpt-4o", "claude-3.5-sonnet" }  // ordered fallbacks
     });
 ```
 

@@ -60,7 +60,8 @@ public sealed record LlmRespondedEvent(
     LlmResponse Response,
     TimeSpan Duration,
     string? TraceId = null,
-    string? CorrelationId = null)
+    string? CorrelationId = null,
+    int Turn = 0)
     : ExecutionEvent("LlmResponded", DateTimeOffset.UtcNow, ExecutionId, TraceId, CorrelationId);
 
 /// <summary>

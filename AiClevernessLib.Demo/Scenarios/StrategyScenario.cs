@@ -6,7 +6,16 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AiClevernessLib.Demo.Scenarios;
 
 /// <summary>
-/// Shows a deterministic strategy answering a matching goal without any LLM call.
+/// Demonstrates deterministic strategies — fixed answers for known goal patterns
+/// that bypass the LLM entirely.
+///
+/// What this shows:
+///   - <see cref="GreetingStrategy"/> matches goals starting with "greet:" and
+///     produces a greeting without calling any AI model.
+///   - Strategies run before the LLM tool loop. If one matches, the pipeline
+///     short-circuits — zero tokens consumed, zero latency from the provider.
+///   - In production, use strategies for FAQ answers, lookup tables, cached
+///     responses, or any deterministic logic that doesn't need reasoning.
 /// </summary>
 internal static class StrategyScenario
 {
@@ -17,6 +26,7 @@ internal static class StrategyScenario
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
 
+        // Register the strategy. In production this is done once at startup via DI.
         await using var scoped = DemoHost.CreateProvider(
             llm,
             services => services.AddAgentStrategy<GreetingStrategy>());

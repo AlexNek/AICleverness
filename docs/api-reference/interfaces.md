@@ -35,7 +35,7 @@ them grouped by topic.
 | `IAgentQualityGate` | Checks the answer; can ask for a retry |
 | `IAgentResultValidator` | A simple yes/no check on the final result |
 | `IAgentResultTransformer` | Changes the final output (formatting, removing private data) |
-| `IAgentObserver` | Gets messages about the run: start, finish, errors |
+| `IAgentObserver` | Gets messages about the run: start, finish, errors. New: `OnLlmCallCompletedAsync`, `OnModelSwitchedAsync` (default no-op) |
 | `IAgentPipelineMiddleware` | Your own step in the pipeline |
 
 ## Memory
@@ -89,4 +89,5 @@ them grouped by topic.
 | `IDiagnosticCollector` | Detailed traces for debugging |
 | `IStartupAnalyzer` | Checks the DI setup when the application starts |
 | `IExecutionEventPublisher` / `IExecutionEventHandler` | Publishes run events to subscribers |
+| `ILlmErrorClassifier` | Internal: classifies LLM failures as transient or permanent for failover decisions |
 | `IRecoveryStrategy` | How to recover after a failure |

@@ -27,6 +27,8 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
 
     private readonly IModelManager? _modelManager;
 
+    private readonly IModelCatalog? _modelCatalog;
+
     private readonly IEnumerable<IAgentObserver> _observers;
 
     private readonly AgentRuntimeOptions _options;
@@ -65,6 +67,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         AgentRuntimeOptions? options = null,
         IExecutionEventPublisher? eventPublisher = null,
         IModelManager? modelManager = null,
+        IModelCatalog? modelCatalog = null,
         ILogger<AgentRuntime>? logger = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
@@ -82,6 +85,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         _options = options ?? new AgentRuntimeOptions();
         _eventPublisher = eventPublisher;
         _modelManager = modelManager;
+        _modelCatalog = modelCatalog;
         _logger = logger;
     }
 
@@ -215,7 +219,8 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
             _options,
             _observers,
             _eventPublisher,
-            _logger);
+            _logger,
+            modelCatalog: _modelCatalog);
         builder.UseTerminal(loop.RunAsync);
 
         return builder.Build();
@@ -353,13 +358,20 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
                         Profile = result.Profile,
                         Attempt = result.Attempts,
                         IsFallback = result.IsFallback,
+                        RemainingFallbacks = result.Fallbacks.Count,
                         SelectionReason = result.SelectionReason
                     });
             context.SetProperty(AgentPropertyKeys.Model, result.Model.Name);
+
+            // Store the full resolution result so ModelFailoverHandler can
+            // access the Fallbacks chain at runtime.
+            context.SetProperty(AgentPropertyKeys.ModelResolutionResult, result);
+
             _logger?.LogDebug(
-                "Resolved model {ModelName} via profile {ProfileId} for agent request",
+                "Resolved model {ModelName} via profile {ProfileId} for agent request (fallbacks: {FallbackCount})",
                 result.Model.Name,
-                result.Profile.Id);
+                result.Profile.Id,
+                result.Fallbacks.Count);
             return Array.Empty<CapabilityProfile>();
         }
 

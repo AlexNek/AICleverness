@@ -5,6 +5,13 @@ namespace AiClevernessLib.Demo;
 
 /// <summary>
 /// Observer that traces agent lifecycle events to the console.
+///
+/// This demonstrates the IAgentObserver interface — the runtime notifies
+/// registered observers on every step: run start/end, each LLM call and response,
+/// tool invocations, model switches, quality gate rejections, and policy blocks.
+///
+/// In production, implement IAgentObserver to send events to your monitoring
+/// system (OpenTelemetry, Application Insights, Datadog, etc.).
 /// </summary>
 public sealed class ConsoleAgentObserver : IAgentObserver
 {
@@ -32,12 +39,33 @@ public sealed class ConsoleAgentObserver : IAgentObserver
     }
 
     /// <inheritdoc />
+    public Task OnLlmCallCompletedAsync(LlmCallInfo info, CancellationToken cancellationToken)
+    {
+        var status = info.Success ? "success" : $"failed: {info.Error}";
+        Console.WriteLine(
+            $"{Prefix} LLM call completed — model: {info.Model}, attempt: {info.Attempt}, "
+            + $"duration: {info.Duration.TotalMilliseconds:F0} ms, {status}");
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     public Task OnLlmRespondedAsync(
         LlmResponse response,
         TimeSpan duration,
         CancellationToken cancellationToken)
     {
         Console.WriteLine($"{Prefix} LLM responded in {duration.TotalMilliseconds:F0} ms");
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task OnModelSwitchedAsync(
+        string fromModel,
+        string toModel,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"{Prefix} model switched: '{fromModel}' → '{toModel}' (reason: {reason})");
         return Task.CompletedTask;
     }
 
@@ -78,7 +106,11 @@ public sealed class ConsoleAgentObserver : IAgentObserver
         TimeSpan duration,
         CancellationToken cancellationToken)
     {
-        Console.WriteLine($"{Prefix} tool '{tool.Name}' completed in {duration.TotalMilliseconds:F0} ms");
+        var output = result.Success
+            ? result.Output ?? "(empty)"
+            : $"error: {result.Error}";
+        Console.WriteLine(
+            $"{Prefix} tool '{tool.Name}' completed in {duration.TotalMilliseconds:F0} ms — {output}");
         return Task.CompletedTask;
     }
 

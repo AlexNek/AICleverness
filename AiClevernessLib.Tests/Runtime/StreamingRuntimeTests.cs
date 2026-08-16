@@ -315,6 +315,27 @@ public sealed class StreamingRuntimeTests
     }
 
     [Fact]
+    public async Task RunStreamingAsync_PublishesLlmCallCompleted_OnFailedAttempt()
+    {
+        var llm = new ThrowingLlmClient(new InvalidOperationException("boom"));
+        var tools = new ToolRegistry();
+        var publisher = new RecordingPublisher();
+        var runtime = new AgentRuntime(llm, tools, eventPublisher: publisher);
+        var request = new AgentRequest("publish failure");
+
+        await CollectEvents(runtime, request);
+
+        // Failed attempts are published too, carrying outcome and turn.
+        var completed = publisher.PublishedEvents
+            .OfType<LlmCallCompletedBusEvent>()
+            .Single();
+        completed.Success.Should().BeFalse();
+        completed.Error.Should().Be("boom");
+        completed.Turn.Should().Be(0);
+        completed.Usage.Should().BeNull();
+    }
+
+    [Fact]
     public async Task RunStreamingAsync_QualityGateRejection_ReturnsFailedResult()
     {
         var llm = new FakeLlmClient([new LlmResponse("mediocre answer")]);
@@ -470,6 +491,22 @@ public sealed class StreamingRuntimeTests
         {
             var response = _responses.Dequeue();
             return Task.FromResult(response with { Usage = new LlmTokenUsage(10, 5) });
+        }
+    }
+
+    private sealed class ThrowingLlmClient : ILlmClient
+    {
+        private readonly Exception _exception;
+
+        public ThrowingLlmClient(Exception exception) => _exception = exception;
+
+        public Task<LlmResponse> CompleteAsync(
+            IReadOnlyList<LlmMessage> messages,
+            IReadOnlyList<ToolDefinition>? tools = null,
+            LlmCompletionOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw _exception;
         }
     }
 

@@ -34,6 +34,9 @@ ones:
 
 - `ModelChunkEvent` — a part of the model's text output.
 - `ToolCompletedAgentEvent` — a tool call has finished; contains its output.
+- `ModelSwitchedAgentEvent` — the runtime switched to a fallback model
+  mid-execution due to a transient failure (see
+  [model failover](../execution/model-failover.md)).
 - `RunCompletedEvent` — the run is done; contains the final
   `AgentResult`.
 

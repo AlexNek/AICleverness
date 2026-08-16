@@ -35,12 +35,28 @@ internal sealed class FilteredObserver : IAgentObserver, IAppliesToAgent
             ? _inner.OnLlmCalledAsync(messages, cancellationToken)
             : Task.CompletedTask;
 
+    public Task OnLlmCallCompletedAsync(
+        LlmCallInfo info,
+        CancellationToken cancellationToken) =>
+        _currentContext is not null && _filter(_currentContext)
+            ? _inner.OnLlmCallCompletedAsync(info, cancellationToken)
+            : Task.CompletedTask;
+
     public Task OnLlmRespondedAsync(
         LlmResponse response,
         TimeSpan duration,
         CancellationToken cancellationToken) =>
         _currentContext is not null && _filter(_currentContext)
             ? _inner.OnLlmRespondedAsync(response, duration, cancellationToken)
+            : Task.CompletedTask;
+
+    public Task OnModelSwitchedAsync(
+        string fromModel,
+        string toModel,
+        string reason,
+        CancellationToken cancellationToken) =>
+        _currentContext is not null && _filter(_currentContext)
+            ? _inner.OnModelSwitchedAsync(fromModel, toModel, reason, cancellationToken)
             : Task.CompletedTask;
 
     public Task OnPolicyBlockedAsync(

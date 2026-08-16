@@ -6,7 +6,16 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AiClevernessLib.Demo.Scenarios;
 
 /// <summary>
-/// Shows a quality gate rejecting a weak answer and the runtime retrying the LLM.
+/// Demonstrates quality gates — post-execution evaluation that can reject the
+/// LLM's answer and force a retry with feedback.
+///
+/// What this shows:
+///   - <see cref="MinimumLengthGate"/> rejects answers shorter than 20 characters.
+///   - The LLM's first scripted answer ("No.") is rejected by the gate.
+///   - The runtime automatically retries with quality feedback appended to the
+///     system prompt, and the LLM's second answer passes.
+///   - In production, use gates for JSON schema validation, factual accuracy
+///     checks, tone/style enforcement, or safety filtering.
 /// </summary>
 internal static class QualityGateScenario
 {
@@ -16,10 +25,13 @@ internal static class QualityGateScenario
     {
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
+
+        // Script two answers: the first is too short (will be rejected), the second passes.
         llm.EnqueueText("No.");
         llm.EnqueueText(
             "AiCleverness orchestrates policies, tools, and quality gates around any LLM provider.");
 
+        // Register the quality gate.
         await using var scoped = DemoHost.CreateProvider(
             llm,
             services => services.AddAgentQualityGate<MinimumLengthGate>());
@@ -29,6 +41,7 @@ internal static class QualityGateScenario
             Goal,
             Parameters: new Dictionary<string, object>
                             {
+                                // Allow one retry when the gate rejects.
                                 [AgentPropertyKeys.MaxQualityRetries] = 1
                             });
 

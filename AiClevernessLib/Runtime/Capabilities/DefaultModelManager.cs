@@ -49,6 +49,10 @@ public sealed class DefaultModelManager : IModelManager
             profiles.Count);
 
         var attempts = 0;
+        var fallbacks = new List<ModelDefinition>();
+        ModelDefinition? selected = null;
+        CapabilityProfile? selectedProfile = null;
+        int selectedAttempts = 0;
 
         foreach (var profile in profiles)
         {
@@ -66,38 +70,66 @@ public sealed class DefaultModelManager : IModelManager
                 continue;
             }
 
-            var selected = await _selectionPolicy.SelectAsync(candidates, requirements, ct);
-
-            if (selected is not null)
+            if (selected is null)
             {
-                _logger?.LogInformation(
-                    "Selected model {ModelName} ({Provider}) via profile '{ProfileId}' (priority {Priority})"
-                    +
-                    " — attempt {Attempt}/{Total}, fallback={IsFallback}",
-                    selected.Name,
-                    selected.ProviderKey,
-                    profile.Id,
-                    profile.Priority,
+                // First profile with candidates: select primary + collect runners-up.
+                var ranked = await GetRankedCandidatesAsync(candidates, requirements, ct);
+                if (ranked.Count > 0)
+                {
+                    selected = ranked[0];
+                    selectedProfile = profile;
+                    selectedAttempts = attempts;
+
+                    // Runners-up from the same profile become fallbacks.
+                    for (var i = 1; i < ranked.Count; i++)
+                    {
+                        fallbacks.Add(ranked[i]);
+                    }
+
+                    continue;
+                }
+
+                _logger?.LogDebug(
+                    "  [{Attempts}/{Total}] Profile '{ProfileId}': all candidates rejected by policy",
                     attempts,
                     profiles.Count,
-                    attempts > 1);
-
-                return new ModelResolutionResult
-                           {
-                               Model = selected,
-                               Profile = profile,
-                               Attempts = attempts,
-                               IsFallback = attempts > 1,
-                               SelectionReason =
-                                   $"Profile '{profile.Id}' (priority {profile.Priority})"
-                           };
+                    profile.Id);
             }
+            else
+            {
+                // Lower-priority profile: best candidate becomes a fallback.
+                var best = await _selectionPolicy.SelectAsync(candidates, requirements, ct);
+                if (best is not null)
+                {
+                    fallbacks.Add(best);
+                }
+            }
+        }
 
-            _logger?.LogDebug(
-                "  [{Attempts}/{Total}] Profile '{ProfileId}': all candidates rejected by policy",
-                attempts,
+        if (selected is not null && selectedProfile is not null)
+        {
+            _logger?.LogInformation(
+                "Selected model {ModelName} ({Provider}) via profile '{ProfileId}' (priority {Priority})"
+                + " — attempt {Attempt}/{Total}, fallback={IsFallback}, chain length={ChainLength}",
+                selected.Name,
+                selected.ProviderKey,
+                selectedProfile.Id,
+                selectedProfile.Priority,
+                selectedAttempts,
                 profiles.Count,
-                profile.Id);
+                selectedAttempts > 1,
+                fallbacks.Count);
+
+            return new ModelResolutionResult
+            {
+                Model = selected,
+                Profile = selectedProfile,
+                Attempts = selectedAttempts,
+                IsFallback = selectedAttempts > 1,
+                Fallbacks = fallbacks.AsReadOnly(),
+                SelectionReason =
+                    $"Profile '{selectedProfile.Id}' (priority {selectedProfile.Priority})"
+            };
         }
 
         _logger?.LogError(
@@ -105,5 +137,43 @@ public sealed class DefaultModelManager : IModelManager
             requirements.Capabilities.CapabilityFlags,
             profiles.Count);
         return null;
+    }
+
+    /// <summary>
+    /// Returns all candidates that pass the selection policy, ranked in policy order.
+    /// </summary>
+    private async ValueTask<IReadOnlyList<ModelDefinition>> GetRankedCandidatesAsync(
+        IReadOnlyList<ModelDefinition> candidates,
+        CapabilityRequirements requirements,
+        CancellationToken ct)
+    {
+        // Ask the policy for the primary pick, then iteratively get the next best
+        // by excluding already-selected candidates.
+        var ranked = new List<ModelDefinition>();
+        var remaining = new List<ModelDefinition>(candidates);
+
+        while (remaining.Count > 0)
+        {
+            var pick = await _selectionPolicy.SelectAsync(remaining, requirements, ct);
+            if (pick is null)
+            {
+                break;
+            }
+
+            // A policy that returns a candidate outside the offered set would
+            // make Remove() a no-op and loop forever — bail out, keeping the
+            // picks already ranked.
+            if (!remaining.Remove(pick))
+            {
+                _logger?.LogWarning(
+                    "Selection policy returned '{ModelName}' which is not among the offered candidates; ranking stopped",
+                    pick.Name);
+                break;
+            }
+
+            ranked.Add(pick);
+        }
+
+        return ranked;
     }
 }

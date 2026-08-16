@@ -16,7 +16,9 @@ The steps, in order:
 5. **LLM tool loop** — the main work. The runtime sends the goal and the
    tool list to the model. The model can call tools, the runtime runs them
    (through `IToolExecutor`), and the loop continues until the model is
-   done.
+   done. On a transient failure (e.g. timeout), the loop can
+   [fail over to the next candidate model](../execution/model-failover.md)
+   if failover is enabled.
 6. **Quality gates** — check the model's answer. If the answer is not good
    enough, the runtime sends the feedback back to the model and tries again.
 7. **Validators and transformers** — final checks on the result, then
@@ -53,6 +55,7 @@ graph LR
     S -->|miss| LLM[LLM Tool Loop]
     LLM --> T[IToolExecutor / ITool]
     T --> LLM
+    LLM -->|failover| LLM
     LLM --> QG[Quality Gates]
     QG -->|retry| LLM
     QG -->|approved| V[Validators / Transformers]
@@ -187,6 +190,7 @@ matching `Add...` method:
 | Validators | `IAgentResultValidator` | `AddAgentResultValidator<T>()` |
 | Transformers | `IAgentResultTransformer` | `AddAgentResultTransformer<T>()` |
 | Observers | `IAgentObserver` | `AddAgentObserver<T>()` |
+| Model failover | Internal (`ILlmErrorClassifier`) | Built-in; enabled globally via `AgentRuntimeOptions.EnableModelFailover` or per-request via the `enable_model_failover` property — see [Model failover](../execution/model-failover.md) |
 
 By default, a registered class runs for every agent. You can also register
 it for one agent only — see

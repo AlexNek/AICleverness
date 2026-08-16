@@ -12,12 +12,18 @@ public static class Program
     {
         Console.WriteLine("=== AiCleverness Demo ===");
         Console.WriteLine();
+        Console.WriteLine("NOTE: This demo is fully hermetic — no network access.");
+        Console.WriteLine("  - LLM: ScriptedLlmClient (pre-scripted responses, no real AI provider)");
+        Console.WriteLine("  - Tools: deterministic fakes (e.g. WeatherTool returns fixed data)");
+        Console.WriteLine("  - Purpose: demonstrate the runtime machinery (tool loop, observers,");
+        Console.WriteLine("    events, policies, quality gates) — not a real application.");
+        Console.WriteLine();
 
         var llm = new ScriptedLlmClient();
         await using var provider = DemoHost.CreateProvider(llm);
 
         await RunScenarioAsync(
-            "1. Tool loop: the LLM calls a tool and the tool really executes",
+            "1. Tool loop: scripted LLM decides to call a tool, runtime executes it",
             () => ToolLoopScenario.RunAsync(provider));
         await RunScenarioAsync(
             "2. Streaming: live AgentEvent stream for the same run",

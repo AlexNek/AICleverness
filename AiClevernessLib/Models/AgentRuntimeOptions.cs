@@ -23,4 +23,11 @@ public sealed class AgentRuntimeOptions
     public bool DefaultToolMetricsEnabled { get; set; } = true;
 
     public int? DefaultToolTimeoutSeconds { get; set; }
+
+    /// <summary>
+    /// When <c>true</c>, the tool loop will fail over to the next candidate model
+    /// in the chain on transient failures (e.g. per-turn timeout). Default is <c>false</c>.
+    /// Can be overridden per-request via <see cref="AgentPropertyKeys.EnableModelFailover"/>.
+    /// </summary>
+    public bool EnableModelFailover { get; set; }
 }

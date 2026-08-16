@@ -25,4 +25,19 @@ public sealed class DefaultModelCatalog : IModelCatalog
 
         return new ValueTask<IReadOnlyList<ModelDefinition>>(Array.Empty<ModelDefinition>());
     }
+
+    public ValueTask<ModelDefinition?> FindByNameAsync(
+        string name,
+        CancellationToken ct = default)
+    {
+        foreach (var candidates in _mapping.Values)
+        {
+            var match = candidates.FirstOrDefault(
+                m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+                return new ValueTask<ModelDefinition?>(match);
+        }
+
+        return new ValueTask<ModelDefinition?>(default(ModelDefinition));
+    }
 }

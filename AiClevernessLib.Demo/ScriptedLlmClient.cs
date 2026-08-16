@@ -6,6 +6,14 @@ namespace AiClevernessLib.Demo;
 /// <summary>
 /// Hermetic <see cref="ILlmClient"/> that replays scripted responses in FIFO order.
 /// Stands in for a real provider adapter so the demo runs without any network access.
+///
+/// In production, replace this with an adapter for your AI provider:
+///   - OpenAI (GPT-4, GPT-3.5)
+///   - Anthropic (Claude)
+///   - Google (Gemini)
+///   - Local models (Ollama, llama.cpp)
+///
+/// The runtime doesn't care which provider you use — it only calls CompleteAsync().
 /// </summary>
 public sealed class ScriptedLlmClient : ILlmClient
 {

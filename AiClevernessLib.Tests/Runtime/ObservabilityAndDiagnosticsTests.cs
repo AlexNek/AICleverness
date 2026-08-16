@@ -253,6 +253,46 @@ public class ObservabilityAndDiagnosticsTests
         m.TotalExecutions.Should().Be(0);
     }
 
+    [Fact]
+    public async Task DefaultMetricsCollector_CountsFailedLlmAttempts()
+    {
+        // Arrange: one success, one timeout, one success after failover —
+        // two logical turns, three attempts.
+        var collector = new DefaultMetricsCollector();
+        await collector.RecordAsync(CreateManifest(
+            "exec-1",
+            ExecutionStatus.Completed,
+            TimeSpan.FromSeconds(2),
+            events:
+            [
+                new LlmRespondedEvent(
+                    "exec-1",
+                    new LlmResponse(null),
+                    TimeSpan.FromMilliseconds(500),
+                    Turn: 0),
+                new LlmFailedEvent(
+                    "exec-1",
+                    "LLM completion timed out after 1s on turn 0",
+                    TimeSpan.FromSeconds(1),
+                    Turn: 0),
+                new LlmRespondedEvent(
+                    "exec-1",
+                    new LlmResponse("ok"),
+                    TimeSpan.FromMilliseconds(300),
+                    Turn: 1)
+            ]));
+
+        // Act
+        var agg = await collector.GetAggregateMetricsAsync();
+        var single = await collector.GetExecutionMetricsAsync("exec-1");
+
+        // Assert — failed attempts are included in the LLM attempt metrics.
+        agg.TotalLlmCalls.Should().Be(3);
+        agg.AverageLlmDuration.Should().NotBeNull();
+        single.Should().NotBeNull();
+        single!.TotalLlmCalls.Should().Be(3);
+    }
+
     // ── StartupAnalysis ────────────────────────────────────────────────────
 
     [Fact]
