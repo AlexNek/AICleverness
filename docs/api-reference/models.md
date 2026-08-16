@@ -69,6 +69,17 @@ every public type and its properties.
 | `CapabilityProfile` | `ProviderName`, `Capabilities`, `Limits` |
 | `ResourceEstimate` / `ResourceUsage` / `ResourceLimits` | Cost, token, time, and tool-call budgets |
 
+## Model Selection and Failover
+
+| Type | Properties |
+| --- | --- |
+| `ModelResolutionResult` | `Model`, `Profile`, `Attempts`, `IsFallback`, `Fallbacks`, `SelectionReason` |
+| `ModelExecutionInfo` | `Model`, `Profile`, `Attempt`, `IsFallback`, `RemainingFallbacks`, `SelectionReason` |
+| `LlmCallInfo` | `ExecutionId`, `Model`, `Turn`, `Attempt`, `IsFallback`, `Duration`, `Usage`, `Success`, `Error`, `Classification`, `StartedAt` |
+| `FailureClassification` | Enum: `Permanent`, `TransientAdvance` |
+| `ModelSwitchedAgentEvent` | `ExecutionId`, `Turn`, `From`, `To`, `Reason` |
+| `ModelSwitchedBusEvent` | `ExecutionId`, `From`, `To`, `Reason`, `Turn`, `Timestamp` |
+
 ## Workflows
 
 | Type | Properties |

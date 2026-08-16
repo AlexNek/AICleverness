@@ -38,6 +38,45 @@ monitoring system:
 services.AddAgentObserver<RuntimeObserver>();
 ```
 
+## Model Failover Events
+
+When [model failover](../execution/model-failover.md) is enabled, additional
+observer methods fire:
+
+- `OnLlmCallCompletedAsync(LlmCallInfo info)` — fires exactly once per LLM
+  call attempt (success, error, or timeout). Provides full context: model
+  name, turn, attempt number, duration, token usage, and failure classification.
+- `OnModelSwitchedAsync(from, to, reason)` — fires when the runtime switches
+  from one model to another due to a transient failure.
+
+Streaming and bus counterparts:
+
+- `ModelSwitchedAgentEvent` — emitted via the streaming event channel.
+- `ModelSwitchedBusEvent` — published via the execution event bus.
+
+Example observer implementation:
+
+```csharp
+public sealed class FailoverLoggingObserver : IAgentObserver
+{
+    public Task OnLlmCallCompletedAsync(LlmCallInfo info, CancellationToken ct)
+    {
+        Log.Information("LLM call: model={Model}, success={Success}, duration={Duration}ms",
+            info.Model, info.Success, info.Duration.TotalMilliseconds);
+        return Task.CompletedTask;
+    }
+
+    public Task OnModelSwitchedAsync(
+        string from, string to, string reason, CancellationToken ct)
+    {
+        Log.Warning("Model switched: {From} → {To}, reason: {Reason}", from, to, reason);
+        return Task.CompletedTask;
+    }
+
+    // Other IAgentObserver methods use default no-op implementations.
+}
+```
+
 ## Execution Graphs
 
 You can export the steps of a run as a Mermaid diagram:
