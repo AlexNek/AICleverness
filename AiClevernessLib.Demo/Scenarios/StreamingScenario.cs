@@ -6,8 +6,18 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AiClevernessLib.Demo.Scenarios;
 
 /// <summary>
-/// Runs the same tool-loop request through the streaming entry point and prints
-/// each <see cref="AgentEvent"/> as it arrives.
+/// Demonstrates streaming execution — the same tool-loop run as scenario 1,
+/// but using <see cref="IStreamingAgentRuntime"/> which exposes each event
+/// as it occurs via <c>IAsyncEnumerable&lt;AgentEvent&gt;</c>.
+///
+/// What this shows:
+///   - Real-time visibility into every runtime step (turn starts, tool calls,
+///     model text chunks, completion).
+///   - A consumer (e.g. a chat UI) can display partial progress without waiting
+///     for the full run to finish.
+///   - Each event carries the execution ID so concurrent runs can be multiplexed.
+///
+/// In production, pipe these events to a WebSocket, SSE stream, or SignalR hub.
 /// </summary>
 internal static class StreamingScenario
 {
@@ -17,10 +27,12 @@ internal static class StreamingScenario
     {
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
+
+        // Same two-turn script: tool call → final text.
         llm.EnqueueToolCall(WeatherTool.ToolName, $$"""{"city": "{{City}}"}""");
         llm.EnqueueText($"In {City} it is cool and windy today.");
 
-        // AgentRuntime implements both entry points; DI registers it as IAgentRuntime.
+        // AgentRuntime implements both IAgentRuntime and IStreamingAgentRuntime.
         var streaming = provider.GetRequiredService<IAgentRuntime>() as IStreamingAgentRuntime
             ?? throw new InvalidOperationException("The registered runtime does not support streaming.");
 
@@ -28,6 +40,8 @@ internal static class StreamingScenario
             $"What is the weather in {City}?",
             AllowedToolNames: [WeatherTool.ToolName]);
 
+        // Each iteration yields one AgentEvent. The pattern-match below shows
+        // how a consumer would handle the most common event types.
         await foreach (var agentEvent in streaming.RunStreamingAsync(request))
         {
             Console.WriteLine($"  {agentEvent.EventType,-14} {Describe(agentEvent)}");
@@ -41,6 +55,7 @@ internal static class StreamingScenario
         ToolStartedEvent tool => $"invoking '{tool.ToolName}'",
         ToolCompletedAgentEvent tool => $"'{tool.ToolName}' -> {tool.Result.Output}",
         ModelChunkEvent chunk when chunk.IsFinal => chunk.Content,
+        ModelSwitchedAgentEvent switched => $"model switched: '{switched.From}' → '{switched.To}'",
         RunCompletedEvent completed => $"success: {completed.Result.Success}",
         PolicyBlockedAgentEvent blocked => $"policy '{blocked.PolicyName}'",
         QualityGateAgentEvent gate => $"gate '{gate.GateName}' approved: {gate.Approved}",

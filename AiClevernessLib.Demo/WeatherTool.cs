@@ -5,6 +5,11 @@ namespace AiClevernessLib.Demo;
 
 /// <summary>
 /// Sample tool that returns deterministic weather data for a city.
+/// This is a fake — it always returns "21°C, partly cloudy" regardless of input.
+///
+/// In production, replace this with a real tool that calls a weather API.
+/// The runtime calls InvokeAsync() with the arguments the LLM provided and
+/// feeds the result back to the model for the next turn.
 /// </summary>
 public sealed class WeatherTool : ITool
 {

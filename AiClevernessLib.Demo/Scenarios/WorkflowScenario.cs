@@ -7,7 +7,16 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AiClevernessLib.Demo.Scenarios;
 
 /// <summary>
-/// Runs a two-node workflow: a draft agent followed by a review agent that depends on it.
+/// Demonstrates the workflow engine — composing multiple agent runs into a
+/// directed acyclic graph (DAG) with explicit dependencies.
+///
+/// What this shows:
+///   - Two nodes: "draft" and "review". The review node depends on the draft.
+///   - The workflow executor runs draft first, then review — respecting the
+///     dependency order automatically.
+///   - Each node is a full agent run (with its own LLM call, tool access, etc.).
+///   - In production, use workflows for multi-step pipelines: research → draft →
+///     review → publish, or any process where steps have data dependencies.
 /// </summary>
 internal static class WorkflowScenario
 {
@@ -21,6 +30,8 @@ internal static class WorkflowScenario
     {
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
+
+        // Script one answer per workflow node (each node makes one LLM call).
         llm.EnqueueText("Draft: Ship the refactor behind a feature flag.");
         llm.EnqueueText("Review: Approved — the draft is concise and actionable.");
 
@@ -42,29 +53,27 @@ internal static class WorkflowScenario
     }
 
     private static WorkflowDefinition BuildWorkflow() => new()
-                                                             {
-                                                                 Id = WorkflowId,
-                                                                 Name = "Draft and review",
-                                                                 EntryNodeId = DraftNodeId,
-                                                                 Nodes =
-                                                                 [
-                                                                     new WorkflowNode
-                                                                     {
-                                                                         Id = DraftNodeId,
-                                                                         Name = "Draft",
-                                                                         Type = WorkflowNodeType.Agent,
-                                                                         Request = new AgentRequest(
-                                                                             "Draft one release-note sentence.")
-                                                                     },
-                                                                     new WorkflowNode
-                                                                     {
-                                                                         Id = ReviewNodeId,
-                                                                         Name = "Review",
-                                                                         Type = WorkflowNodeType.Agent,
-                                                                         DependsOn = [DraftNodeId],
-                                                                         Request = new AgentRequest(
-                                                                             "Review the draft for clarity.")
-                                                                     }
-                                                                 ]
-                                                             };
+    {
+        Id = WorkflowId,
+        Name = "Draft and review",
+        EntryNodeId = DraftNodeId,
+        Nodes =
+        [
+            new WorkflowNode
+            {
+                Id = DraftNodeId,
+                Name = "Draft",
+                Type = WorkflowNodeType.Agent,
+                Request = new AgentRequest("Draft one release-note sentence.")
+            },
+            new WorkflowNode
+            {
+                Id = ReviewNodeId,
+                Name = "Review",
+                Type = WorkflowNodeType.Agent,
+                DependsOn = [DraftNodeId],
+                Request = new AgentRequest("Review the draft for clarity.")
+            }
+        ]
+    };
 }

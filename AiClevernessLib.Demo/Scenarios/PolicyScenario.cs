@@ -6,7 +6,16 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AiClevernessLib.Demo.Scenarios;
 
 /// <summary>
-/// Shows a policy blocking a dangerous request before any LLM call happens.
+/// Demonstrates the policy pipeline — pre-execution guardrails that can block
+/// a request before any LLM call happens.
+///
+/// What this shows:
+///   - <see cref="NoDangerousRequestsPolicy"/> inspects the goal text and blocks
+///     anything containing "delete".
+///   - The LLM is never called (CallCount stays 0) — policies run first in the
+///     pipeline and can reject cheaply.
+///   - In production, use policies for rate limiting, content filtering, cost
+///     budgets, or any business rule that should short-circuit execution.
 /// </summary>
 internal static class PolicyScenario
 {
@@ -17,6 +26,7 @@ internal static class PolicyScenario
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
 
+        // Register the policy. In production this is done once at startup via DI.
         await using var scoped = DemoHost.CreateProvider(
             llm,
             services => services.AddAgentPolicy<NoDangerousRequestsPolicy>());
