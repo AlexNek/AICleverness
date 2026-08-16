@@ -14,5 +14,11 @@ public sealed record ModelExecutionInfo
 
     public required CapabilityProfile Profile { get; init; }
 
+    /// <summary>
+    /// Number of fallback candidates remaining in the chain after this model.
+    /// Set by the failover handler on each switch. Zero when no fallbacks remain.
+    /// </summary>
+    public int RemainingFallbacks { get; init; }
+
     public string? SelectionReason { get; init; }
 }

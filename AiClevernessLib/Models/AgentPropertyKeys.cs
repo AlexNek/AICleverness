@@ -9,6 +9,12 @@ public static class AgentPropertyKeys
     /// <summary>LLM completion timeout in seconds.</summary>
     public const string CompletionTimeoutSeconds = "completion_timeout_seconds";
 
+    /// <summary>
+    /// Per-request override to enable/disable model failover (bool).
+    /// Overrides <see cref="AgentRuntimeOptions.EnableModelFailover"/>.
+    /// </summary>
+    public const string EnableModelFailover = "enable_model_failover";
+
     /// <summary>Maximum quality-gate retry attempts.</summary>
     public const string MaxQualityRetries = "max_quality_retries";
 
@@ -20,6 +26,13 @@ public static class AgentPropertyKeys
 
     /// <summary>Full model execution provenance (model, profile, selection reason).</summary>
     public const string ModelExecutionInfo = "model_execution_info";
+
+    /// <summary>
+    /// Ordered fallback model names for runtime failover (<see cref="IReadOnlyList{String}"/>).
+    /// When present, takes precedence over the capability-resolved chain.
+    /// Model names that cannot be found in the catalog are skipped with a warning.
+    /// </summary>
+    public const string ModelFallbackChain = "model_fallback_chain";
 
     /// <summary>Quality feedback text passed into the next LLM attempt.</summary>
     public const string QualityFeedback = "quality_feedback";

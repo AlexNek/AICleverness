@@ -353,13 +353,20 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
                         Profile = result.Profile,
                         Attempt = result.Attempts,
                         IsFallback = result.IsFallback,
+                        RemainingFallbacks = result.Fallbacks.Count,
                         SelectionReason = result.SelectionReason
                     });
             context.SetProperty(AgentPropertyKeys.Model, result.Model.Name);
+
+            // Store the full resolution result so ModelFailoverHandler can
+            // access the Fallbacks chain at runtime.
+            context.SetProperty("model_resolution_result", result);
+
             _logger?.LogDebug(
-                "Resolved model {ModelName} via profile {ProfileId} for agent request",
+                "Resolved model {ModelName} via profile {ProfileId} for agent request (fallbacks: {FallbackCount})",
                 result.Model.Name,
-                result.Profile.Id);
+                result.Profile.Id,
+                result.Fallbacks.Count);
             return Array.Empty<CapabilityProfile>();
         }
 
