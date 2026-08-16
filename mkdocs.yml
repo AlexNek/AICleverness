@@ -58,6 +58,7 @@ nav:
       - Agent Scoping: execution/agent-scoping.md
   - Streaming:
       - Streaming Execution: streaming/streaming-execution.md
+      - Streaming LLM Client: streaming/streaming-llm-client.md
       - Streaming Tool Buffer: streaming/tool-call-buffer.md
   - Memory: memory/memory-tiers.md
   - Security: security/security-approval.md

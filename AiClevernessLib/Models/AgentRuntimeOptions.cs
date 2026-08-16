@@ -7,6 +7,13 @@ public sealed class AgentRuntimeOptions
 {
     public int DefaultCompletionTimeoutSeconds { get; set; } = 60;
 
+    /// <summary>
+    /// Default idle silence threshold in seconds between meaningful chunks during streaming.
+    /// When the LLM client supports streaming, a stream is considered stalled if no
+    /// meaningful chunk arrives within this duration. Default is 30 seconds.
+    /// </summary>
+    public int DefaultIdleTimeoutSeconds { get; set; } = 30;
+
     public int DefaultMaxQualityRetries { get; set; } = 1;
 
     public int DefaultMaxTurns { get; set; } = 8;

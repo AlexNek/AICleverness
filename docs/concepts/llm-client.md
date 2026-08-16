@@ -57,3 +57,34 @@ services.AddAiClevernessLlmClient<MyLlmClient>();
 For provider-neutral capability checks, model selection, and prompt
 management, see the capability and conversation interfaces in the
 [API Reference](../api-reference/interfaces.md).
+
+## Buffered vs Streaming
+
+The runtime supports two ways to call the LLM. Which one it uses depends
+on whether your client also implements `IStreamingLlmClient`:
+
+| | Buffered (default) | Streaming (opt-in) |
+|---|---|---|
+| Interface | `ILlmClient` | `IStreamingLlmClient : ILlmClient` |
+| Method | `CompleteAsync` — waits for the full response | `StreamAsync` — returns tokens one by one |
+| Timeout | Wall-clock (`CompletionTimeoutSeconds`) | Idle-based (`IdleTimeoutSeconds`) with an absolute cap |
+| Best for | Simple providers, short responses | Slow models, long generations, real-time UX |
+
+**Buffered mode** is what you get with `ILlmClient` alone. The runtime
+sends the request, waits for the full response, and applies a wall-clock
+timeout. If the model takes longer than `CompletionTimeoutSeconds`, the
+call is killed — even if the model is still working.
+
+**Streaming mode** activates when your client also implements
+`IStreamingLlmClient`. The runtime reads tokens as they arrive and resets
+an idle timer on every meaningful chunk. A slow model that keeps sending
+tokens is never killed for being slow — only a real stall (no meaningful
+chunk for `IdleTimeoutSeconds`) triggers a timeout. `CompletionTimeoutSeconds`
+remains as an absolute safety cap to prevent infinite streams.
+
+The runtime chooses the mode automatically at construction time. You do
+not switch between them at runtime — the same strategy is used for every
+call in a run, including failover retries.
+
+To implement streaming for your provider, see
+[Streaming LLM Client](../streaming/streaming-llm-client.md).

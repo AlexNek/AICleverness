@@ -10,6 +10,13 @@ public static class AgentPropertyKeys
     public const string CompletionTimeoutSeconds = "completion_timeout_seconds";
 
     /// <summary>
+    /// Idle silence threshold in seconds between meaningful chunks during streaming.
+    /// Only used when the LLM client supports streaming. If no meaningful chunk is
+    /// received within this duration, the stream is considered stalled.
+    /// </summary>
+    public const string IdleTimeoutSeconds = "idle_timeout_seconds";
+
+    /// <summary>
     /// Per-request override to enable/disable model failover (bool).
     /// Overrides <see cref="AgentRuntimeOptions.EnableModelFailover"/>.
     /// </summary>
