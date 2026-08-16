@@ -208,6 +208,26 @@ public class EventInfrastructureTests
         evt.EventType.Should().Be("LlmCallCompleted");
         evt.Duration.Should().Be(TimeSpan.FromMilliseconds(500));
         evt.Usage.Should().Be(usage);
+        evt.Success.Should().BeTrue();
+        evt.Turn.Should().Be(0);
+        evt.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public void LlmCallCompletedBusEvent_FailedAttempt_CarriesOutcomeAndTurn()
+    {
+        var evt = new LlmCallCompletedBusEvent(
+            "exec-1",
+            TimeSpan.FromSeconds(1),
+            null,
+            Success: false,
+            Turn: 2,
+            Error: "LLM completion timed out after 1s on turn 2");
+
+        evt.Success.Should().BeFalse();
+        evt.Turn.Should().Be(2);
+        evt.Error.Should().Contain("timed out");
+        evt.Usage.Should().BeNull();
     }
 
     [Fact]

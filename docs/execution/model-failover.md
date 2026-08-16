@@ -1,8 +1,8 @@
 # Model Failover
 
-When an LLM call fails with a transient error (timeout, rate limit), the
-runtime can fail over to the next candidate model in the chain — same
-conversation, same turn, no repeated tool calls.
+When an LLM call fails with a transient error (currently: completion
+timeout), the runtime can fail over to the next candidate model in the
+chain — same conversation, same turn, no repeated tool calls.
 
 ## How It Works
 
@@ -46,8 +46,11 @@ The chain is resolved in this priority order:
 | `ModelResolutionResult.Fallbacks` | Built automatically by capability resolution |
 | Empty (no failover) | No chain available or failover disabled |
 
-When using an explicit chain, model names are validated against the catalog.
-Unknown names are skipped with a warning log.
+When using an explicit chain and a model catalog is registered, model
+names are validated against the catalog. Unknown names are skipped with a
+warning log. Without a catalog, names are passed through as-is. In both
+cases the chain is normalized: the active model is excluded and duplicates
+are removed, so failover never retries the current model.
 
 ## Pinned Models
 
@@ -58,14 +61,16 @@ regardless of the enable flag. Pinned means pinned.
 ## Turn Budget
 
 A failed attempt does **not** count against `maxTurns`. The turn counter is
-rewound on failover so consumers see the same budget semantics as before.
+rewound on failover so consumers see the same budget semantics as before —
+the retry reuses the same logical turn in the loop counter, the execution
+state, and the event stream (no second `TurnStartedEvent` for that turn).
 
 ## Chain Exhaustion
 
 When all candidates in the chain have been tried and failed, the run fails
 with an error message:
 
-```
+```text
 LLM failover chain exhausted after 3 attempts; last model tried: 'model-c' on turn 0
 ```
 
@@ -75,7 +80,7 @@ This is identifiable programmatically via `FailureEvent.Phase == "ModelFailover"
 
 For a single failover on turn N, consumers observe this exact sequence:
 
-```
+```text
 1. TurnStartedEvent          { Turn = N }
 2. OnLlmCalledAsync          (messages sent to model A)
 3. [timeout / error]
@@ -84,11 +89,13 @@ For a single failover on turn N, consumers observe this exact sequence:
 6. OnModelSwitchedAsync      { from = A, to = B, reason = "..." }
 7. ModelSwitchedAgentEvent   { From = A, To = B }
 8. ModelSwitchedBusEvent     { From = A, To = B }
-9. TurnStartedEvent          { Turn = N }   (same turn number, new attempt)
-10. OnLlmCalledAsync         (same messages sent to model B)
-11. [success]
-12. OnLlmCallCompletedAsync  { Model = B, Success = true }
+9. OnLlmCalledAsync          (same messages sent to model B)
+10. [success]
+11. OnLlmCallCompletedAsync  { Model = B, Success = true }
 ```
+
+The retried attempt reuses the logical turn — there is no second
+`TurnStartedEvent` and no extra turn counted in the execution state.
 
 ## Observability Hooks
 

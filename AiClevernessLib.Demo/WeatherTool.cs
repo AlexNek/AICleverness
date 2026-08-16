@@ -5,7 +5,9 @@ namespace AiClevernessLib.Demo;
 
 /// <summary>
 /// Sample tool that returns deterministic weather data for a city.
-/// This is a fake — it always returns "21°C, partly cloudy" regardless of input.
+/// This is a fake — for a valid, non-blank city argument it always returns
+/// the fixed value "21°C, partly cloudy" (including the city name in the
+/// output); a missing or blank city argument returns an error result.
 ///
 /// In production, replace this with a real tool that calls a weather API.
 /// The runtime calls InvokeAsync() with the arguments the LLM provided and

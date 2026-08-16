@@ -103,7 +103,7 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
             .OrderBy(d => d)
             .ToList();
 
-        var llmEvents = manifests.SelectMany(m => m.Events).OfType<LlmRespondedEvent>().ToList();
+        var llmDurations = GetLlmDurations(manifests.SelectMany(m => m.Events));
         var toolEvents = manifests.SelectMany(m => m.Events).OfType<ToolCompletedEvent>().ToList();
         var qualityEvents = manifests.SelectMany(m => m.Events).OfType<QualityGateRejectedEvent>()
             .ToList();
@@ -132,10 +132,10 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
                        P50Duration = GetPercentile(durations, 0.50),
                        P95Duration = GetPercentile(durations, 0.95),
                        P99Duration = GetPercentile(durations, 0.99),
-                       TotalLlmCalls = llmEvents.Count,
+                       TotalLlmCalls = llmDurations.Count,
                        AverageLlmDuration =
-                           llmEvents.Count > 0
-                               ? TimeSpan.FromTicks((long)llmEvents.Average(e => e.Duration.Ticks))
+                           llmDurations.Count > 0
+                               ? TimeSpan.FromTicks((long)llmDurations.Average(d => d.Ticks))
                                : null,
                        TotalToolInvocations = totalToolInvocations,
                        FailedToolInvocations = toolEvents.Count(e => !e.Result.Success),
@@ -152,7 +152,7 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
 
     private static ExecutionMetrics ComputeSingle(ExecutionManifest manifest)
     {
-        var llmEvents = manifest.Events.OfType<LlmRespondedEvent>().ToList();
+        var llmDurations = GetLlmDurations(manifest.Events);
         var toolEvents = manifest.Events.OfType<ToolCompletedEvent>().ToList();
         var qualityEvents = manifest.Events.OfType<QualityGateRejectedEvent>().ToList();
 
@@ -168,10 +168,10 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
                        AverageDuration = manifest.Duration,
                        MinDuration = manifest.Duration,
                        MaxDuration = manifest.Duration,
-                       TotalLlmCalls = llmEvents.Count,
+                       TotalLlmCalls = llmDurations.Count,
                        AverageLlmDuration =
-                           llmEvents.Count > 0
-                               ? TimeSpan.FromTicks((long)llmEvents.Average(e => e.Duration.Ticks))
+                           llmDurations.Count > 0
+                               ? TimeSpan.FromTicks((long)llmDurations.Average(d => d.Ticks))
                                : null,
                        TotalToolInvocations = manifest.Events.Count(e => e is ToolInvokedEvent),
                        FailedToolInvocations = toolEvents.Count(e => !e.Result.Success),
@@ -191,5 +191,23 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
         if (sorted.Count == 0) return null;
         var index = (int)Math.Ceiling(sorted.Count * percentile) - 1;
         return sorted[Math.Max(0, Math.Min(index, sorted.Count - 1))];
+    }
+
+    /// <summary>
+    /// Durations of every LLM attempt — successful responses and failed
+    /// attempts alike — so attempt metrics never drop failures.
+    /// </summary>
+    private static List<TimeSpan> GetLlmDurations(IEnumerable<ExecutionEvent> events)
+    {
+        var durations = new List<TimeSpan>();
+        foreach (var evt in events)
+        {
+            if (evt is LlmRespondedEvent responded)
+                durations.Add(responded.Duration);
+            else if (evt is LlmFailedEvent failed)
+                durations.Add(failed.Duration);
+        }
+
+        return durations;
     }
 }

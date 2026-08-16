@@ -8,7 +8,7 @@ namespace AiCleverness.Runtime;
 /// <summary>
 /// Encapsulates all failover orchestration: chain resolution, candidate consumption,
 /// options rebuild, execution-info updates, and notification emission.
-/// Constructed once at the start of each <see cref="LlmToolLoop"/> run.
+/// Created once per <see cref="LlmToolLoop"/> run via <see cref="CreateAsync"/>.
 /// </summary>
 internal sealed class ModelFailoverHandler
 {
@@ -20,22 +20,50 @@ internal sealed class ModelFailoverHandler
 
     private readonly IEnumerable<IAgentObserver> _observers;
 
-    private readonly CapabilityProfile? _profile;
+    private ModelExecutionInfo? _execInfo;
 
-    public ModelFailoverHandler(
-        IAgentContext context,
-        AgentRuntimeOptions options,
+    private ModelFailoverHandler(
         IEnumerable<IAgentObserver> observers,
         IExecutionEventPublisher? eventPublisher,
-        ILogger? logger)
+        ILogger? logger,
+        Queue<ModelDefinition> candidates,
+        ModelExecutionInfo? execInfo,
+        bool isEnabled)
     {
         _observers = observers;
         _eventPublisher = eventPublisher;
         _logger = logger;
+        _candidates = candidates;
+        _execInfo = execInfo;
+        IsEnabled = isEnabled;
+    }
 
+    /// <summary>1-based attempt number within the failover chain.</summary>
+    public int Attempt { get; private set; } = 1;
+
+    /// <summary>Whether failover is enabled and the chain has candidates.</summary>
+    public bool IsEnabled { get; private set; }
+
+    /// <summary>Whether the current attempt runs on a fallback model.</summary>
+    public bool IsOnFallback => Attempt > 1;
+
+    /// <summary>
+    /// Creates a handler with the effective chain resolved from request parameters
+    /// and capability-resolution provenance. Explicit chain names are validated
+    /// against the catalog when one is available.
+    /// </summary>
+    public static async Task<ModelFailoverHandler> CreateAsync(
+        IAgentContext context,
+        AgentRuntimeOptions options,
+        IEnumerable<IAgentObserver> observers,
+        IExecutionEventPublisher? eventPublisher,
+        ILogger? logger,
+        IModelCatalog? catalog = null,
+        CancellationToken cancellationToken = default)
+    {
         // Determine if failover is enabled (per-request overrides global).
         var perRequest = context.GetProperty<bool?>(AgentPropertyKeys.EnableModelFailover);
-        IsEnabled = perRequest ?? options.EnableModelFailover;
+        var isEnabled = perRequest ?? options.EnableModelFailover;
 
         // Resolve effective chain.
         var explicitChain = context.GetProperty<IReadOnlyList<string>>(
@@ -43,109 +71,194 @@ internal sealed class ModelFailoverHandler
 
         var execInfo = context.GetProperty<ModelExecutionInfo>(
             AgentPropertyKeys.ModelExecutionInfo);
-        _profile = execInfo?.Profile;
 
-        // Check if model is pinned (explicit model with no chain).
+        // Pinned model: the caller set a model explicitly without capability
+        // resolution (no provenance) and without a fallback chain. When
+        // provenance exists, resolution owns the model choice and its fallback
+        // chain decides failover — the pin does not apply.
         var pinnedModel = context.GetProperty<string>(AgentPropertyKeys.Model);
-        if (pinnedModel is not null && explicitChain is null
-                                    && (execInfo is null
-                                        || execInfo.Model.Name == pinnedModel))
+        if (pinnedModel is not null && explicitChain is null && execInfo is null)
         {
             // Pinned model — no fallback regardless of enable flag.
-            IsEnabled = false;
+            isEnabled = false;
         }
 
-        _candidates = new Queue<ModelDefinition>();
+        var candidates = new Queue<ModelDefinition>();
 
-        if (!IsEnabled)
+        if (isEnabled)
         {
-            return;
-        }
-
-        if (explicitChain is { Count: > 0 })
-        {
-            // Explicit chain: wrap names into ModelDefinition.
-            // Unknown names are skipped (validated downstream if catalog available).
-            foreach (var name in explicitChain)
+            if (explicitChain is { Count: > 0 })
             {
-                _candidates.Enqueue(new ModelDefinition { Name = name, ProviderKey = "explicit" });
-            }
+                // Explicit chain: resolve names against the catalog when
+                // available (unknown names are skipped with a warning),
+                // excluding the active model and duplicates so failover never
+                // retries the current model.
+                var activeModel = execInfo?.Model.Name ?? pinnedModel;
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            _logger?.LogDebug(
-                "Model failover enabled with explicit chain of {Count} candidates",
-                _candidates.Count);
-        }
-        else if (execInfo is not null)
-        {
-            // Resolution-based chain from ModelResolutionResult.Fallbacks
-            // (stored in ModelExecutionInfo indirectly via the context).
-            var resolutionResult = context.GetProperty<ModelResolutionResult>(
-                "model_resolution_result");
-            if (resolutionResult?.Fallbacks is { Count: > 0 } fallbacks)
-            {
-                foreach (var fb in fallbacks)
+                foreach (var name in explicitChain)
                 {
-                    _candidates.Enqueue(fb);
+                    ModelDefinition definition;
+                    if (catalog is null)
+                    {
+                        // No catalog — accept the name as-is.
+                        definition = new ModelDefinition
+                                         {
+                                             Name = name, ProviderKey = "explicit"
+                                         };
+                    }
+                    else
+                    {
+                        var resolved = await catalog.FindByNameAsync(name, cancellationToken);
+                        if (resolved is null)
+                        {
+                            logger?.LogWarning(
+                                "Model failover: fallback model '{ModelName}' not found in catalog — skipped",
+                                name);
+                            continue;
+                        }
+
+                        definition = resolved;
+                    }
+
+                    if (activeModel is not null
+                        && string.Equals(definition.Name, activeModel, StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger?.LogDebug(
+                            "Model failover: fallback '{ModelName}' is the active model — skipped",
+                            definition.Name);
+                        continue;
+                    }
+
+                    if (!seen.Add(definition.Name))
+                    {
+                        logger?.LogDebug(
+                            "Model failover: fallback '{ModelName}' appears more than once — skipped",
+                            definition.Name);
+                        continue;
+                    }
+
+                    candidates.Enqueue(definition);
                 }
 
-                _logger?.LogDebug(
-                    "Model failover enabled with {Count} resolution-based fallbacks",
-                    _candidates.Count);
+                logger?.LogDebug(
+                    "Model failover enabled with explicit chain of {Count} candidates",
+                    candidates.Count);
+            }
+            else if (execInfo is not null)
+            {
+                // Resolution-based chain from ModelResolutionResult.Fallbacks.
+                var resolutionResult = context.GetProperty<ModelResolutionResult>(
+                    AgentPropertyKeys.ModelResolutionResult);
+                if (resolutionResult?.Fallbacks is { Count: > 0 } fallbacks)
+                {
+                    foreach (var fallback in fallbacks)
+                    {
+                        candidates.Enqueue(fallback);
+                    }
+
+                    logger?.LogDebug(
+                        "Model failover enabled with {Count} resolution-based fallbacks",
+                        candidates.Count);
+                }
             }
         }
 
         // If the chain is empty, failover has nothing to do.
-        if (_candidates.Count == 0)
+        if (candidates.Count == 0)
         {
-            IsEnabled = false;
+            isEnabled = false;
         }
-    }
 
-    /// <summary>Whether there is at least one more candidate in the chain.</summary>
-    public bool HasNextCandidate => _candidates.Count > 0;
-
-    /// <summary>Whether failover is enabled and the chain has candidates.</summary>
-    public bool IsEnabled { get; private set; }
-
-    /// <summary>
-    /// Builds a new <see cref="LlmCompletionOptions"/> with the next model name,
-    /// preserving temperature and max tokens from the original.
-    /// </summary>
-    public LlmCompletionOptions BuildOptions(LlmCompletionOptions original, ModelDefinition next)
-    {
-        return new LlmCompletionOptions(original.Temperature, original.MaxTokens, next.Name);
+        return new ModelFailoverHandler(
+            observers,
+            eventPublisher,
+            logger,
+            candidates,
+            execInfo,
+            isEnabled);
     }
 
     /// <summary>
-    /// Builds an updated <see cref="ModelExecutionInfo"/> reflecting the failover.
+    /// Performs the full failover switch for a transient failure: consumes the
+    /// next candidate, reports the switch step, emits the transient failure event
+    /// and all switch notifications, updates context provenance, and rebuilds
+    /// completion options. Returns the new options, or null when no candidate
+    /// remains.
     /// </summary>
-    public ModelExecutionInfo BuildExecutionInfo(
-        ModelExecutionInfo current,
-        ModelDefinition next,
-        string reason)
+    public async Task<LlmCompletionOptions?> TryFailoverAsync(
+        string executionId,
+        int turn,
+        LlmCompletionOptions currentOptions,
+        IAgentContext context,
+        string failureError,
+        string failureVerb,
+        string reason,
+        List<string> steps,
+        Action<string> report,
+        Action<AgentEvent>? emit,
+        CancellationToken cancellationToken)
     {
-        return current with
+        if (!IsEnabled || _candidates.Count == 0)
         {
-            Model = next,
-            Attempt = current.Attempt + 1,
-            IsFallback = true,
-            RemainingFallbacks = _candidates.Count,
-            SelectionReason = $"runtime failover after {reason}"
-        };
-    }
+            return null;
+        }
 
-    /// <summary>
-    /// Consumes and returns the next candidate from the chain.
-    /// </summary>
-    public ModelDefinition ConsumeNext()
-    {
-        return _candidates.Dequeue();
+        var fromModel = currentOptions.Model ?? "unknown";
+        Attempt++;
+        var nextCandidate = _candidates.Dequeue();
+
+        var switchMessage =
+            $"Model '{fromModel}' {failureVerb}; switching to '{nextCandidate.Name}' (conversation continues)";
+        _logger?.LogWarning("Agent: {Message}", switchMessage);
+        steps.Add(switchMessage);
+        report(switchMessage);
+
+        // Transient failure event first, then all switch notifications.
+        emit?.Invoke(new FailureEvent
+                         {
+                             ExecutionId = executionId,
+                             Error = failureError,
+                             Phase = "LlmCompletion",
+                             IsTransient = true
+                         });
+
+        await NotifySwitchAsync(
+            executionId,
+            fromModel,
+            nextCandidate.Name,
+            reason,
+            turn,
+            emit,
+            cancellationToken);
+
+        // Update context provenance.
+        if (_execInfo is not null)
+        {
+            _execInfo = _execInfo with
+                        {
+                            Model = nextCandidate,
+                            Attempt = _execInfo.Attempt + 1,
+                            IsFallback = true,
+                            RemainingFallbacks = _candidates.Count,
+                            SelectionReason = $"runtime failover after {reason}"
+                        };
+            context.SetProperty(AgentPropertyKeys.ModelExecutionInfo, _execInfo);
+        }
+
+        context.SetProperty(AgentPropertyKeys.Model, nextCandidate.Name);
+
+        // Rebuild options with the new model.
+        return new LlmCompletionOptions(
+            currentOptions.Temperature,
+            currentOptions.MaxTokens,
+            nextCandidate.Name);
     }
 
     /// <summary>
     /// Emits all failover notifications: observer, streaming event, and bus event.
     /// </summary>
-    public async Task NotifySwitchAsync(
+    private async Task NotifySwitchAsync(
         string executionId,
         string fromModel,
         string toModel,
@@ -163,13 +276,13 @@ internal sealed class ModelFailoverHandler
 
         // Streaming event.
         emit?.Invoke(new ModelSwitchedAgentEvent
-        {
-            ExecutionId = executionId,
-            From = fromModel,
-            To = toModel,
-            Reason = reason,
-            Turn = turn
-        });
+                         {
+                             ExecutionId = executionId,
+                             From = fromModel,
+                             To = toModel,
+                             Reason = reason,
+                             Turn = turn
+                         });
 
         // Bus event.
         if (_eventPublisher is not null)

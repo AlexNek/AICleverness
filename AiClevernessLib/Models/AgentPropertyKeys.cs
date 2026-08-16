@@ -34,6 +34,12 @@ public static class AgentPropertyKeys
     /// </summary>
     public const string ModelFallbackChain = "model_fallback_chain";
 
+    /// <summary>
+    /// Full <see cref="ModelResolutionResult"/> produced by capability resolution.
+    /// Stored by the runtime so the failover handler can access the fallback chain.
+    /// </summary>
+    public const string ModelResolutionResult = "model_resolution_result";
+
     /// <summary>Quality feedback text passed into the next LLM attempt.</summary>
     public const string QualityFeedback = "quality_feedback";
 

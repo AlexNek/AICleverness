@@ -160,8 +160,18 @@ public sealed class DefaultModelManager : IModelManager
                 break;
             }
 
+            // A policy that returns a candidate outside the offered set would
+            // make Remove() a no-op and loop forever — bail out, keeping the
+            // picks already ranked.
+            if (!remaining.Remove(pick))
+            {
+                _logger?.LogWarning(
+                    "Selection policy returned '{ModelName}' which is not among the offered candidates; ranking stopped",
+                    pick.Name);
+                break;
+            }
+
             ranked.Add(pick);
-            remaining.Remove(pick);
         }
 
         return ranked;

@@ -190,7 +190,7 @@ matching `Add...` method:
 | Validators | `IAgentResultValidator` | `AddAgentResultValidator<T>()` |
 | Transformers | `IAgentResultTransformer` | `AddAgentResultTransformer<T>()` |
 | Observers | `IAgentObserver` | `AddAgentObserver<T>()` |
-| Model failover | Internal (`ILlmErrorClassifier`) | Built-in; enabled via `EnableModelFailover` option |
+| Model failover | Internal (`ILlmErrorClassifier`) | Built-in; enabled globally via `AgentRuntimeOptions.EnableModelFailover` or per-request via the `enable_model_failover` property — see [Model failover](../execution/model-failover.md) |
 
 By default, a registered class runs for every agent. You can also register
 it for one agent only — see

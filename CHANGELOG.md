@@ -7,14 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-16
+
 ### Added
-- Capability-based model failover: on transient LLM failure (timeout), the runtime fails over to the next candidate model in the ordered chain — same conversation, same turn, no repeated tool calls. Opt-in via `AgentRuntimeOptions.EnableModelFailover` or per-request `enable_model_failover` parameter. Candidate chain built from `ModelResolutionResult.Fallbacks` (capability resolution) or explicit `model_fallback_chain` request property
+- Capability-based model failover: on transient LLM failure (timeout), the runtime fails over to the next candidate model in the ordered chain — same conversation, same turn, no repeated tool calls. Opt-in via `AgentRuntimeOptions.EnableModelFailover` or per-request `enable_model_failover` parameter. Candidate chain built from `ModelResolutionResult.Fallbacks` (capability resolution) or explicit `model_fallback_chain` request property — explicit names are validated against the registered model catalog (`IModelCatalog.FindByNameAsync`), unknown names are skipped with a warning, and the chain is normalized — the active model is excluded and duplicates removed, so failover never retries the current model. A model set via `model` without capability resolution stays pinned and never fails over
 - `LlmCallInfo` record and `IAgentObserver.OnLlmCallCompletedAsync` hook — fires exactly once per LLM call attempt (success, error, or timeout) with full context: model, turn, attempt, duration, usage, classification
 - `IAgentObserver.OnModelSwitchedAsync` — observer notification on every model failover switch
 - `ModelSwitchedAgentEvent` (streaming) and `ModelSwitchedBusEvent` (bus) — model-switch events for all observability channels
 - `FailureClassification` enum and internal `ILlmErrorClassifier` / `DefaultLlmErrorClassifier` — extensible error classification (timeout → advance; extension point for rate-limit/unavailable signals)
 - `ModelResolutionResult.Fallbacks` — ordered alternate models from capability resolution
 - `ModelExecutionInfo.RemainingFallbacks` — provenance tracking for failover depth
+- `LlmFailedEvent` execution event — failed LLM attempts (timeout/error) are recorded in manifests/journals with error, duration, and logical turn instead of being represented as responses; `LlmRespondedEvent` also carries the logical `Turn`. `DefaultMetricsCollector` counts successful and failed attempts alike in `TotalLlmCalls` / `AverageLlmDuration`
+
+### Changed
+- `LlmCallCompletedBusEvent` is now published for every LLM attempt — success, timeout, and error (previously successful completions only) — and carries `Success`, `Turn`, and `Error` alongside duration and usage, so bus-based attempt metrics see every attempt
 
 ## [1.1.0] - 2026-08-15
 

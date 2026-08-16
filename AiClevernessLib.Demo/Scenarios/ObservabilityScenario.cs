@@ -94,13 +94,21 @@ internal static class ObservabilityScenario
             new ExecutionStartedEvent(ExecutionId, request)
         };
 
-        // Add LLM events from collector.
-        foreach (var llmDuration in collector.LlmDurations)
+        // Add LLM events from collector — successful attempts as responses,
+        // failed attempts as failure events, each keeping its logical turn.
+        foreach (var (duration, success, error, turn) in collector.LlmAttempts)
         {
-            events.Add(new LlmRespondedEvent(
-                ExecutionId,
-                new LlmResponse(null),
-                llmDuration));
+            events.Add(success
+                ? new LlmRespondedEvent(
+                    ExecutionId,
+                    new LlmResponse(null),
+                    duration,
+                    Turn: turn)
+                : new LlmFailedEvent(
+                    ExecutionId,
+                    error ?? "unknown error",
+                    duration,
+                    Turn: turn));
         }
 
         // Add tool events from collector.
@@ -127,7 +135,9 @@ internal static class ObservabilityScenario
             Request: request,
             Options: new AgentRuntimeOptions(),
             ToolNames: [WeatherTool.ToolName],
-            TurnCount: collector.LlmDurations.Count,
+            // Distinct logical turns — retries/failover attempts on the same
+            // turn count once.
+            TurnCount: collector.LlmAttempts.Select(a => a.Turn).Distinct().Count(),
             QualityRetryCount: 0,
             ToolRetryCount: 0,
             Events: events);
@@ -141,13 +151,13 @@ internal static class ObservabilityScenario
         IExecutionEventHandler<ToolInvokedBusEvent>,
         IExecutionEventHandler<ToolCompletedBusEvent>
     {
-        public List<TimeSpan> LlmDurations { get; } = [];
+        public List<(TimeSpan Duration, bool Success, string? Error, int Turn)> LlmAttempts { get; } = [];
 
         public List<(string ToolName, ToolResult Result, TimeSpan Duration)> ToolCompletions { get; } = [];
 
         public Task HandleAsync(LlmCallCompletedBusEvent @event, CancellationToken ct)
         {
-            LlmDurations.Add(@event.Duration);
+            LlmAttempts.Add((@event.Duration, @event.Success, @event.Error, @event.Turn));
             return Task.CompletedTask;
         }
 

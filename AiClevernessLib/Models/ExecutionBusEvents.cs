@@ -141,12 +141,16 @@ public sealed record PolicyBlockedBusEvent(
 }
 
 /// <summary>
-/// Publishable event raised when an LLM call completes.
+/// Publishable event raised when an LLM call completes — on every outcome
+/// (success, timeout, or error), so attempt metrics see every attempt.
 /// </summary>
 public sealed record LlmCallCompletedBusEvent(
     string ExecutionId,
     TimeSpan Duration,
-    LlmTokenUsage? Usage) : IExecutionEvent
+    LlmTokenUsage? Usage,
+    bool Success = true,
+    int Turn = 0,
+    string? Error = null) : IExecutionEvent
 {
     /// <inheritdoc />
     public string EventType => "LlmCallCompleted";

@@ -27,6 +27,8 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
 
     private readonly IModelManager? _modelManager;
 
+    private readonly IModelCatalog? _modelCatalog;
+
     private readonly IEnumerable<IAgentObserver> _observers;
 
     private readonly AgentRuntimeOptions _options;
@@ -65,6 +67,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         AgentRuntimeOptions? options = null,
         IExecutionEventPublisher? eventPublisher = null,
         IModelManager? modelManager = null,
+        IModelCatalog? modelCatalog = null,
         ILogger<AgentRuntime>? logger = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
@@ -82,6 +85,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         _options = options ?? new AgentRuntimeOptions();
         _eventPublisher = eventPublisher;
         _modelManager = modelManager;
+        _modelCatalog = modelCatalog;
         _logger = logger;
     }
 
@@ -215,7 +219,8 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
             _options,
             _observers,
             _eventPublisher,
-            _logger);
+            _logger,
+            modelCatalog: _modelCatalog);
         builder.UseTerminal(loop.RunAsync);
 
         return builder.Build();
@@ -360,7 +365,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
 
             // Store the full resolution result so ModelFailoverHandler can
             // access the Fallbacks chain at runtime.
-            context.SetProperty("model_resolution_result", result);
+            context.SetProperty(AgentPropertyKeys.ModelResolutionResult, result);
 
             _logger?.LogDebug(
                 "Resolved model {ModelName} via profile {ProfileId} for agent request (fallbacks: {FallbackCount})",
