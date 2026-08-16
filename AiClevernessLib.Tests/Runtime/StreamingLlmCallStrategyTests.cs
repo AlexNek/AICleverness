@@ -105,7 +105,8 @@ public sealed class StreamingLlmCallStrategyTests
 
         // Act & Assert — absolute cap should cancel before stream completes
         var act = () => strategy.CallAsync([], null, null, opts, CancellationToken.None);
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>()
+            .WithMessage("*completion timeout*");
     }
 
     [Fact]

@@ -84,6 +84,12 @@ internal sealed class StreamingLlmCallStrategy : ILlmCallStrategy
             }
         }
         catch (OperationCanceledException) when (
+            absoluteCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(
+                $"LLM streaming completion timeout: total duration exceeded {strategyOptions.CompletionTimeoutSeconds}s.");
+        }
+        catch (OperationCanceledException) when (
             idleCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             throw new OperationCanceledException(

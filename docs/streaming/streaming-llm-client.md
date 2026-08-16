@@ -9,7 +9,7 @@ The LLM tool loop calls your provider in one of two modes:
 | Interface | `ILlmClient` | `IStreamingLlmClient : ILlmClient` |
 | Method | `CompleteAsync` — one call, one response | `StreamAsync` — tokens arrive one by one |
 | Timeout | Wall-clock only (`CompletionTimeoutSeconds`) | Idle-based (`IdleTimeoutSeconds`) + absolute cap (`CompletionTimeoutSeconds`) |
-| Failure mode | Timeout kills a working model | Only a real stall (no meaningful chunk) triggers timeout |
+| Failure mode | Timeout kills a working model | Idle stall (no meaningful chunk) or absolute cap reached |
 
 The runtime picks the mode automatically. If your client implements
 `IStreamingLlmClient`, the streaming path activates. Otherwise the
@@ -47,7 +47,8 @@ Two distinct timeout properties control behavior:
 ### Examples
 
 - **Buffered client, response in 45s** → Succeeds (within 60s cap).
-- **Streaming client, chunks every 5s for 90s** → Succeeds. Idle timer resets on each chunk. Absolute cap (60s) would kill it — configure `CompletionTimeoutSeconds` higher for expected long generations.
+- **Streaming client, chunks every 5s for 90s, cap at 120s** → Succeeds. Idle timer resets on each chunk. `CompletionTimeoutSeconds` must exceed the total generation time.
+- **Streaming client, chunks every 5s for 90s, cap at 60s** → Fails. Absolute cap kills the stream at 60s despite continuous chunk activity.
 - **Streaming client, 35s silence** → Fails. Idle timeout (30s) fires. Classified as `TransientAdvance`, triggers failover.
 
 ## Chunk Validation Rules
@@ -111,7 +112,7 @@ Usage data in streaming is **best-effort**:
 
 The `LlmToolLoop` delegates LLM calls to an `ILlmCallStrategy`:
 
-```
+```text
 ILlmCallStrategy
 ├── BufferedLlmCallStrategy   (CompleteAsync + wall-clock CancelAfter)
 └── StreamingLlmCallStrategy  (StreamAsync + idle timer + absolute cap)
