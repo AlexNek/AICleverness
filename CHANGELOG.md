@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Streaming LLM client support via `IStreamingLlmClient : ILlmClient` — opt-in interface returning `IAsyncEnumerable<LlmChunk>` with idle-based timeout semantics. Strategy pattern (`ILlmCallStrategy`, `BufferedLlmCallStrategy`, `StreamingLlmCallStrategy`) replaces inline timeout logic in `LlmToolLoop` — resolved at construction time via `LlmCallStrategyFactory`, no runtime type checks in the loop
+- `LlmChunk` record (content delta, tool-call deltas, completion flag, optional usage) and `LlmToolCallDelta` record (index-based incremental tool-call fragments)
+- `StreamingToolCallAccumulator` — assembles `LlmToolCallDelta` fragments by index into complete `LlmToolCall` instances
+- `AgentPropertyKeys.IdleTimeoutSeconds` / `AgentRuntimeOptions.DefaultIdleTimeoutSeconds` (default 30s) — silence threshold between meaningful chunks during streaming. `CompletionTimeoutSeconds` remains the absolute wall-clock safety cap
+- Intermediate `ModelChunkEvent` with `IsFinal = false` emitted during streaming for real-time UX updates
+
 ## [1.2.0] - 2026-08-16
 
 ### Added
@@ -61,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Developer manual published as a documentation site via MkDocs Material and GitHub Pages
 - NuGet package ships a compact README with use cases and prominent links to the developer manual and the full repository README
 
-[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.2.0
 [1.1.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.1.0
 [1.0.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.0.0
