@@ -16,7 +16,10 @@ The steps, in order:
 5. **LLM tool loop** — the main work. The runtime sends the goal and the
    tool list to the model. The model can call tools, the runtime runs them
    (through `IToolExecutor`), and the loop continues until the model is
-   done. On a transient failure (e.g. timeout), the loop can
+   done. The loop calls the LLM in either **buffered** mode (one call,
+   wall-clock timeout) or **streaming** mode (token by token, idle-based
+   timeout) — see [LLM Client](llm-client.md#buffered-vs-streaming). On a
+   transient failure (e.g. timeout), the loop can
    [fail over to the next candidate model](../execution/model-failover.md)
    if failover is enabled.
 6. **Quality gates** — check the model's answer. If the answer is not good
