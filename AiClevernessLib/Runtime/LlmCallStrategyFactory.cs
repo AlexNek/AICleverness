@@ -18,9 +18,11 @@ internal static class LlmCallStrategyFactory
     public static ILlmCallStrategy Create(ILlmClient llm, ILoggerFactory? loggerFactory = null)
     {
         if (llm is IStreamingLlmClient streamingClient)
+        {
             return new StreamingLlmCallStrategy(
                 streamingClient,
                 loggerFactory?.CreateLogger<StreamingLlmCallStrategy>());
+        }
 
         return new BufferedLlmCallStrategy(
             llm,

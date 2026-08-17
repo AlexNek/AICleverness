@@ -381,7 +381,11 @@ internal sealed class LlmToolLoop
                                      IsTransient = false
                                  });
                 var errorUsage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
-                return new AgentResult(false, null, ex.Message, steps, errorUsage, FailureKind: EFailureKind.Unknown);
+                // TransientAdvance with no failover candidate = chain exhausted; otherwise permanent failure.
+                var failureKind = classification == FailureClassification.TransientAdvance
+                    ? EFailureKind.FailoverExhausted
+                    : EFailureKind.LlmError;
+                return new AgentResult(false, null, ex.Message, steps, errorUsage, FailureKind: failureKind);
             }
 
             if (response.Usage is not null)

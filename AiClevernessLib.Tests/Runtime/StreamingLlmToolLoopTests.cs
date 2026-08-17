@@ -119,7 +119,7 @@ public sealed class StreamingLlmToolLoopTests
         // Assert
         result.Success.Should().BeFalse();
         result.Output.Should().BeNull();
-        result.FailureKind.Should().Be(EFailureKind.Unknown);
+        result.FailureKind.Should().Be(EFailureKind.LlmError);
     }
 
     [Fact]

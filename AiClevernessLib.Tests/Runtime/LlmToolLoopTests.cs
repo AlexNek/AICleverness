@@ -163,7 +163,7 @@ public sealed class LlmToolLoopTests
         // Assert — no partial content returned
         result.Success.Should().BeFalse();
         result.Output.Should().BeNull();
-        result.FailureKind.Should().Be(EFailureKind.Unknown);
+        result.FailureKind.Should().Be(EFailureKind.LlmError);
     }
 
     [Fact]
