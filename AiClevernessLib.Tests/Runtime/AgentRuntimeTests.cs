@@ -371,6 +371,88 @@ public sealed class AgentRuntimeTests
         result.FailureKind.Should().Be(EFailureKind.LlmTimeout);
     }
 
+    [Fact]
+    public async Task RunAsync_WithToolCallAndReasoningText_ReportsReasoningInSteps()
+    {
+        // Arrange — the model returns reasoning text alongside a tool call
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(
+                    "Let me check the pricing page directly",
+                    [new LlmToolCall("call-1", "echo", "{\"message\":\"hello\"}")]),
+                new LlmResponse("Done")
+            ]);
+
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+        var request = new AgentRequest("Test reasoning visibility");
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert — the reasoning text is reported before the tool call
+        result.Success.Should().BeTrue();
+        result.Steps.Should().Contain(s => s.Contains("Let me check the pricing page directly"));
+        result.Steps.Should().Contain(s => s.Contains("Calling tool echo"));
+    }
+
+    [Fact]
+    public async Task RunAsync_WithToolCallAndLongReasoningText_TruncatesToMax()
+    {
+        // Arrange — the model returns very long reasoning text (> 500 chars)
+        var longReasoning = new string('x', 600);
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(
+                    longReasoning,
+                    [new LlmToolCall("call-1", "echo", "{\"message\":\"hello\"}")]),
+                new LlmResponse("Done")
+            ]);
+
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+        var request = new AgentRequest("Test truncation");
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert — the reasoning text is truncated with "..." suffix
+        result.Success.Should().BeTrue();
+        var reasoningStep = result.Steps.FirstOrDefault(s => s.Contains("xxxx"));
+        reasoningStep.Should().NotBeNull();
+        reasoningStep!.Length.Should().BeLessThan(600);
+        reasoningStep.Should().EndWith("...");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithToolCallAndNoReasoningText_DoesNotReportEmptyReasoning()
+    {
+        // Arrange — the model returns only tool calls, no reasoning text
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(
+                    null,
+                    [new LlmToolCall("call-1", "echo", "{\"message\":\"hello\"}")]),
+                new LlmResponse("Done")
+            ]);
+
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+        var request = new AgentRequest("Test no reasoning");
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert — no empty reasoning step is added
+        result.Success.Should().BeTrue();
+        result.Steps.Should().Contain(s => s.Contains("Calling tool echo"));
+        // All steps should have meaningful content (no empty or whitespace-only steps)
+        result.Steps.Should().NotContain(s => string.IsNullOrWhiteSpace(s));
+    }
+
     private sealed class BlockAllPolicy : IAgentPolicy
     {
         public string Name => "BlockAllPolicy";

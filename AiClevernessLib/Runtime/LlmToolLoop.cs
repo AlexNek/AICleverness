@@ -396,6 +396,23 @@ internal sealed class LlmToolLoop
 
             if (response.ToolCalls is { Count: > 0 })
             {
+                // Surface the model's reasoning text that accompanies tool calls —
+                // without this, the user sees only mechanical "Calling tool X(...)"
+                // messages with no explanation of why the model decided to act.
+                // Empty content is skipped; long content is truncated to keep
+                // progress output readable.
+                if (!string.IsNullOrWhiteSpace(response.Content))
+                {
+                    const int MaxReasoningLength = 500;
+                    var trimmed = response.Content.Trim();
+                    var displayText = trimmed.Length > MaxReasoningLength
+                        ? string.Concat(trimmed.AsSpan(0, MaxReasoningLength), "...")
+                        : trimmed;
+                    var reasoningMsg = $"  {displayText}";
+                    steps.Add(reasoningMsg);
+                    report(reasoningMsg);
+                }
+
                 messages.Add(new LlmMessage("assistant") { ToolCalls = response.ToolCalls });
 
                 foreach (var toolCall in response.ToolCalls)

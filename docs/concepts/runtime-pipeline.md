@@ -176,6 +176,32 @@ tool calls it never needed.
     var request = new AgentRequest(goal, tools.Count > 0 ? tools : null);
     ```
 
+## Progress Reporting in the Tool Loop
+
+During a tool-loop run, the runtime reports its progress via the `IProgress<string>`
+callback (passed to `RunAsync`) and the `Steps` list on the result. The following
+messages are surfaced:
+
+| When | Message format | Example |
+| --- | --- | --- |
+| Tool call starts | `Calling tool {name}({arguments})` | `Calling tool fetch_url({"url":"..."})` |
+| Tool call finishes | `  {name} succeeded` or `  {name} failed: {error}` | `  fetch_url succeeded` |
+| Model reasoning with tool calls | `  {reasoning text}` (truncated if > 500 chars) | `  Let me check the pricing page directly` |
+| Final response | `LLM returned final response.` | — |
+| Turn exhausted | `Turn {n} produced no content and no tool calls.` | — |
+
+When the model generates reasoning text alongside tool calls (e.g., "Let me
+search for this information"), that text is reported before the tool calls are
+listed. This allows consumers to see the model's decision-making process at
+each step of the loop. If the model produces no reasoning text, nothing is
+reported. Long reasoning text is truncated to 500 characters to keep the
+progress output readable.
+
+!!! note "Streaming vs. Progress Callback"
+    The progress callback is used by both streaming and non-streaming runs.
+    Streaming additionally emits `ModelChunkEvent` items for each content chunk
+    via the event channel — see [Streaming](../streaming/streaming-execution.md).
+
 ## Extension Points
 
 Every step in the pipeline is an interface. To add your own behavior, write
