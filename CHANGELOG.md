@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-17
+
 ### Added
-- `EFailureKind` enum (`None`, `LlmTimeout`, `LlmError`, `FailoverExhausted`, `TurnLimitExceeded`, `Cancelled`, `PolicyBlocked`, `InputValidationFailed`) and corresponding property on `AgentResult` — enables typed failure assertions without relying on error message string content
+- `EFailureKind` enum (`None`, `NoFailure`, `LlmTimeout`, `LlmError`, `FailoverExhausted`, `TurnLimitExceeded`, `Cancelled`, `PolicyBlocked`, `InputValidationFailed`, `Unknown`) and corresponding property on `AgentResult` — enables typed failure assertions without relying on error message string content. `None` (default) means "not set"; `NoFailure` explicitly indicates successful execution; `Unknown` is a catch-all for unclassified failures
 
 ### Changed
 - Timeout error messages in both streaming and buffered LLM call strategies now report `"no response received (model may be unavailable or overloaded)"` instead of the generic `"timed out"`. Streaming additionally reports chunk count when stalling mid-stream. Failover verb changes from `timed out` to `unavailable` when the model never responded

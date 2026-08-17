@@ -7,8 +7,11 @@ namespace AiCleverness.Models;
 /// </summary>
 public enum EFailureKind
 {
-    /// <summary>No failure — execution succeeded.</summary>
+    /// <summary>Not set — the default value when no explicit failure kind has been assigned.</summary>
     None,
+
+    /// <summary>Execution succeeded — no failure occurred.</summary>
+    NoFailure,
 
     /// <summary>LLM call timed out (idle or wall-clock) — model did not respond in time.</summary>
     LlmTimeout,
@@ -29,5 +32,8 @@ public enum EFailureKind
     PolicyBlocked,
 
     /// <summary>Input validation failed before execution.</summary>
-    InputValidationFailed
+    InputValidationFailed,
+
+    /// <summary>Unclassified failure — does not match any known failure kind.</summary>
+    Unknown
 }

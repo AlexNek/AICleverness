@@ -159,7 +159,8 @@ internal sealed class LlmToolLoop
                         null,
                         "Cancellation requested.",
                         steps,
-                        new LlmTokenUsage(totalPromptTokens, totalCompletionTokens));
+                        new LlmTokenUsage(totalPromptTokens, totalCompletionTokens),
+                        FailureKind: EFailureKind.Cancelled);
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
@@ -380,7 +381,7 @@ internal sealed class LlmToolLoop
                                      IsTransient = false
                                  });
                 var errorUsage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
-                return new AgentResult(false, null, ex.Message, steps, errorUsage, FailureKind: EFailureKind.LlmError);
+                return new AgentResult(false, null, ex.Message, steps, errorUsage, FailureKind: EFailureKind.Unknown);
             }
 
             if (response.Usage is not null)
@@ -511,7 +512,8 @@ internal sealed class LlmToolLoop
                                 null,
                                 "Cancellation requested during tool execution.",
                                 steps,
-                                new LlmTokenUsage(totalPromptTokens, totalCompletionTokens));
+                                new LlmTokenUsage(totalPromptTokens, totalCompletionTokens),
+                                FailureKind: EFailureKind.Cancelled);
                         }
 
                         throw;
@@ -535,7 +537,7 @@ internal sealed class LlmToolLoop
                                      IsFinal = true
                                  });
                 var usage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
-                return new AgentResult(true, content, null, steps, usage);
+                return new AgentResult(true, content, null, steps, usage, FailureKind: EFailureKind.NoFailure);
             }
 
             var turnMsg = $"Turn {turn} produced no content and no tool calls.";

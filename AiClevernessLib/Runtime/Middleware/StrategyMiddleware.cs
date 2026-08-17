@@ -55,7 +55,7 @@ internal sealed class StrategyMiddleware : IAgentPipelineMiddleware
                                  });
 
                 var steps = ExecutionSteps.Get(context);
-                return new AgentResult(true, result.Output, null, steps);
+                return new AgentResult(true, result.Output, null, steps, FailureKind: EFailureKind.NoFailure);
             }
         }
 
