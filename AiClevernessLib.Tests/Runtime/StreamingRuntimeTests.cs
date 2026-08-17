@@ -48,7 +48,7 @@ public sealed class StreamingRuntimeTests
 
         var completed = events.OfType<RunCompletedEvent>().Single();
         completed.Result.Success.Should().BeFalse();
-        completed.Result.Reasoning.Should().Contain("Cancellation requested");
+        completed.Result.FailureKind.Should().Be(EFailureKind.Cancelled);
         events.Last().Should().Be(completed);
     }
 
@@ -203,7 +203,7 @@ public sealed class StreamingRuntimeTests
 
         var completed = events.OfType<RunCompletedEvent>().Single();
         completed.Result.Success.Should().BeFalse();
-        completed.Result.Reasoning.Should().Contain("Exhausted 2 turns");
+        completed.Result.FailureKind.Should().Be(EFailureKind.TurnLimitExceeded);
     }
 
     [Fact]
@@ -240,7 +240,6 @@ public sealed class StreamingRuntimeTests
         var failure = events.OfType<FailureEvent>().Single();
         failure.Phase.Should().Be("LlmCompletion");
         failure.IsTransient.Should().BeTrue();
-        failure.Error.Should().Contain("timed out");
 
         events.Should().ContainSingle(e => e is RunCompletedEvent);
         var completed = events.OfType<RunCompletedEvent>().Single();

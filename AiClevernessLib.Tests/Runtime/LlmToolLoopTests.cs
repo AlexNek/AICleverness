@@ -163,7 +163,7 @@ public sealed class LlmToolLoopTests
         // Assert — no partial content returned
         result.Success.Should().BeFalse();
         result.Output.Should().BeNull();
-        result.Reasoning.Should().Contain("Stream exploded");
+        result.FailureKind.Should().Be(EFailureKind.LlmError);
     }
 
     [Fact]
@@ -237,7 +237,7 @@ public sealed class LlmToolLoopTests
 
         // Assert — valid completion with null content, loop exhausts turns
         result.Success.Should().BeFalse();
-        result.Reasoning.Should().Contain("Exhausted");
+        result.FailureKind.Should().Be(EFailureKind.TurnLimitExceeded);
     }
 
     [Fact]

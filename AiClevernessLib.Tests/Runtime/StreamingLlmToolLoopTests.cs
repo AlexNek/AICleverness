@@ -70,7 +70,7 @@ public sealed class StreamingLlmToolLoopTests
 
         // Assert
         result.Success.Should().BeFalse();
-        result.Reasoning.Should().Contain("idle timeout");
+        result.FailureKind.Should().Be(EFailureKind.LlmTimeout);
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed class StreamingLlmToolLoopTests
 
         // Assert
         result.Success.Should().BeFalse();
-        result.Reasoning.Should().Contain("timed out");
+        result.FailureKind.Should().Be(EFailureKind.LlmTimeout);
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class StreamingLlmToolLoopTests
         // Assert
         result.Success.Should().BeFalse();
         result.Output.Should().BeNull();
-        result.Reasoning.Should().Contain("Stream exploded!");
+        result.FailureKind.Should().Be(EFailureKind.LlmError);
     }
 
     [Fact]
