@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `EFailureKind` enum (`None`, `LlmTimeout`, `LlmError`, `FailoverExhausted`, `TurnLimitExceeded`, `Cancelled`, `PolicyBlocked`, `InputValidationFailed`) and corresponding property on `AgentResult` — enables typed failure assertions without relying on error message string content
+
+### Changed
+- Timeout error messages in both streaming and buffered LLM call strategies now report `"no response received (model may be unavailable or overloaded)"` instead of the generic `"timed out"`. Streaming additionally reports chunk count when stalling mid-stream. Failover verb changes from `timed out` to `unavailable` when the model never responded
+- `AgentRuntime` constructor parameter `ILogger<AgentRuntime>?` replaced by `ILoggerFactory?` — the runtime and all internal components (`StreamingLlmCallStrategy`, `BufferedLlmCallStrategy`) create their own typed `ILogger<T>` from the factory. Callers pass one factory; classes never call `loggerFactory.CreateLogger<T>()` externally. The parameter is optional and backward-compatible; when omitted, all components run without logging
+
+### Fixed
+- Original provider exception is now preserved as `InnerException` on timeout `OperationCanceledException` and logged at `Warning` level in both streaming and buffered strategies — previously the provider error was silently discarded
+
 ## [1.3.0] - 2026-08-16
 
 ### Added

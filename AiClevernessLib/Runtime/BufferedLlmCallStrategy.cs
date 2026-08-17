@@ -1,6 +1,8 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
 
+using Microsoft.Extensions.Logging;
+
 namespace AiCleverness.Runtime;
 
 /// <summary>
@@ -12,9 +14,12 @@ internal sealed class BufferedLlmCallStrategy : ILlmCallStrategy
 {
     private readonly ILlmClient _llm;
 
-    public BufferedLlmCallStrategy(ILlmClient llm)
+    private readonly ILogger<BufferedLlmCallStrategy>? _logger;
+
+    public BufferedLlmCallStrategy(ILlmClient llm, ILogger<BufferedLlmCallStrategy>? logger = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
+        _logger = logger;
     }
 
     /// <inheritdoc/>
@@ -28,6 +33,23 @@ internal sealed class BufferedLlmCallStrategy : ILlmCallStrategy
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(strategyOptions.CompletionTimeoutSeconds));
 
-        return await _llm.CompleteAsync(messages, tools, options, timeoutCts.Token);
+        try
+        {
+            return await _llm.CompleteAsync(messages, tools, options, timeoutCts.Token);
+        }
+        catch (OperationCanceledException ocEx) when (
+            timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            var message =
+                $"LLM buffered completion timeout: no response received within {strategyOptions.CompletionTimeoutSeconds}s (model may be unavailable or overloaded)";
+
+            _logger?.LogWarning(
+                ocEx,
+                "Buffered completion timeout after {Seconds}s. Original exception: {OriginalMessage}",
+                strategyOptions.CompletionTimeoutSeconds,
+                ocEx.InnerException?.Message ?? ocEx.Message);
+
+            throw new OperationCanceledException(message, ocEx);
+        }
     }
 }

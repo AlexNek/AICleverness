@@ -25,6 +25,8 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
 
     private readonly ILogger<AgentRuntime>? _logger;
 
+    private readonly ILoggerFactory? _loggerFactory;
+
     private readonly IModelManager? _modelManager;
 
     private readonly IModelCatalog? _modelCatalog;
@@ -68,7 +70,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         IExecutionEventPublisher? eventPublisher = null,
         IModelManager? modelManager = null,
         IModelCatalog? modelCatalog = null,
-        ILogger<AgentRuntime>? logger = null)
+        ILoggerFactory? loggerFactory = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
         _tools = tools ?? throw new ArgumentNullException(nameof(tools));
@@ -86,7 +88,8 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         _eventPublisher = eventPublisher;
         _modelManager = modelManager;
         _modelCatalog = modelCatalog;
-        _logger = logger;
+        _loggerFactory = loggerFactory;
+        _logger = loggerFactory?.CreateLogger<AgentRuntime>();
     }
 
     public async Task<AgentResult> RunAsync(
@@ -220,7 +223,8 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
             _observers,
             _eventPublisher,
             _logger,
-            modelCatalog: _modelCatalog);
+            modelCatalog: _modelCatalog,
+            loggerFactory: _loggerFactory);
         builder.UseTerminal(loop.RunAsync);
 
         return builder.Build();

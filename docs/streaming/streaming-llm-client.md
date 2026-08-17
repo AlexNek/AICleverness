@@ -132,3 +132,86 @@ When a streaming call fails and failover activates:
 - The same `ILlmClient` instance handles all models (model name comes from `LlmCompletionOptions`).
 - The strategy remains the same across failover candidates (same client capabilities).
 - `ModelFailoverHandler` is unaware of streaming — it only sees success/failure.
+
+## Timeout Diagnostics
+
+When a timeout fires, both strategies produce descriptive error messages
+and preserve the original provider exception:
+
+### Streaming strategy
+
+| Condition | Error message | Failover verb |
+|-----------|---------------|---------------|
+| **Zero meaningful chunks received** | `LLM streaming: no response received within Ns (model may be unavailable or overloaded)` | `unavailable` |
+| **Some chunks received, then silence** | `LLM streaming idle timeout: no meaningful chunk received for Ns (after M chunks)` | `timed out` |
+
+### Buffered strategy (non-streaming `ILlmClient`)
+
+| Condition | Error message | Failover verb |
+|-----------|---------------|---------------|
+| **No response within wall-clock cap** | `LLM buffered completion timeout: no response received within Ns (model may be unavailable or overloaded)` | `unavailable` |
+
+In both cases, the original `OperationCanceledException` (and its
+`InnerException` if any) is preserved — so the provider's actual error
+message (e.g. "high demand, come later") surfaces in logs.
+
+### Logging
+
+Both `StreamingLlmCallStrategy` and `BufferedLlmCallStrategy` accept a
+typed `ILogger<T>` (created via `ILoggerFactory` in `LlmCallStrategyFactory`).
+On timeout they log:
+
+- The timeout duration
+- The number of chunks received before failure (streaming only)
+- The original exception message from the transport layer
+- The inner exception (if any) — this is where provider-level errors
+  (e.g. "service overloaded", HTTP 429/503 bodies) surface
+
+To see these diagnostics, enable `Warning` level for:
+
+- `AiCleverness.Runtime.StreamingLlmCallStrategy`
+- `AiCleverness.Runtime.BufferedLlmCallStrategy`
+
+### With DI container
+
+When logging is registered in the container, `ILoggerFactory` is
+automatically injected — no extra wiring needed:
+
+```csharp
+services.AddLogging(builder =>
+{
+    builder.AddConsole();
+    builder.SetMinimumLevel(LogLevel.Warning);
+});
+services.AddAiClevernessRuntime();
+```
+
+### Manual construction (no DI container)
+
+When constructing `AgentRuntime` manually, pass an `ILoggerFactory`
+to enable typed logging in internal components:
+
+```csharp
+using Microsoft.Extensions.Logging;
+
+var loggerFactory = LoggerFactory.Create(builder =>
+{
+    builder.AddDebug();          // Output window in Visual Studio
+    builder.SetMinimumLevel(LogLevel.Warning);
+});
+
+var runtime = new AgentRuntime(
+    new MyLlmClient(),
+    tools,
+    loggerFactory: loggerFactory);
+```
+
+The `loggerFactory` parameter is optional. When omitted, the strategies
+run without logging (existing behavior). When provided, `AgentRuntime`
+and each internal component create their own typed logger from the
+factory — log entries show the originating class name as the category.
+
+!!! tip
+    `builder.AddDebug()` sends log output to the Visual Studio Output
+    window. For file logging, add Serilog or NLog via their respective
+    `ILoggerFactory` extensions.

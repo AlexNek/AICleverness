@@ -9,7 +9,8 @@ public sealed record AgentResult(
     string? Reasoning = null,
     IReadOnlyList<string>? Steps = null,
     LlmTokenUsage? Usage = null,
-    IReadOnlyDictionary<string, object>? Metadata = null)
+    IReadOnlyDictionary<string, object>? Metadata = null,
+    EFailureKind FailureKind = EFailureKind.None)
 {
     public IReadOnlyDictionary<string, object> Metadata { get; init; } =
         Metadata ?? new Dictionary<string, object>();
