@@ -45,7 +45,8 @@ internal sealed class LlmToolLoop
         IExecutionEventPublisher? eventPublisher,
         ILogger? logger,
         ILlmErrorClassifier? errorClassifier = null,
-        IModelCatalog? modelCatalog = null)
+        IModelCatalog? modelCatalog = null,
+        ILoggerFactory? loggerFactory = null)
     {
         _llm = llm;
         _tools = tools;
@@ -56,7 +57,7 @@ internal sealed class LlmToolLoop
         _logger = logger;
         _errorClassifier = errorClassifier ?? new DefaultLlmErrorClassifier();
         _modelCatalog = modelCatalog;
-        _strategy = LlmCallStrategyFactory.Create(llm);
+        _strategy = LlmCallStrategyFactory.Create(llm, loggerFactory);
     }
 
     /// <summary>
@@ -158,7 +159,8 @@ internal sealed class LlmToolLoop
                         null,
                         "Cancellation requested.",
                         steps,
-                        new LlmTokenUsage(totalPromptTokens, totalCompletionTokens));
+                        new LlmTokenUsage(totalPromptTokens, totalCompletionTokens),
+                        FailureKind: EFailureKind.Cancelled);
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
@@ -223,9 +225,30 @@ internal sealed class LlmToolLoop
             {
                 var timeoutDuration = DateTimeOffset.UtcNow - llmCallStarted;
                 var classification = _errorClassifier.Classify(ocEx, cancellationToken);
-                var timeoutError = !string.IsNullOrEmpty(ocEx.Message) && ocEx.Message.Contains("idle timeout")
+
+                // Use the strategy's descriptive message when available (starts with "LLM streaming" or "LLM buffered").
+                // Fall back to a generic timeout message for plain OCEs without strategy context.
+                var hasStrategyMessage = ocEx.Message.StartsWith("LLM streaming", StringComparison.Ordinal)
+                                         || ocEx.Message.StartsWith("LLM buffered", StringComparison.Ordinal);
+                var timeoutError = hasStrategyMessage
                     ? $"{ocEx.Message} on turn {turn}"
                     : $"LLM completion timed out after {completionTimeoutSeconds}s on turn {turn}";
+
+                // Log inner exception if the provider supplied one — this is where
+                // the real provider error (e.g. "high demand, come later") surfaces.
+                if (ocEx.InnerException is not null)
+                {
+                    _logger?.LogWarning(
+                        ocEx.InnerException,
+                        "LLM timeout on turn {Turn} — provider inner exception: {ProviderMessage}",
+                        turn,
+                        ocEx.InnerException.Message);
+                }
+
+                // Determine the failover verb based on whether the model responded at all.
+                var failureVerb = ocEx.Message.Contains("no response received")
+                    ? "unavailable"
+                    : "timed out";
 
                 // Notify observers and publish bus event for the failed call.
                 await NotifyLlmCallCompletedAsync(
@@ -242,7 +265,7 @@ internal sealed class LlmToolLoop
                         options,
                         context,
                         timeoutError,
-                        "timed out",
+                        failureVerb,
                         $"timeout after {completionTimeoutSeconds}s",
                         steps,
                         report,
@@ -280,7 +303,10 @@ internal sealed class LlmToolLoop
                                      IsTransient = errorPhase == "LlmCompletion"
                                  });
                 var timeoutUsage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
-                return new AgentResult(false, null, exhaustionMsg, steps, timeoutUsage);
+                var failureKind = errorPhase == "ModelFailover"
+                    ? EFailureKind.FailoverExhausted
+                    : EFailureKind.LlmTimeout;
+                return new AgentResult(false, null, exhaustionMsg, steps, timeoutUsage, FailureKind: failureKind);
             }
             catch (OperationCanceledException)
             {
@@ -296,7 +322,8 @@ internal sealed class LlmToolLoop
                         null,
                         "Cancellation requested during LLM call.",
                         steps,
-                        new LlmTokenUsage(totalPromptTokens, totalCompletionTokens));
+                        new LlmTokenUsage(totalPromptTokens, totalCompletionTokens),
+                        FailureKind: EFailureKind.Cancelled);
                 }
 
                 throw;
@@ -354,7 +381,11 @@ internal sealed class LlmToolLoop
                                      IsTransient = false
                                  });
                 var errorUsage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
-                return new AgentResult(false, null, ex.Message, steps, errorUsage);
+                // TransientAdvance with no failover candidate = chain exhausted; otherwise permanent failure.
+                var failureKind = classification == FailureClassification.TransientAdvance
+                    ? EFailureKind.FailoverExhausted
+                    : EFailureKind.LlmError;
+                return new AgentResult(false, null, ex.Message, steps, errorUsage, FailureKind: failureKind);
             }
 
             if (response.Usage is not null)
@@ -485,7 +516,8 @@ internal sealed class LlmToolLoop
                                 null,
                                 "Cancellation requested during tool execution.",
                                 steps,
-                                new LlmTokenUsage(totalPromptTokens, totalCompletionTokens));
+                                new LlmTokenUsage(totalPromptTokens, totalCompletionTokens),
+                                FailureKind: EFailureKind.Cancelled);
                         }
 
                         throw;
@@ -509,7 +541,7 @@ internal sealed class LlmToolLoop
                                      IsFinal = true
                                  });
                 var usage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
-                return new AgentResult(true, content, null, steps, usage);
+                return new AgentResult(true, content, null, steps, usage, FailureKind: EFailureKind.NoFailure);
             }
 
             var turnMsg = $"Turn {turn} produced no content and no tool calls.";
@@ -521,7 +553,7 @@ internal sealed class LlmToolLoop
         steps.Add(exhausted);
         report(exhausted);
         var finalUsage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
-        return new AgentResult(false, null, exhausted, steps, finalUsage);
+        return new AgentResult(false, null, exhausted, steps, finalUsage, FailureKind: EFailureKind.TurnLimitExceeded);
     }
 
     /// <summary>

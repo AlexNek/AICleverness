@@ -77,8 +77,7 @@ public sealed class ModelFailoverTests
 
         // Assert
         result.Success.Should().BeFalse();
-        result.Reasoning.Should().Contain("model-c");
-        result.Reasoning.Should().Contain("failover chain exhausted");
+        result.FailureKind.Should().Be(EFailureKind.FailoverExhausted);
     }
 
     [Fact]
@@ -111,7 +110,7 @@ public sealed class ModelFailoverTests
 
         // Assert — should fail immediately, not failover.
         result.Success.Should().BeFalse();
-        result.Reasoning.Should().Contain("timed out");
+        result.FailureKind.Should().Be(EFailureKind.LlmTimeout);
         llm.CallLog.Should().HaveCount(1);
     }
 

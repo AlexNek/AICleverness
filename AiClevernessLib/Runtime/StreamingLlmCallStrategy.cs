@@ -3,6 +3,8 @@ using System.Text;
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
 
+using Microsoft.Extensions.Logging;
+
 namespace AiCleverness.Runtime;
 
 /// <summary>
@@ -11,11 +13,14 @@ namespace AiCleverness.Runtime;
 /// </summary>
 internal sealed class StreamingLlmCallStrategy : ILlmCallStrategy
 {
+    private readonly ILogger<StreamingLlmCallStrategy>? _logger;
+
     private readonly IStreamingLlmClient _streamingClient;
 
-    public StreamingLlmCallStrategy(IStreamingLlmClient streamingClient)
+    public StreamingLlmCallStrategy(IStreamingLlmClient streamingClient, ILogger<StreamingLlmCallStrategy>? logger = null)
     {
         _streamingClient = streamingClient ?? throw new ArgumentNullException(nameof(streamingClient));
+        _logger = logger;
     }
 
     /// <inheritdoc/>
@@ -42,6 +47,7 @@ internal sealed class StreamingLlmCallStrategy : ILlmCallStrategy
         var toolCallAccumulator = new StreamingToolCallAccumulator();
         LlmTokenUsage? lastUsage = null;
         string? finishReason = null;
+        var chunksReceived = 0;
 
         try
         {
@@ -79,21 +85,42 @@ internal sealed class StreamingLlmCallStrategy : ILlmCallStrategy
                 // Restart idle timer only on meaningful chunks.
                 if (isMeaningful)
                 {
+                    chunksReceived++;
                     idleCts.CancelAfter(idleTimeout);
                 }
             }
         }
-        catch (OperationCanceledException) when (
+        catch (OperationCanceledException ocEx) when (
             absoluteCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            throw new OperationCanceledException(
-                $"LLM streaming completion timeout: total duration exceeded {strategyOptions.CompletionTimeoutSeconds}s.");
+            var message = chunksReceived == 0
+                ? $"LLM streaming: no response received within {strategyOptions.CompletionTimeoutSeconds}s (model may be unavailable or overloaded)"
+                : $"LLM streaming completion timeout: total duration exceeded {strategyOptions.CompletionTimeoutSeconds}s after {chunksReceived} chunks";
+
+            _logger?.LogWarning(
+                ocEx,
+                "Streaming absolute timeout after {Seconds}s (chunks received: {ChunksReceived}). Original exception: {OriginalMessage}",
+                strategyOptions.CompletionTimeoutSeconds,
+                chunksReceived,
+                ocEx.InnerException?.Message ?? ocEx.Message);
+
+            throw new OperationCanceledException(message, ocEx);
         }
-        catch (OperationCanceledException) when (
+        catch (OperationCanceledException ocEx) when (
             idleCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            throw new OperationCanceledException(
-                $"LLM streaming idle timeout: no meaningful chunk received for {strategyOptions.IdleTimeoutSeconds}s.");
+            var message = chunksReceived == 0
+                ? $"LLM streaming: no response received within {strategyOptions.IdleTimeoutSeconds}s (model may be unavailable or overloaded)"
+                : $"LLM streaming idle timeout: no meaningful chunk received for {strategyOptions.IdleTimeoutSeconds}s (after {chunksReceived} chunks)";
+
+            _logger?.LogWarning(
+                ocEx,
+                "Streaming idle timeout after {Seconds}s (chunks received: {ChunksReceived}). Original exception: {OriginalMessage}",
+                strategyOptions.IdleTimeoutSeconds,
+                chunksReceived,
+                ocEx.InnerException?.Message ?? ocEx.Message);
+
+            throw new OperationCanceledException(message, ocEx);
         }
 
         var content = contentBuilder.Length > 0 ? contentBuilder.ToString() : null;

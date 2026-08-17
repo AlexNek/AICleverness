@@ -368,7 +368,7 @@ public sealed class AgentRuntimeTests
         var result = await runtime.RunAsync(request);
 
         result.Success.Should().BeFalse();
-        result.Reasoning.Should().Contain("timed out");
+        result.FailureKind.Should().Be(EFailureKind.LlmTimeout);
     }
 
     private sealed class BlockAllPolicy : IAgentPolicy

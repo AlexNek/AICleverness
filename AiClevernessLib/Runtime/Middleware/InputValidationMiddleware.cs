@@ -55,7 +55,7 @@ internal sealed class InputValidationMiddleware : IAgentPipelineMiddleware
                 var steps = ExecutionSteps.Get(context);
                 steps.Add($"Input validation failed ({validator.Name}): {result.Error}");
 
-                return new AgentResult(false, null, result.Error, steps);
+                return new AgentResult(false, null, result.Error, steps, FailureKind: EFailureKind.InputValidationFailed);
             }
         }
 

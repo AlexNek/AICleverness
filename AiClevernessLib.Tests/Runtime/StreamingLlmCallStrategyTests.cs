@@ -86,7 +86,7 @@ public sealed class StreamingLlmCallStrategyTests
         // Act & Assert
         var act = () => strategy.CallAsync([], null, null, opts, CancellationToken.None);
         await act.Should().ThrowAsync<OperationCanceledException>()
-            .WithMessage("*idle timeout*");
+            .WithMessage("*no response received*");
     }
 
     [Fact]

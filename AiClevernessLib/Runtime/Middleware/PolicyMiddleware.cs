@@ -88,7 +88,7 @@ internal sealed class PolicyMiddleware : IAgentPipelineMiddleware
                         context.CancellationToken);
                 }
 
-                var blockedResult = new AgentResult(false, null, reason, ExecutionSteps.Get(context));
+                var blockedResult = new AgentResult(false, null, reason, ExecutionSteps.Get(context), FailureKind: EFailureKind.PolicyBlocked);
 
                 await ObserverNotifier.NotifyAllAsync(
                     _observers,

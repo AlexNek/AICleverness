@@ -56,7 +56,24 @@ services.AddStartupAnalyzer();
 services.AddOpenTelemetryObserver();
 ```
 
-## Without DI
+## Logging
+
+When logging is registered in the container, `ILoggerFactory` is
+automatically injected into `AgentRuntime`. Internal components create
+typed loggers under their own category — no extra wiring needed:
+
+```csharp
+// Any app with a DI container (ASP.NET, WPF, console, worker service, etc.)
+services.AddLogging(builder =>
+{
+    builder.AddConsole();
+    builder.SetMinimumLevel(LogLevel.Warning);
+});
+services.AddAiClevernessRuntime();
+services.AddAiClevernessLlmClient<MyLlmClient>();
+```
+
+## Manual Construction (No DI Container)
 
 You do not have to use DI. You can create every part yourself with `new`
 and put them together:
@@ -71,6 +88,22 @@ var runtime = new AgentRuntime(
     new[] { new RateLimitPolicy() },
     new[] { new CachedResultStrategy() },
     new DefaultPlanner(new MyLlmClient(...)));
+```
+
+To enable diagnostic logging in manual construction, pass an
+`ILoggerFactory`:
+
+```csharp
+var loggerFactory = LoggerFactory.Create(builder =>
+{
+    builder.AddDebug();          // Visual Studio Output window
+    builder.SetMinimumLevel(LogLevel.Warning);
+});
+
+var runtime = new AgentRuntime(
+    new MyLlmClient(...),
+    tools,
+    loggerFactory: loggerFactory);
 ```
 
 ## Change the Settings for One Run

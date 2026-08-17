@@ -26,7 +26,7 @@ public sealed class SequentialAgentPipeline
     {
         ArgumentNullException.ThrowIfNull(requests);
         if (requests.Count == 0)
-            return new AgentResult(true, null, "Empty pipeline.");
+            return new AgentResult(true, null, "Empty pipeline.", FailureKind: EFailureKind.NoFailure);
 
         AgentResult? lastResult = null;
 
