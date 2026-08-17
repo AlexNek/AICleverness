@@ -185,8 +185,8 @@ messages are surfaced:
 | When | Message format | Example |
 | --- | --- | --- |
 | Tool call starts | `Calling tool {name}({arguments})` | `Calling tool fetch_url({"url":"..."})` |
-| Tool call finishes | `  {name} succeeded` or `  {name} failed: {error}` | `  fetch_url succeeded` |
-| Model reasoning with tool calls | `  {reasoning text}` (truncated if > 500 chars) | `  Let me check the pricing page directly` |
+| Tool call finishes | Two-space indent + `{name} succeeded` or `{name} failed: {error}` | `  fetch_url succeeded` |
+| Model reasoning with tool calls | Two-space indent + `{reasoning text}` (truncated if > 500 chars) | `  Let me check the pricing page directly` |
 | Final response | `LLM returned final response.` | — |
 | Turn exhausted | `Turn {n} produced no content and no tool calls.` | — |
 

@@ -395,6 +395,13 @@ public sealed class AgentRuntimeTests
         result.Success.Should().BeTrue();
         result.Steps.Should().Contain(s => s.Contains("Let me check the pricing page directly"));
         result.Steps.Should().Contain(s => s.Contains("Calling tool echo"));
+
+        // Verify ordering: reasoning must appear before the tool call
+        var reasoningIndex = result.Steps.Select((s, i) => (s, i)).First(x => x.s.Contains("Let me check the pricing page directly")).i;
+        var toolCallIndex = result.Steps.Select((s, i) => (s, i)).First(x => x.s.Contains("Calling tool echo")).i;
+        reasoningIndex.Should().BeGreaterOrEqualTo(0);
+        toolCallIndex.Should().BeGreaterOrEqualTo(0);
+        reasoningIndex.Should().BeLessThan(toolCallIndex);
     }
 
     [Fact]
@@ -422,8 +429,13 @@ public sealed class AgentRuntimeTests
         result.Success.Should().BeTrue();
         var reasoningStep = result.Steps.FirstOrDefault(s => s.Contains("xxxx"));
         reasoningStep.Should().NotBeNull();
-        reasoningStep!.Length.Should().BeLessThan(600);
+
+        // Exact truncation contract: "  " (2 spaces) + 500 chars + "..." = 505 total
+        reasoningStep!.Length.Should().Be(505, "truncation limit is 500 chars plus 2-space prefix and '...' suffix");
         reasoningStep.Should().EndWith("...");
+        reasoningStep.Should().StartWith("  ");
+        // Verify the content is exactly 500 'x' characters before the suffix
+        reasoningStep.Substring(2, 500).Should().Be(new string('x', 500));
     }
 
     [Fact]
