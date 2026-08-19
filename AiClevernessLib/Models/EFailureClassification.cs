@@ -3,7 +3,7 @@ namespace AiCleverness.Models;
 /// <summary>
 /// Describes how the runtime should treat a completion failure.
 /// </summary>
-public enum FailureClassification
+public enum EFailureClassification
 {
     /// <summary>Permanent failure — abort immediately, do not failover.</summary>
     Permanent,

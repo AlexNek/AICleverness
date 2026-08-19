@@ -257,7 +257,7 @@ internal sealed class LlmToolLoop
                     timeoutError, classification, llmCallStarted, cancellationToken);
 
                 // Failover path: advance to the next candidate when available.
-                if (classification == FailureClassification.TransientAdvance)
+                if (classification == EFailureClassification.TransientAdvance)
                 {
                     var nextOptions = await failoverHandler.TryFailoverAsync(
                         executionId,
@@ -285,10 +285,10 @@ internal sealed class LlmToolLoop
                 }
 
                 // Chain exhaustion or failover disabled — existing failure path.
-                var errorPhase = failoverHandler.IsEnabled && classification == FailureClassification.TransientAdvance
+                var errorPhase = failoverHandler.IsEnabled && classification == EFailureClassification.TransientAdvance
                     ? "ModelFailover"
                     : "LlmCompletion";
-                var exhaustionMsg = failoverHandler.IsEnabled && classification == FailureClassification.TransientAdvance
+                var exhaustionMsg = failoverHandler.IsEnabled && classification == EFailureClassification.TransientAdvance
                     ? $"LLM failover chain exhausted after {failoverHandler.Attempt} attempts; last model tried: '{options.Model ?? "unknown"}' on turn {turn}"
                     : timeoutError;
 
@@ -343,7 +343,7 @@ internal sealed class LlmToolLoop
 
                 // Failover path: advance to the next candidate when available
                 // (future: rate-limit signals via the classifier).
-                if (classification == FailureClassification.TransientAdvance)
+                if (classification == EFailureClassification.TransientAdvance)
                 {
                     var nextOptions = await failoverHandler.TryFailoverAsync(
                         executionId,
@@ -382,7 +382,7 @@ internal sealed class LlmToolLoop
                                  });
                 var errorUsage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
                 // TransientAdvance with no failover candidate = chain exhausted; otherwise permanent failure.
-                var failureKind = classification == FailureClassification.TransientAdvance
+                var failureKind = classification == EFailureClassification.TransientAdvance
                     ? EFailureKind.FailoverExhausted
                     : EFailureKind.LlmError;
                 return new AgentResult(false, null, ex.Message, steps, errorUsage, FailureKind: failureKind);
@@ -585,7 +585,7 @@ internal sealed class LlmToolLoop
         TimeSpan duration,
         LlmTokenUsage? usage,
         string? error,
-        FailureClassification? classification,
+        EFailureClassification? classification,
         DateTimeOffset startedAt,
         CancellationToken cancellationToken)
     {

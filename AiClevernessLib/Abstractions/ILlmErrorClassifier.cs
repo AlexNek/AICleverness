@@ -8,7 +8,7 @@ namespace AiCleverness.Abstractions;
 /// </summary>
 /// <remarks>
 /// Internal extension point. The default implementation classifies per-turn
-/// timeouts as <see cref="FailureClassification.TransientAdvance"/>.
+/// timeouts as <see cref="EFailureClassification.TransientAdvance"/>.
 /// Rate-limit and unavailable-model signals can be added to a custom
 /// implementation without touching the tool loop.
 /// </remarks>
@@ -22,5 +22,5 @@ internal interface ILlmErrorClassifier
     /// The caller-supplied cancellation token. Used to distinguish per-turn
     /// timeouts (internal CTS cancelled) from user-initiated cancellation.
     /// </param>
-    FailureClassification Classify(Exception exception, CancellationToken callerToken);
+    EFailureClassification Classify(Exception exception, CancellationToken callerToken);
 }
