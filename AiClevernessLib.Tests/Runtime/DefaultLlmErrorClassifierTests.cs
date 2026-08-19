@@ -7,8 +7,8 @@ namespace AiClevernessLib.Tests.Runtime;
 
 /// <summary>
 /// Tests for <see cref="DefaultLlmErrorClassifier"/>.
-/// These tests expose the missing HTTP 5xx / 429 classification
-/// (currently returns Permanent instead of TransientAdvance).
+/// Verifies that per-turn timeouts, HTTP 5xx server errors, and HTTP 429
+/// rate limits are classified as <see cref="EFailureClassification.TransientAdvance"/>.
 /// </summary>
 public sealed class DefaultLlmErrorClassifierTests
 {
@@ -70,7 +70,7 @@ public sealed class DefaultLlmErrorClassifierTests
         result.Should().Be(EFailureClassification.Permanent);
     }
 
-    // --- Server errors (BUG: currently returns Permanent, should return TransientAdvance) ---
+    // --- Server errors → TransientAdvance ---
 
     [Fact]
     public void Classify_ServerError503_ReturnsTransientAdvance()
@@ -111,7 +111,7 @@ public sealed class DefaultLlmErrorClassifierTests
         result.Should().Be(EFailureClassification.TransientAdvance);
     }
 
-    // --- Rate limit errors (BUG: currently returns Permanent, should return TransientAdvance) ---
+    // --- Rate limit errors → TransientAdvance ---
 
     [Fact]
     public void Classify_RateLimitHttp429_ReturnsTransientAdvance()

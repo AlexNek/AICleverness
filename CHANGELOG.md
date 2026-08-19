@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-08-19
+
 ### Changed
 - `DefaultLlmErrorClassifier` now classifies HTTP 5xx server errors and HTTP 429 rate limits as `TransientAdvance`, enabling in-place model failover for provider outages instead of aborting immediately
+- **Breaking:** `FailureClassification` enum renamed to `EFailureClassification` to follow project naming conventions — consumers must update type references including `LlmCallInfo.Classification`
 
 ## [1.3.2] - 2026-08-17
 
