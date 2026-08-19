@@ -270,7 +270,7 @@ public sealed class ModelFailoverTests
         observer.LlmCallCompletedInfos.Should().HaveCount(2);
         observer.LlmCallCompletedInfos[0].Success.Should().BeFalse();
         observer.LlmCallCompletedInfos[0].Model.Should().Be("model-a");
-        observer.LlmCallCompletedInfos[0].Classification.Should().Be(FailureClassification.TransientAdvance);
+        observer.LlmCallCompletedInfos[0].Classification.Should().Be(EFailureClassification.TransientAdvance);
         observer.LlmCallCompletedInfos[1].Success.Should().BeTrue();
         observer.LlmCallCompletedInfos[1].Model.Should().Be("model-b");
 
@@ -326,7 +326,7 @@ public sealed class ModelFailoverTests
 
         var result = classifier.Classify(ex, callerCts.Token);
 
-        result.Should().Be(FailureClassification.TransientAdvance);
+        result.Should().Be(EFailureClassification.TransientAdvance);
     }
 
     [Fact]
@@ -339,7 +339,7 @@ public sealed class ModelFailoverTests
 
         var result = classifier.Classify(ex, callerCts.Token);
 
-        result.Should().Be(FailureClassification.Permanent);
+        result.Should().Be(EFailureClassification.Permanent);
     }
 
     [Fact]
@@ -351,7 +351,7 @@ public sealed class ModelFailoverTests
 
         var result = classifier.Classify(ex, callerCts.Token);
 
-        result.Should().Be(FailureClassification.Permanent);
+        result.Should().Be(EFailureClassification.Permanent);
     }
 
     [Fact]

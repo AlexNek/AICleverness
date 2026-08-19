@@ -11,7 +11,7 @@ public sealed record LlmCallInfo
     public required int Attempt { get; init; }
 
     /// <summary>Classification applied by the error classifier (null on success).</summary>
-    public FailureClassification? Classification { get; init; }
+    public EFailureClassification? Classification { get; init; }
 
     /// <summary>Wall-clock duration of this LLM call.</summary>
     public required TimeSpan Duration { get; init; }
