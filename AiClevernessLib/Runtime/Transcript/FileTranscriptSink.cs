@@ -68,9 +68,21 @@ internal sealed class FileTranscriptSink : ITranscriptSink
             if (_completed)
                 return;
 
-            _completed = true;
-            _writer.Flush();
-            _writer.Dispose();
+            try
+            {
+                _writer.Flush();
+            }
+            finally
+            {
+                try
+                {
+                    _writer.Dispose();
+                }
+                finally
+                {
+                    _completed = true;
+                }
+            }
         }
     }
 

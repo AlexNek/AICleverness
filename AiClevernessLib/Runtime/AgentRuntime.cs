@@ -118,12 +118,12 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         }
         catch (OperationCanceledException cancellationException)
         {
-            transcript?.RecordException(cancellationException, "Cancelled");
+            transcript?.CompleteException(cancellationException, "Cancelled");
             throw;
         }
         catch (Exception exception)
         {
-            transcript?.RecordException(exception, "Failed");
+            transcript?.CompleteException(exception, "Failed");
             throw;
         }
         finally
@@ -188,7 +188,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
             await pipelineTask;
             if (pipelineFailure is not null)
             {
-                transcript?.RecordException(
+                transcript?.CompleteException(
                     pipelineFailure,
                     pipelineFailure is OperationCanceledException ? "Cancelled" : "Failed");
                 ExceptionDispatchInfo.Capture(pipelineFailure).Throw();
@@ -209,7 +209,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
             }
             catch (Exception ex)
             {
-                transcript?.RecordException(ex, "Failed");
+                transcript?.CompleteException(ex, "Failed");
                 throw;
             }
 
@@ -403,13 +403,13 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         }
         catch (OperationCanceledException cancellationException)
         {
-            transcript.RecordException(cancellationException, "Cancelled");
+            transcript.CompleteException(cancellationException, "Cancelled");
             transcript.FinalizeTranscript();
             throw;
         }
         catch (Exception exception)
         {
-            transcript.RecordException(exception, "Failed");
+            transcript.CompleteException(exception, "Failed");
             transcript.FinalizeTranscript();
             throw;
         }

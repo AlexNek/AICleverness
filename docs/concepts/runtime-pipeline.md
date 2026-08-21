@@ -259,29 +259,40 @@ if (result.Metadata.TryGetValue(
 
 Each execution receives a separate file named with its UTC timestamp and
 execution ID. The file is written incrementally and contains the request,
-turns, model content, model tool decisions, tool results, quality retries,
-status, and final response. The same execution artifact is used across quality
-gate retries and is finalized for successful, failed, blocked, and cancelled
+turns, model content, model tool decisions, tool-call IDs when available, raw
+malformed or non-object argument markers, tool results, quality retries with
+separate quality-attempt and model-failover metadata, status, and final
+response. The same execution artifact is used across quality gate retries and
+is finalized for successful, failed, blocked, cancelled, and escaped-exception
 runs. `AgentResultMetadataKeys.MarkdownTranscriptPath` is present only when
 persistence completed; `AgentResultMetadataKeys.MarkdownTranscriptStatus`
 reports the persistence outcome.
 
 Normal transcript persistence requires `AgentRuntimeOptions.TranscriptRedactor`.
 The runtime applies built-in redaction to common sensitive JSON property names
-and then calls the host redactor for text and serialized arguments. Do not put
-raw secrets in `AgentRequest.Parameters` to configure redaction: the redactor
-should obtain secret context from the host's secret store and return safe text.
-If no redactor is configured, the run continues without creating a transcript
-and reports `RedactorUnavailable` in result metadata. Transcript I/O and
-redactor failures are isolated from the agent result; inspect the status when
-diagnostics are important.
+and then calls the host redactor for text and serialized arguments. Malformed
+arguments are passed to the host redactor as explicitly marked raw content;
+valid non-object arguments retain their serialized content with a marker. Do
+not put raw secrets in `AgentRequest.Parameters` to configure redaction: the
+redactor should obtain secret context from the host's secret store and return
+safe text. If an explicitly supplied destination is invalid, or no redactor is
+configured for normal mode, the run continues without creating a transcript,
+logs a warning when a logger is configured, and reports `Unavailable` or
+`RedactorUnavailable` in result metadata. Transcript I/O and redactor failures
+are isolated from the agent result; inspect the status when diagnostics are
+important.
 
 For explicitly controlled local debugging, set
 `AgentPropertyKeys.MarkdownTranscriptDebug` to `true`. Debug mode bypasses both
-built-in and host redaction, so it must never be enabled for sensitive
-production executions. Transcript persistence is unbounded by design; hosts
-that need retention or size limits should apply them to the transcript
-directory and redactor policy.
+built-in and host redaction and records available request parameters, the
+effective system prompt, quality feedback, model/failover information,
+execution provenance, and runtime settings in addition to raw model/tool
+content, outputs, and errors. Provider-specific hidden metadata or reasoning
+is not available through the provider-neutral LLM contracts and is not claimed
+by the transcript. It must never be enabled for sensitive production
+executions. Transcript persistence is unbounded by design; hosts that need
+retention or size limits should apply them to the transcript directory and
+redactor policy.
 
 ## Extension Points
 

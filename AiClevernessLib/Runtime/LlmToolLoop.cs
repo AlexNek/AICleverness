@@ -109,6 +109,17 @@ internal sealed class LlmToolLoop
             context.GetProperty<int?>(AgentPropertyKeys.IdleTimeoutSeconds)
             ?? _options.DefaultIdleTimeoutSeconds;
         var options = new LlmCompletionOptions(temperature, null, model);
+        transcript?.AppendDebugRuntime(
+            executionContext.Metadata,
+            executionContext.State,
+            execInfo,
+            systemPrompt,
+            qualityFeedback,
+            maxTurns,
+            temperature,
+            completionTimeoutSeconds,
+            idleTimeoutSeconds,
+            model);
 
         // Set when a failover retry rewinds the loop to the same logical turn —
         // the retry must not increment the state turn counter or emit a second
@@ -178,6 +189,7 @@ internal sealed class LlmToolLoop
             retryingSameTurn = false;
             transcript?.AppendTurn(
                 turn + 1,
+                executionContext.State.QualityRetryCount + 1,
                 Math.Max(1, failoverHandler.Attempt),
                 options.Model);
 
@@ -438,13 +450,26 @@ internal sealed class LlmToolLoop
                                       ? $"Tool '{toolCall.Name}' is not allowed for this run."
                                       : $"Tool '{toolCall.Name}' is not registered.";
                         steps.Add(err);
-                        transcript?.AppendToolDecision(options.Model, toolCall.Name, toolCall.Arguments);
-                        transcript?.AppendToolResult(toolCall.Name, "Failed", null, err);
+                        transcript?.AppendToolDecision(
+                            options.Model,
+                            toolCall.Name,
+                            toolCall.Id,
+                            toolCall.Arguments);
+                        transcript?.AppendToolResult(
+                            toolCall.Name,
+                            toolCall.Id,
+                            "Failed",
+                            null,
+                            err);
                         messages.Add(new LlmMessage("tool", err) { ToolCallId = toolCall.Id });
                         continue;
                     }
 
-                    transcript?.AppendToolDecision(options.Model, toolCall.Name, toolCall.Arguments);
+                    transcript?.AppendToolDecision(
+                        options.Model,
+                        toolCall.Name,
+                        toolCall.Id,
+                        toolCall.Arguments);
                     var arguments = ToolCallArgumentParser.Parse(toolCall.Arguments);
                     var invocation = new ToolInvocation(toolCall.Name, arguments);
 
@@ -576,6 +601,7 @@ internal sealed class LlmToolLoop
                     report(resultMsg);
                     transcript?.AppendToolResult(
                         tool.Name,
+                        toolCall.Id,
                         cacheHit ? result.Success ? "Cached" : "CachedFailure" : result.Success ? "Succeeded" : "Failed",
                         result.Success ? result.Output : null,
                         result.Success ? null : result.Error);

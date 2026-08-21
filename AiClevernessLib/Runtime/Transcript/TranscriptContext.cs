@@ -28,8 +28,6 @@ internal sealed class TranscriptContext
         "token"
     };
 
-    private readonly MarkdownTranscriptBuilder _builder = new();
-
     private readonly object _gate = new();
 
     private readonly ILogger? _logger;
@@ -37,6 +35,8 @@ internal sealed class TranscriptContext
     private readonly Func<string, string>? _redactor;
 
     private readonly ITranscriptSink? _sink;
+
+    private MarkdownTranscriptBuilder? _builder;
 
     private bool _completed;
 
@@ -65,6 +65,8 @@ internal sealed class TranscriptContext
 
     public string? PersistenceStatus { get; private set; }
 
+    private MarkdownTranscriptBuilder Builder => _builder ??= new();
+
     public static TranscriptContext Create(
         AgentRequest request,
         string executionId,
@@ -84,11 +86,11 @@ internal sealed class TranscriptContext
             || !Path.IsPathFullyQualified(directory))
         {
             var hasDirectory = parameters.ContainsKey(AgentPropertyKeys.MarkdownTranscriptDirectory);
-            return Disabled(hasDirectory ? "Unavailable" : null, debug, logger);
+            return Disabled(hasDirectory ? "Unavailable" : null, debug, logger, executionId);
         }
 
         if (!debug && options.TranscriptRedactor is null)
-            return Disabled("RedactorUnavailable", debug, logger);
+            return Disabled("RedactorUnavailable", debug, logger, executionId);
 
         try
         {
@@ -104,11 +106,14 @@ internal sealed class TranscriptContext
                 status: null,
                 logger);
             context.Append(
-                context._builder.Header(
+                context.Builder.Header(
                     context.RedactText(request.Goal),
                     executionId,
                     DateTimeOffset.UtcNow,
                     debug));
+            if (debug)
+                context.AppendDebugRequest(parameters);
+
             return context;
         }
         catch (Exception ex)
@@ -117,64 +122,133 @@ internal sealed class TranscriptContext
                 ex,
                 "Markdown transcript initialization failed for execution {ExecutionId}.",
                 executionId);
-            return Disabled("Unavailable", debug, logger);
+            return new TranscriptContext(null, null, debug, "Unavailable", logger);
         }
     }
 
-    public void AppendTurn(int turn, int attempt, string? model) =>
-        Append(_builder.Turn(turn, attempt, model));
+    public void AppendTurn(int turn, int qualityAttempt, int failoverAttempt, string? model)
+    {
+        if (_sink is null)
+            return;
+
+        Append(Builder.Turn(turn, qualityAttempt, failoverAttempt, model));
+    }
+
+    public void AppendDebugRequest(IReadOnlyDictionary<string, object> parameters)
+    {
+        if (!Debug || _sink is null)
+            return;
+
+        Append(Builder.DebugRequest(parameters));
+    }
+
+    public void AppendDebugRuntime(
+        ExecutionMetadata metadata,
+        ExecutionState state,
+        ModelExecutionInfo? modelExecutionInfo,
+        string systemPrompt,
+        string? qualityFeedback,
+        int maxTurns,
+        float temperature,
+        int completionTimeoutSeconds,
+        int idleTimeoutSeconds,
+        string? model)
+    {
+        if (!Debug || _sink is null)
+            return;
+
+        Append(
+            Builder.DebugRuntime(
+                metadata,
+                state,
+                modelExecutionInfo,
+                systemPrompt,
+                qualityFeedback,
+                maxTurns,
+                temperature,
+                completionTimeoutSeconds,
+                idleTimeoutSeconds,
+                model));
+    }
 
     public void AppendModelContent(string? content)
     {
-        if (!string.IsNullOrWhiteSpace(content))
-            Append(_builder.ModelContent(RedactText(content)));
+        if (_sink is null || string.IsNullOrWhiteSpace(content))
+            return;
+
+        Append(Builder.ModelContent(RedactText(content)));
     }
 
-    public void AppendToolDecision(string? model, string toolName, string rawArguments)
+    public void AppendToolDecision(
+        string? model,
+        string toolName,
+        string? callId,
+        string rawArguments)
     {
+        if (_sink is null)
+            return;
+
         Append(
-            _builder.ToolDecision(
+            Builder.ToolDecision(
                 model ?? "unknown",
                 toolName,
+                callId,
                 RedactArguments(rawArguments)));
     }
 
     public void AppendToolResult(
         string toolName,
+        string? callId,
         string status,
         string? output,
         string? error)
     {
+        if (_sink is null)
+            return;
+
         Append(
-            _builder.ToolResult(
+            Builder.ToolResult(
                 toolName,
+                callId,
                 status,
                 output is null ? null : RedactText(output),
                 error is null ? null : RedactText(error)));
     }
 
-    public void AppendRetry(string reason, int retryNumber) =>
-        Append(_builder.Retry(RedactText(reason), retryNumber));
+    public void AppendRetry(string reason, int retryNumber)
+    {
+        if (_sink is null)
+            return;
 
-    public void AppendStatus(string status, string? detail = null) =>
-        Append(_builder.Status(status, detail is null ? null : RedactText(detail)));
+        Append(Builder.Retry(RedactText(reason), retryNumber));
+    }
+
+    public void AppendStatus(string status, string? detail = null)
+    {
+        if (_sink is null)
+            return;
+
+        Append(Builder.Status(status, detail is null ? null : RedactText(detail)));
+    }
 
     public void Complete(AgentResult result, string status)
     {
         lock (_gate)
         {
-            if (_completed || _sink is null || _terminalWritten)
+            if (_completed || _sink is null || _terminalWritten || PersistenceStatus is not null)
                 return;
 
             try
             {
-                _sink.Append(_builder.Final(
-                    result with
-                    {
-                        Output = result.Output is null ? null : RedactText(result.Output),
-                        Reasoning = result.Reasoning is null ? null : RedactText(result.Reasoning)
-                    },
-                    status));
+                var redactedResult = result with
+                                     {
+                                         Output = result.Output is null ? null : RedactText(result.Output),
+                                         Reasoning = result.Reasoning is null ? null : RedactText(result.Reasoning)
+                                     };
+                if (PersistenceStatus is not null)
+                    return;
+
+                _sink.Append(Builder.Final(redactedResult, status));
                 _terminalWritten = true;
             }
             catch (Exception ex)
@@ -184,12 +258,34 @@ internal sealed class TranscriptContext
         }
     }
 
-    public void RecordException(Exception exception, string status)
+    public void RecordException(Exception exception, string status) =>
+        CompleteException(exception, status);
+
+    public void CompleteException(Exception exception, string status)
     {
         if (_sink is null)
             return;
 
-        AppendStatus(status, exception.Message);
+        lock (_gate)
+        {
+            if (_completed || _terminalWritten)
+                return;
+
+            try
+            {
+                var detail = RedactText(exception.Message);
+                if (PersistenceStatus is not null)
+                    return;
+
+                _sink.Append(Builder.Status(status, detail));
+                _sink.Append(Builder.FinalFailure(status, detail));
+                _terminalWritten = true;
+            }
+            catch (Exception ex)
+            {
+                Disable("FinalizationFailed", ex);
+            }
+        }
     }
 
     public void FinalizeTranscript()
@@ -246,8 +342,19 @@ internal sealed class TranscriptContext
     private static TranscriptContext Disabled(
         string? status,
         bool debug,
-        ILogger? logger) =>
-        new(null, null, debug, status, logger);
+        ILogger? logger,
+        string executionId)
+    {
+        if (status is not null)
+        {
+            logger?.LogWarning(
+                "Markdown transcript disabled for execution {ExecutionId}: {Reason}.",
+                executionId,
+                status);
+        }
+
+        return new TranscriptContext(null, null, debug, status, logger);
+    }
 
     private void Append(string content)
     {
@@ -282,11 +389,14 @@ internal sealed class TranscriptContext
                 WriteRedactedJson(document.RootElement, writer);
             }
 
-            candidate = Encoding.UTF8.GetString(stream.ToArray());
+            var rendered = Encoding.UTF8.GetString(stream.ToArray());
+            candidate = document.RootElement.ValueKind == JsonValueKind.Object
+                            ? rendered
+                            : $"[NON_OBJECT_ARGUMENTS]{Environment.NewLine}{rendered}";
         }
         catch (JsonException)
         {
-            candidate = "[REDACTED_UNPARSEABLE_ARGUMENTS]";
+            candidate = $"[UNPARSEABLE_ARGUMENTS]{Environment.NewLine}{rawArguments}";
         }
 
         return ApplyHostRedactor(candidate);

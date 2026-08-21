@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Opt-in per-execution Markdown transcripts with unique files, lifecycle and quality-retry coverage, result metadata for the completed path/status, and host-configured redaction that fails closed when unavailable
+- Opt-in per-execution Markdown transcripts with an explicitly supplied absolute destination, unique files, separate turn quality/failover metadata, terminal sections for returned and escaped failure/cancellation paths, tool-call IDs and raw malformed-argument preservation, debug runtime/request metadata, result metadata for the completed path/status, and host-configured redaction that fails closed when unavailable
 - Tool-loop progress now includes a bounded first-line summary for successful non-empty tool results and deterministic model/tool/argument decision metadata before valid tool calls; malformed or non-object argument payloads no longer abort progress handling; full tool output sent to the LLM remains unchanged
 - Optional pre-invocation idempotency replay now returns cached tool results before real-call reporting, suppressing normal invocation lifecycle events and counters while preserving the complete result for the next LLM turn
 
