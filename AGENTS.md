@@ -58,6 +58,14 @@ AiClevernessLib.Demo   →  AiClevernessLib  ←  AiClevernessLib.Tests
 - NSubstitute for mocking interfaces
 - One test class per production class, named `{ClassName}Tests`
 
+## Code review validation
+
+- A full solution build is **not required** for a code review.
+- Prefer source inspection and targeted tests for the changed behavior.
+- Run only checks that provide evidence about the requested behavior or inspected files; do not perform unrelated validation as a ritual.
+- Do not run documentation builds, `git diff --check`, benchmarks, or broad test/build commands unless the review scope or changed files make them relevant, or the user explicitly requests them.
+- Build only the affected project or dependency chain when compilation evidence is relevant; run the full solution build only when the review scope requires it or the user explicitly requests it.
+
 ## CHANGELOG maintenance (release workflow)
 
 `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.

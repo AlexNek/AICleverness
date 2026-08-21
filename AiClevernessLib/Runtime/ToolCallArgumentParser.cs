@@ -23,6 +23,11 @@ internal static class ToolCallArgumentParser
         {
             using var document = JsonDocument.Parse(argumentsJson);
             var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return new Dictionary<string, object>(StringComparer.Ordinal);
+            }
+
             var result = new Dictionary<string, object>(StringComparer.Ordinal);
             foreach (var property in root.EnumerateObject())
             {
