@@ -2,6 +2,8 @@ using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Runtime;
 
+using AiClevernessLib.Tests.Testing;
+
 using FluentAssertions;
 
 namespace AiClevernessLib.Tests.Runtime;
@@ -294,6 +296,35 @@ public sealed class StreamingRuntimeTests
         toolCompleted.ToolName.Should().Be("echo");
         toolCompleted.Result.Success.Should().BeTrue();
         toolCompleted.Duration.Should().BeGreaterThanOrEqualTo(TimeSpan.Zero);
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_CachedToolResult_SuppressesRealToolEventsAndPreservesOutput()
+    {
+        // Arrange
+        var llm = new FakeChatClient()
+            .EnqueueToolCallResponse(new LlmToolCall("c1", "echo", "{\"message\":\"hi\"}"))
+            .EnqueueResponse("done");
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var executor = new CacheHitToolExecutor();
+        var runtime = new AgentRuntime(llm, tools, toolExecutor: executor);
+        var request = new AgentRequest("use cached echo", ["echo"]);
+
+        // Act
+        var events = await CollectEvents(runtime, request);
+
+        // Assert
+        var completed = events.OfType<RunCompletedEvent>().Single();
+        completed.Result.Success.Should().BeTrue();
+        completed.Result.Output.Should().Be("done");
+        completed.Result.Steps.Should().Contain("  echo reused cached result: cached output");
+        events.Should().NotContain(e => e is ToolStartedEvent);
+        events.Should().NotContain(e => e is ToolCompletedAgentEvent);
+        executor.ExecuteCalled.Should().BeFalse();
+        llm.Calls.Should().HaveCount(2);
+        llm.Calls[1].Messages.Should()
+            .Contain(message => message.Role == "tool" && message.Content == "cached output");
     }
 
     [Fact]
