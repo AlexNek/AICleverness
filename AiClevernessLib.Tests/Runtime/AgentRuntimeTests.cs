@@ -465,6 +465,265 @@ public sealed class AgentRuntimeTests
         result.Steps.Should().NotContain(s => string.IsNullOrWhiteSpace(s));
     }
 
+    [Fact]
+    public async Task RunAsync_WithToolResultOutput_ReportsFirstLineSummary()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(
+                    null,
+                    [new LlmToolCall("call-1", "echo", "{\"message\":\"first line\\nsecond line\"}")]),
+                new LlmResponse("Done")
+            ]);
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var progress = new RecordingProgress();
+        var runtime = new AgentRuntime(llm, tools);
+
+        // Act
+        var result = await runtime.RunAsync(
+            new AgentRequest("Test result summary"),
+            progress);
+
+        // Assert
+        result.Steps.Should().Contain("  echo succeeded: first line");
+        progress.Messages.Should().Contain("  echo succeeded: first line");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithLongToolResult_LimitsSummaryTo100Characters()
+    {
+        // Arrange
+        var longMessage = new string('x', 150);
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(
+                    null,
+                    [new LlmToolCall(
+                        "call-1",
+                        "echo",
+                        $"{{\"message\":\"{longMessage}\"}}")]),
+                new LlmResponse("Done")
+            ]);
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+
+        // Act
+        var result = await runtime.RunAsync(new AgentRequest("Test result truncation"));
+
+        // Assert
+        var summary = result.Steps.Single(s => s.StartsWith("  echo succeeded: ", StringComparison.Ordinal));
+        var preview = summary["  echo succeeded: ".Length..];
+        preview.Length.Should().Be(100);
+        preview.Should().EndWith("...");
+        preview[..^3].Should().Be(new string('x', 97));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RunAsync_WithEmptyToolResult_DoesNotAppendSummary(string output)
+    {
+        // Arrange
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(
+                    null,
+                    [new LlmToolCall("call-1", "echo", $"{{\"message\":\"{output}\"}}")]),
+                new LlmResponse("Done")
+            ]);
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+
+        // Act
+        var result = await runtime.RunAsync(new AgentRequest("Test empty result"));
+
+        // Assert
+        result.Steps.Should().Contain("  echo succeeded");
+        result.Steps.Should().NotContain(s => s.StartsWith("  echo succeeded: ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_WithFailedToolResult_PreservesFailureFormat()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(null, [new LlmToolCall("call-1", "fail", "{}")]),
+                new LlmResponse("Done")
+            ]);
+        var tools = new ToolRegistry();
+        tools.Register(new FailingTool());
+        var runtime = new AgentRuntime(llm, tools);
+
+        // Act
+        var result = await runtime.RunAsync(new AgentRequest("Test failed result"));
+
+        // Assert
+        result.Steps.Should().Contain("  fail failed: expected failure");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithToolCall_ShowsModelAndPreferredKeyArgument()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(
+                    null,
+                    [new LlmToolCall(
+                        "call-1",
+                        "echo",
+                        "{\"query\":\"search\",\"url\":\"https://test.example.com/item\"}")]),
+                new LlmResponse("Done")
+            ]);
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+        var request = new AgentRequest(
+            "Test decision metadata",
+            Parameters: new Dictionary<string, object> { [AgentPropertyKeys.Model] = "test-model" });
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert
+        result.Steps.Should()
+            .Contain("  [test-model] Decision: echo — \"https://test.example.com/item\"");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithToolCallAndNoModel_UsesLlmDecisionLabel()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(null, [new LlmToolCall("call-1", "echo", "{\"message\":\"hello\"}")]),
+                new LlmResponse("Done")
+            ]);
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+
+        // Act
+        var result = await runtime.RunAsync(new AgentRequest("Test model fallback"));
+
+        // Assert
+        result.Steps.Should().Contain("  [LLM] Decision: echo — \"hello\"");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithJsonReasoning_ReportsReasoningField()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(
+                    "{\"reasoning\":\"The first result looks relevant.\",\"extra\":\"ignored\"}",
+                    [new LlmToolCall("call-1", "echo", "{\"message\":\"hello\"}")]),
+                new LlmResponse("Done")
+            ]);
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+
+        // Act
+        var result = await runtime.RunAsync(new AgentRequest("Test JSON reasoning"));
+
+        // Assert
+        result.Steps.Should().Contain("  The first result looks relevant.");
+        result.Steps.Should().NotContain(s => s.Contains("\"extra\":\"ignored\""));
+    }
+
+    [Fact]
+    public async Task RunAsync_WithMalformedJsonContent_ContinuesToolLoop()
+    {
+        // Arrange
+        const string malformedContent = "{not-json";
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(
+                    malformedContent,
+                    [new LlmToolCall("call-1", "echo", "{\"message\":\"hello\"}")]),
+                new LlmResponse("Done")
+            ]);
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+
+        // Act
+        var result = await runtime.RunAsync(new AgentRequest("Test malformed content"));
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Steps.Should().Contain("  {not-json");
+        result.Steps.Should().Contain(s => s.Contains("Decision: echo"));
+    }
+
+    [Fact]
+    public async Task RunAsync_WithToolCall_ReportsDecisionBeforeInvocation()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(
+            [
+                new LlmResponse(
+                    "I need to check this value",
+                    [new LlmToolCall("call-1", "echo", "{\"message\":\"hello\"}")]),
+                new LlmResponse("Done")
+            ]);
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var runtime = new AgentRuntime(llm, tools);
+
+        // Act
+        var result = await runtime.RunAsync(new AgentRequest("Test ordering"));
+
+        // Assert
+        var steps = result.Steps.ToList();
+        var reasoningIndex = steps.IndexOf("  I need to check this value");
+        var decisionIndex = steps.IndexOf("  [LLM] Decision: echo — \"hello\"");
+        var invocationIndex = steps.IndexOf("Calling tool echo({\"message\":\"hello\"})");
+        reasoningIndex.Should().BeLessThan(decisionIndex);
+        decisionIndex.Should().BeLessThan(invocationIndex);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithCachedToolResult_SuppressesRealInvocationReporting()
+    {
+        // Arrange
+        var llm = new FakeChatClient()
+            .EnqueueToolCallResponse(new LlmToolCall("call-1", "echo", "{\"message\":\"hello\"}"))
+            .EnqueueResponse("Done");
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var observer = new SpyObserver();
+        var executor = new CacheHitToolExecutor();
+        var runtime = new AgentRuntime(
+            llm,
+            tools,
+            toolExecutor: executor,
+            observers: [observer]);
+
+        // Act
+        var result = await runtime.RunAsync(new AgentRequest("Test cached tool result"));
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Steps.Should().Contain("  [LLM] Decision: echo — \"hello\"");
+        result.Steps.Should().Contain("  echo reused cached result: cached output");
+        result.Steps.Should().NotContain(s => s.StartsWith("Calling tool echo", StringComparison.Ordinal));
+        executor.ExecuteCalled.Should().BeFalse();
+        observer.ToolInvoked.Should().BeFalse();
+        observer.ToolCompleted.Should().BeFalse();
+
+        llm.Calls.Should().HaveCount(2);
+        llm.Calls[1].Messages.Should()
+            .Contain(message => message.Role == "tool" && message.Content == "cached output");
+    }
+
     private sealed class BlockAllPolicy : IAgentPolicy
     {
         public string Name => "BlockAllPolicy";
@@ -479,6 +738,51 @@ public sealed class AgentRuntimeTests
         {
             return Task.FromResult(
                 new PolicyResult(true, 0.0, "block", "BlockAllPolicy blocked everything."));
+        }
+    }
+
+    private sealed class RecordingProgress : IProgress<string>
+    {
+        public List<string> Messages { get; } = [];
+
+        public void Report(string value) => Messages.Add(value);
+    }
+
+    private sealed class FailingTool : ITool
+    {
+        public ToolDefinition Definition => new(Name, Description);
+
+        public string Description => "Always returns a failure.";
+
+        public string Name => "fail";
+
+        public Task<ToolResult> InvokeAsync(
+            ToolInvocation invocation,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ToolResult(false, null, "expected failure"));
+    }
+
+    private sealed class CacheHitToolExecutor : IToolExecutor, ICacheAwareToolExecutor
+    {
+        public bool ExecuteCalled { get; private set; }
+
+        public bool TryGetCachedResult(
+            ITool tool,
+            ToolInvocation invocation,
+            out ToolResult result)
+        {
+            result = new ToolResult(true, "cached output");
+            return true;
+        }
+
+        public Task<ToolResult> ExecuteAsync(
+            ITool tool,
+            ToolInvocation invocation,
+            ToolExecutionPolicy policy,
+            CancellationToken cancellationToken)
+        {
+            ExecuteCalled = true;
+            throw new InvalidOperationException("A cache hit must not execute the tool.");
         }
     }
 

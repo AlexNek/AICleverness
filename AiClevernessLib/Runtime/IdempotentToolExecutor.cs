@@ -24,7 +24,7 @@ namespace AiCleverness.Runtime;
 /// Only successful results are cached. Failed invocations are always retried.
 /// </para>
 /// </remarks>
-public sealed class IdempotentToolExecutor : IToolExecutor
+public sealed class IdempotentToolExecutor : IToolExecutor, ICacheAwareToolExecutor
 {
     private readonly IIdempotencyCache _cache;
 
@@ -60,21 +60,14 @@ public sealed class IdempotentToolExecutor : IToolExecutor
         ToolExecutionPolicy policy,
         CancellationToken cancellationToken)
     {
-        var key = ComputeKey(tool, invocation);
-
-        if (_cache.TryGet(key, out var cached))
-        {
-            _logger?.LogDebug(
-                "Idempotency cache hit for tool {ToolName} (key: {Key})",
-                tool.Name,
-                key);
+        if (TryGetCachedResult(tool, invocation, out var cached))
             return cached;
-        }
 
         var result = await _inner.ExecuteAsync(tool, invocation, policy, cancellationToken);
 
         if (result.Success)
         {
+            var key = ComputeKey(tool, invocation);
             _cache.Set(key, result);
             _logger?.LogDebug(
                 "Cached successful result for tool {ToolName} (key: {Key})",
@@ -83,6 +76,25 @@ public sealed class IdempotentToolExecutor : IToolExecutor
         }
 
         return result;
+    }
+
+    /// <inheritdoc />
+    public bool TryGetCachedResult(
+        ITool tool,
+        ToolInvocation invocation,
+        [MaybeNullWhen(false)] out ToolResult result)
+    {
+        var key = ComputeKey(tool, invocation);
+        if (_cache.TryGet(key, out result))
+        {
+            _logger?.LogDebug(
+                "Idempotency cache hit for tool {ToolName} (key: {Key})",
+                tool.Name,
+                key);
+            return true;
+        }
+
+        return false;
     }
 
     private string ComputeKey(ITool tool, ToolInvocation invocation)

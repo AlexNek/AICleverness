@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Tool-loop progress now includes a bounded first-line summary for successful non-empty tool results and deterministic model/tool/argument decision metadata before valid tool calls; full tool output sent to the LLM remains unchanged
+- Optional pre-invocation idempotency replay now returns cached tool results before real-call reporting, suppressing normal invocation lifecycle events and counters while preserving the complete result for the next LLM turn
+
 ## [1.3.3] - 2026-08-19
 
 ### Changed

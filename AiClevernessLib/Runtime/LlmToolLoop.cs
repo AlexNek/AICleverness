@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 using AiCleverness.Abstractions;
@@ -396,18 +397,16 @@ internal sealed class LlmToolLoop
 
             if (response.ToolCalls is { Count: > 0 })
             {
-                // Surface the model's reasoning text that accompanies tool calls —
-                // without this, the user sees only mechanical "Calling tool X(...)"
-                // messages with no explanation of why the model decided to act.
-                // Empty content is skipped; long content is truncated to keep
-                // progress output readable.
-                if (!string.IsNullOrWhiteSpace(response.Content))
+                // Surface the model's existing content before tool calls. When
+                // content is a workflow JSON object with a top-level reasoning
+                // string, show that field instead of the complete JSON envelope.
+                var reasoningText = ExtractJsonReasoning(response.Content) ?? response.Content;
+                if (!string.IsNullOrWhiteSpace(reasoningText))
                 {
                     const int MaxReasoningLength = 500;
-                    var trimmed = response.Content.Trim();
-                    var displayText = trimmed.Length > MaxReasoningLength
-                        ? string.Concat(trimmed.AsSpan(0, MaxReasoningLength), "...")
-                        : trimmed;
+                    var displayText = TruncateReasoning(
+                        reasoningText.Trim(),
+                        MaxReasoningLength);
                     var reasoningMsg = $"  {displayText}";
                     steps.Add(reasoningMsg);
                     report(reasoningMsg);
@@ -436,109 +435,134 @@ internal sealed class LlmToolLoop
                     var arguments = ToolCallArgumentParser.Parse(toolCall.Arguments);
                     var invocation = new ToolInvocation(toolCall.Name, arguments);
 
-                    var stepMsg =
-                        $"Calling tool {tool.Name}({JsonSerializer.Serialize(arguments, AiClevernessJsonContext.Default.DictionaryStringObject)})";
-                    steps.Add(stepMsg);
-                    report(stepMsg);
-                    _logger?.LogDebug("Invoking tool {ToolName}", tool.Name);
+                    var decisionMsg =
+                        $"  [{GetModelLabel(options.Model)}] Decision: {tool.Name} — {ExtractKeyArgument(arguments)}";
+                    steps.Add(decisionMsg);
+                    report(decisionMsg);
 
-                    emit?.Invoke(new ToolStartedEvent
-                                     {
-                                         ExecutionId = executionId,
-                                         ToolName = tool.Name,
-                                         Invocation = invocation
-                                     });
+                    var cacheHit = false;
+                    ToolResult result;
+                    var toolDuration = TimeSpan.Zero;
 
-                    try
+                    if (_toolExecutor is ICacheAwareToolExecutor cacheAwareExecutor
+                        && cacheAwareExecutor.TryGetCachedResult(
+                            tool,
+                            invocation,
+                            out var cachedResult))
                     {
-                        executionContext.State.IncrementToolInvocation();
-                        await ObserverNotifier.NotifyAllAsync(
-                            _observers,
-                            observer => observer.OnToolInvokedAsync(
-                                tool,
-                                invocation,
-                                cancellationToken),
-                            _logger,
-                            cancellationToken);
+                        cacheHit = true;
+                        result = cachedResult;
+                    }
+                    else
+                    {
+                        var stepMsg =
+                            $"Calling tool {tool.Name}({JsonSerializer.Serialize(arguments, AiClevernessJsonContext.Default.DictionaryStringObject)})";
+                        steps.Add(stepMsg);
+                        report(stepMsg);
+                        _logger?.LogDebug("Invoking tool {ToolName}", tool.Name);
 
-                        // Publish tool invoked event.
-                        if (_eventPublisher is not null)
-                        {
-                            await _eventPublisher.PublishAsync(
-                                new ToolInvokedBusEvent(executionId, tool.Name, invocation),
-                                cancellationToken);
-                        }
-
-                        var started = DateTimeOffset.UtcNow;
-                        var policy = ToolPolicyFactory.Create(tool, context, _options);
-                        var result = await _toolExecutor.ExecuteAsync(
-                                         tool,
-                                         invocation,
-                                         policy,
-                                         cancellationToken);
-                        var toolDuration = DateTimeOffset.UtcNow - started;
-                        await ObserverNotifier.NotifyAllAsync(
-                            _observers,
-                            observer => observer.OnToolCompletedAsync(
-                                tool,
-                                result,
-                                toolDuration,
-                                cancellationToken),
-                            _logger,
-                            cancellationToken);
-
-                        // Publish tool completed event.
-                        if (_eventPublisher is not null)
-                        {
-                            await _eventPublisher.PublishAsync(
-                                new ToolCompletedBusEvent(
-                                    executionId,
-                                    tool.Name,
-                                    result,
-                                    toolDuration),
-                                cancellationToken);
-                        }
-
-                        emit?.Invoke(new ToolCompletedAgentEvent
+                        emit?.Invoke(new ToolStartedEvent
                                          {
                                              ExecutionId = executionId,
                                              ToolName = tool.Name,
-                                             Result = result,
-                                             Duration = toolDuration
+                                             Invocation = invocation
                                          });
 
-                        var output = result.Success
-                                         ? result.Output ?? "(empty)"
-                                         : $"Error: {result.Error ?? "unknown error"}";
-
-                        var resultMsg = result.Success
-                                            ? $"  {tool.Name} succeeded"
-                                            : $"  {tool.Name} failed: {result.Error}";
-                        steps.Add(resultMsg);
-                        report(resultMsg);
-
-                        messages.Add(new LlmMessage("tool", output) { ToolCallId = toolCall.Id });
-                    }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                    {
-                        if (emit is not null)
+                        try
                         {
-                            emit(new CancellationEvent
-                                     {
-                                         ExecutionId = executionId,
-                                         Reason = "Cancellation requested during tool execution."
-                                     });
-                            return new AgentResult(
-                                false,
-                                null,
-                                "Cancellation requested during tool execution.",
-                                steps,
-                                new LlmTokenUsage(totalPromptTokens, totalCompletionTokens),
-                                FailureKind: EFailureKind.Cancelled);
-                        }
+                            executionContext.State.IncrementToolInvocation();
+                            await ObserverNotifier.NotifyAllAsync(
+                                _observers,
+                                observer => observer.OnToolInvokedAsync(
+                                    tool,
+                                    invocation,
+                                    cancellationToken),
+                                _logger,
+                                cancellationToken);
 
-                        throw;
+                            // Publish tool invoked event.
+                            if (_eventPublisher is not null)
+                            {
+                                await _eventPublisher.PublishAsync(
+                                    new ToolInvokedBusEvent(executionId, tool.Name, invocation),
+                                    cancellationToken);
+                            }
+
+                            var started = DateTimeOffset.UtcNow;
+                            var policy = ToolPolicyFactory.Create(tool, context, _options);
+                            result = await _toolExecutor.ExecuteAsync(
+                                             tool,
+                                             invocation,
+                                             policy,
+                                             cancellationToken);
+                            toolDuration = DateTimeOffset.UtcNow - started;
+                            await ObserverNotifier.NotifyAllAsync(
+                                _observers,
+                                observer => observer.OnToolCompletedAsync(
+                                    tool,
+                                    result,
+                                    toolDuration,
+                                    cancellationToken),
+                                _logger,
+                                cancellationToken);
+
+                            // Publish tool completed event.
+                            if (_eventPublisher is not null)
+                            {
+                                await _eventPublisher.PublishAsync(
+                                    new ToolCompletedBusEvent(
+                                        executionId,
+                                        tool.Name,
+                                        result,
+                                        toolDuration),
+                                    cancellationToken);
+                            }
+
+                            emit?.Invoke(new ToolCompletedAgentEvent
+                                             {
+                                                 ExecutionId = executionId,
+                                                 ToolName = tool.Name,
+                                                 Result = result,
+                                                 Duration = toolDuration
+                                             });
+                        }
+                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                        {
+                            if (emit is not null)
+                            {
+                                emit(new CancellationEvent
+                                         {
+                                             ExecutionId = executionId,
+                                             Reason = "Cancellation requested during tool execution."
+                                         });
+                                return new AgentResult(
+                                    false,
+                                    null,
+                                    "Cancellation requested during tool execution.",
+                                    steps,
+                                    new LlmTokenUsage(totalPromptTokens, totalCompletionTokens),
+                                    FailureKind: EFailureKind.Cancelled);
+                            }
+
+                            throw;
+                        }
                     }
+
+                    var output = result.Success
+                                     ? result.Output ?? "(empty)"
+                                     : $"Error: {result.Error ?? "unknown error"}";
+
+                    var resultMsg = result.Success
+                                        ? cacheHit
+                                            ? $"  {tool.Name} reused cached result{FormatToolResultSummary(result.Output)}"
+                                            : $"  {tool.Name} succeeded{FormatToolResultSummary(result.Output)}"
+                                        : cacheHit
+                                            ? $"  {tool.Name} reused cached failure: {result.Error}"
+                                            : $"  {tool.Name} failed: {result.Error}";
+                    steps.Add(resultMsg);
+                    report(resultMsg);
+
+                    messages.Add(new LlmMessage("tool", output) { ToolCallId = toolCall.Id });
                 }
 
                 continue;
@@ -571,6 +595,135 @@ internal sealed class LlmToolLoop
         report(exhausted);
         var finalUsage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
         return new AgentResult(false, null, exhausted, steps, finalUsage, FailureKind: EFailureKind.TurnLimitExceeded);
+    }
+
+    private const int MaxDecisionArgumentLength = 200;
+
+    private const int MaxToolResultPreviewLength = 100;
+
+    private static string ExtractKeyArgument(IReadOnlyDictionary<string, object> arguments)
+    {
+        var preferredKeys = new[] { "url", "uri", "query", "path" };
+        foreach (var key in preferredKeys)
+        {
+            if (arguments.TryGetValue(key, out var preferredValue)
+                && IsScalar(preferredValue))
+            {
+                return FormatArgumentValue(preferredValue);
+            }
+        }
+
+        foreach (var pair in arguments.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            if (IsScalar(pair.Value))
+            {
+                return FormatArgumentValue(pair.Value);
+            }
+        }
+
+        return "(no scalar argument)";
+    }
+
+    private static string? ExtractJsonReasoning(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            var root = document.RootElement;
+            if (root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("reasoning", out var reasoning)
+                && reasoning.ValueKind == JsonValueKind.String)
+            {
+                return reasoning.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            // Non-JSON model content is valid and remains the displayed fallback.
+        }
+
+        return null;
+    }
+
+    private static string FormatArgumentValue(object value)
+    {
+        var text = value is IFormattable formattable
+            ? formattable.ToString(null, CultureInfo.InvariantCulture)
+            : value.ToString();
+        text ??= string.Empty;
+        text = text.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        text = text.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal);
+        return $"\"{TruncateWithEllipsis(text, MaxDecisionArgumentLength)}\"";
+    }
+
+    private static string FormatToolResultSummary(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return string.Empty;
+        }
+
+        var firstLine = output.Split(
+                new[] { '\r', '\n' },
+                2,
+                StringSplitOptions.None)[0]
+            .Trim();
+        if (firstLine.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        return $": {TruncateWithEllipsis(firstLine, MaxToolResultPreviewLength)}";
+    }
+
+    private static string GetModelLabel(string? model)
+    {
+        return string.IsNullOrWhiteSpace(model) ? "LLM" : model.Trim();
+    }
+
+    private static bool IsScalar(object? value)
+    {
+        return value is string
+            or bool
+            or byte
+            or sbyte
+            or short
+            or ushort
+            or int
+            or uint
+            or long
+            or ulong
+            or float
+            or double
+            or decimal;
+    }
+
+    private static string TruncateReasoning(string text, int maxLength)
+    {
+        return text.Length > maxLength
+            ? string.Concat(text.AsSpan(0, maxLength), "...")
+            : text;
+    }
+
+    private static string TruncateWithEllipsis(string text, int maxLength)
+    {
+        if (text.Length <= maxLength)
+        {
+            return text;
+        }
+
+        if (maxLength <= 3)
+        {
+            return new string('.', maxLength);
+        }
+
+        return string.Concat(text.AsSpan(0, maxLength - 3), "...");
     }
 
     /// <summary>

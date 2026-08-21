@@ -2,6 +2,8 @@ using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Runtime;
 
+using AiClevernessLib.Tests.Testing;
+
 using FluentAssertions;
 
 namespace AiClevernessLib.Tests.Runtime;
@@ -297,6 +299,35 @@ public sealed class StreamingRuntimeTests
     }
 
     [Fact]
+    public async Task RunStreamingAsync_CachedToolResult_SuppressesRealToolEventsAndPreservesOutput()
+    {
+        // Arrange
+        var llm = new FakeChatClient()
+            .EnqueueToolCallResponse(new LlmToolCall("c1", "echo", "{\"message\":\"hi\"}"))
+            .EnqueueResponse("done");
+        var tools = new ToolRegistry();
+        tools.Register(new EchoTool());
+        var executor = new CacheHitToolExecutor();
+        var runtime = new AgentRuntime(llm, tools, toolExecutor: executor);
+        var request = new AgentRequest("use cached echo", ["echo"]);
+
+        // Act
+        var events = await CollectEvents(runtime, request);
+
+        // Assert
+        var completed = events.OfType<RunCompletedEvent>().Single();
+        completed.Result.Success.Should().BeTrue();
+        completed.Result.Output.Should().Be("done");
+        completed.Result.Steps.Should().Contain("  echo reused cached result: cached output");
+        events.Should().NotContain(e => e is ToolStartedEvent);
+        events.Should().NotContain(e => e is ToolCompletedAgentEvent);
+        executor.ExecuteCalled.Should().BeFalse();
+        llm.Calls.Should().HaveCount(2);
+        llm.Calls[1].Messages.Should()
+            .Contain(message => message.Role == "tool" && message.Content == "cached output");
+    }
+
+    [Fact]
     public async Task RunStreamingAsync_PublishesBusEvents_WhenPublisherRegistered()
     {
         var llm = new FakeLlmClient([new LlmResponse("done")]);
@@ -458,6 +489,30 @@ public sealed class StreamingRuntimeTests
         {
             var msg = invocation.Arguments.TryGetValue("message", out var m) ? m?.ToString() : null;
             return Task.FromResult(new ToolResult(true, msg ?? "(empty)"));
+        }
+    }
+
+    private sealed class CacheHitToolExecutor : IToolExecutor, ICacheAwareToolExecutor
+    {
+        public bool ExecuteCalled { get; private set; }
+
+        public bool TryGetCachedResult(
+            ITool tool,
+            ToolInvocation invocation,
+            out ToolResult result)
+        {
+            result = new ToolResult(true, "cached output");
+            return true;
+        }
+
+        public Task<ToolResult> ExecuteAsync(
+            ITool tool,
+            ToolInvocation invocation,
+            ToolExecutionPolicy policy,
+            CancellationToken cancellationToken)
+        {
+            ExecuteCalled = true;
+            throw new InvalidOperationException("A cache hit must not execute the tool.");
         }
     }
 

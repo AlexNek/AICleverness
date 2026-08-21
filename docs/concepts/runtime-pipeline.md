@@ -185,22 +185,47 @@ messages are surfaced:
 | When | Message format | Example |
 | --- | --- | --- |
 | Tool call starts | `Calling tool {name}({arguments})` | `Calling tool fetch_url({"url":"..."})` |
-| Tool call finishes | Two-space indent + `{name} succeeded` or `{name} failed: {error}` | `  fetch_url succeeded` |
-| Model reasoning with tool calls | Two-space indent + `{reasoning text}` (truncated if > 500 chars) | `  Let me check the pricing page directly` |
+| Tool call finishes successfully | Two-space indent + `{name} succeeded` with an optional first-line summary | `  fetch_url succeeded: ## Pricing Plans...` |
+| Cached result is reused | Two-space indent + `{name} reused cached result` with an optional first-line summary | `  fetch_url reused cached result: ## Pricing Plans...` |
+| Tool call fails | Two-space indent + `{name} failed: {error}` | `  fetch_url failed: timeout` |
+| Model decision | Two-space indent + `[{model}] Decision: {tool} — "{key argument}"` | `  [configured-model] Decision: fetch_url — "https://test.example.com/pricing"` |
+| Model content with tool calls | Two-space indent + model content, truncated if > 500 chars | `  Let me check the pricing page directly` |
 | Final response | `LLM returned final response.` | — |
 | Turn exhausted | `Turn {n} produced no content and no tool calls.` | — |
 
-When the model generates reasoning text alongside tool calls (e.g., "Let me
-search for this information"), that text is reported before the tool calls are
-listed. This allows consumers to see the model's decision-making process at
-each step of the loop. If the model produces no reasoning text, nothing is
-reported. Long reasoning text is truncated to 500 characters to keep the
-progress output readable.
+Successful non-empty tool results show the first line of output as a human-readable
+preview. The complete preview, including `...` when truncation occurs, is limited
+to 100 characters. Empty and whitespace-only output does not add a summary. The
+complete tool output is still passed to the next LLM turn; only the progress and
+`Steps` display is shortened.
 
-!!! note "Streaming vs. Progress Callback"
-    The progress callback is used by both streaming and non-streaming runs.
-    Streaming additionally emits `ModelChunkEvent` items for each content chunk
-    via the event channel — see [Streaming](../streaming/streaming-execution.md).
+When the configured executor implements `ICacheAwareToolExecutor`, the runtime
+probes for a cached result after the decision line and before reporting a real
+invocation. A hit emits the distinct `reused cached result` progress step and
+passes the complete cached output to the next LLM turn. It does not emit the
+normal `Calling tool ...` step, increment the tool invocation counter, notify tool
+invocation/completion observers, publish tool bus events, or emit
+`ToolStartedEvent`/`ToolCompletedAgentEvent`. Cache misses and ordinary
+`IToolExecutor` implementations retain the normal path. See
+[Tool Idempotency](../tools/tool-idempotency.md) for wiring requirements.
+
+Before each valid tool call, the runtime reports deterministic decision metadata:
+the active model label, tool name, and one scalar argument. It prefers arguments
+named `url`, `uri`, `query`, or `path`, then uses the first scalar argument in
+ordinal key order. If no scalar argument exists, it reports `(no scalar argument)`.
+This metadata identifies the selected action; it is not reconstructed model
+reasoning. When ordinary model content accompanies tool calls, that content is
+reported before the decision line. If the content is a JSON object with a
+string-valued top-level `reasoning` property, that property is displayed instead
+of the complete JSON envelope. Malformed or non-JSON content remains safe and is
+reported using the existing content fallback.
+
+!!! note "Progress vs. Streaming Events"
+    The progress callback and `AgentResult.Steps` are used by `RunAsync`.
+    `RunStreamingAsync` continues to expose its existing structured events for
+    real tool executions, including `ModelChunkEvent`, `ToolStartedEvent`, and
+    `ToolCompletedAgentEvent`. A pre-invocation cache hit intentionally omits
+    the normal tool lifecycle events; this adds no new streaming event type.
 
 ## Extension Points
 

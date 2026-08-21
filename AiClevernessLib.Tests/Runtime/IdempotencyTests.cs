@@ -113,6 +113,44 @@ public sealed class IdempotencyTests
         }
 
         [Fact]
+        public async Task TryGetCachedResult_AfterSuccessfulExecution_ReturnsCachedResult()
+        {
+            var inner = new CountingToolExecutor();
+            var cache = new InMemoryIdempotencyCache();
+            var executor = new IdempotentToolExecutor(inner, cache, "exec-1");
+            var tool = new FakeTool("search");
+            var invocation = new ToolInvocation(
+                "search",
+                new Dictionary<string, object> { ["q"] = "AI" });
+
+            await executor.ExecuteAsync(tool, invocation, new ToolExecutionPolicy(), default);
+
+            var hit = executor.TryGetCachedResult(tool, invocation, out var cached);
+
+            hit.Should().BeTrue();
+            cached!.Output.Should().Be("result");
+            inner.CallCount.Should().Be(1);
+        }
+
+        [Fact]
+        public void TryGetCachedResult_WhenMissing_ReturnsFalse()
+        {
+            var inner = new CountingToolExecutor();
+            var cache = new InMemoryIdempotencyCache();
+            var executor = new IdempotentToolExecutor(inner, cache, "exec-1");
+            var tool = new FakeTool("search");
+            var invocation = new ToolInvocation(
+                "search",
+                new Dictionary<string, object> { ["q"] = "AI" });
+
+            var hit = executor.TryGetCachedResult(tool, invocation, out var cached);
+
+            hit.Should().BeFalse();
+            cached.Should().BeNull();
+            inner.CallCount.Should().Be(0);
+        }
+
+        [Fact]
         public async Task SecondCall_SameArgs_ReturnsCached()
         {
             var inner = new CountingToolExecutor();
