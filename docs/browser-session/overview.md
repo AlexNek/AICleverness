@@ -8,7 +8,7 @@ decision loop.
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │  External caller                                │
 │  (console, workflow, LLM orchestration, etc.)   │
@@ -145,7 +145,7 @@ waiting for the operation to finish.
 
 ## Cookie persistence
 
-Set `StorageStatePath` to persist cookies across workflows:
+Set `StorageStatePath` to persist cookies across workflows. Persisted browser state may contain authentication cookies and other session credentials. Protect the file with restricted access, exclude it from source control, and use a separate path for each independent workflow or identity; never share it between unrelated or concurrent workflows.
 
 ```csharp
 var options = new BrowserSessionOptions

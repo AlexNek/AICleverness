@@ -45,7 +45,7 @@ To enable the runtime's pre-invocation replay behavior, supply the
   result after the model decision and before `Calling tool ...`,
   `ToolStartedEvent`, observers, bus events, or the invocation counter.
 - **A cache hit is not reported as execution.** The runtime emits a distinct
-  progress step such as `  fetch_url reused cached result: ...`, suppresses
+  progress step such as two-space indent + `fetch_url reused cached result: ...`, suppresses
   normal invocation and completion callbacks/events, and sends the complete
   cached output to the next LLM turn.
 - **Cache misses use the normal path.** The existing `Calling tool ...` message,

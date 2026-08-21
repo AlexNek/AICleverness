@@ -185,11 +185,11 @@ messages are surfaced:
 | When | Message format | Example |
 | --- | --- | --- |
 | Tool call starts | `Calling tool {name}({arguments})` | `Calling tool fetch_url({"url":"..."})` |
-| Tool call finishes successfully | Two-space indent + `{name} succeeded` with an optional first-line summary | `  fetch_url succeeded: ## Pricing Plans...` |
-| Cached result is reused | Two-space indent + `{name} reused cached result` with an optional first-line summary | `  fetch_url reused cached result: ## Pricing Plans...` |
-| Tool call fails | Two-space indent + `{name} failed: {error}` | `  fetch_url failed: timeout` |
-| Model decision | Two-space indent + `[{model}] Decision: {tool} — "{key argument}"` | `  [configured-model] Decision: fetch_url — "https://test.example.com/pricing"` |
-| Model content with tool calls | Two-space indent + model content, truncated if > 500 chars | `  Let me check the pricing page directly` |
+| Tool call finishes successfully | Two-space indent + `{name} succeeded` with an optional first-line summary | Two-space indent + `fetch_url succeeded: ## Pricing Plans...` |
+| Cached result is reused | Two-space indent + `{name} reused cached result` with an optional first-line summary | Two-space indent + `fetch_url reused cached result: ## Pricing Plans...` |
+| Tool call fails | Two-space indent + `{name} failed: {error}` | Two-space indent + `fetch_url failed: timeout` |
+| Model decision | Two-space indent + `[{model}] Decision: {tool} — "{key argument}"` | Two-space indent + `[configured-model] Decision: fetch_url — "https://test.example.com/pricing"` |
+| Model content with tool calls | Two-space indent + model content, truncated if > 500 chars | Two-space indent + `Let me check the pricing page directly` |
 | Final response | `LLM returned final response.` | — |
 | Turn exhausted | `Turn {n} produced no content and no tool calls.` | — |
 

@@ -50,7 +50,7 @@ Each `BrowserSnapshot` gives the caller:
 1. **Content** — the page body in Markdown, PlainText, or Html according to
    the configured `EContentFormat`.
 2. **Elements** — a numbered list of interactive elements:
-   ```
+   ```text
    [1] a: "Sign In" → /login
    [2] input[text]: placeholder="Email" name="email"
    [3] input[password]: placeholder="Password" name="password"
@@ -70,9 +70,13 @@ snapshot = await session.ExecuteAsync(new BrowserOperation(
         new FormFieldValue(3, "test-password-123")
     ]));
 
+var submitIndex = snapshot.Elements
+    .Single(element => element.Tag == "button" && element.Text == "Submit")
+    .Index;
+
 snapshot = await session.ExecuteAsync(new BrowserOperation(
     EBrowserOperationType.Click,
-    ElementIndex: 4));
+    ElementIndex: submitIndex));
 
 // Verify that snapshot.Url is now the expected dashboard URL.
 ```
@@ -82,9 +86,14 @@ snapshot = await session.ExecuteAsync(new BrowserOperation(
 ```csharp
 var snapshot = await session.StartAsync("https://test.example.com/feed");
 
-while (snapshot.HasMoreContent)
+while (true)
 {
     ProcessContent(snapshot.Content);
+
+    if (!snapshot.HasMoreContent)
+    {
+        break;
+    }
 
     snapshot = await session.ExecuteAsync(
         new BrowserOperation(EBrowserOperationType.ScrollDown));
@@ -96,7 +105,7 @@ while (snapshot.HasMoreContent)
 A typical system prompt for the external LLM can describe the operation
 contract as follows:
 
-```
+```text
 You receive a BrowserSnapshot with page content and numbered interactive elements.
 
 To interact, respond with a JSON BrowserOperation:
@@ -136,6 +145,6 @@ available:
 
 - Use `EContentFormat.Markdown` for a good structure/size balance.
 - Set `IncludeScreenshot = true` only for multimodal consumers.
-- Use `StorageStatePath` for authentication across workflows.
+- Use `StorageStatePath` for authentication across workflows only when the state file is protected and excluded from source control. Persisted state may contain authentication cookies; use a separate path for each independent workflow or identity and never share it between unrelated or concurrent workflows.
 - Keep `MaxOperations` reasonable to prevent runaway loops.
 - A session is not thread-safe; use one session per workflow thread.
