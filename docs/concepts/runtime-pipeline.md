@@ -227,6 +227,62 @@ reported using the existing content fallback.
     `ToolCompletedAgentEvent`. A pre-invocation cache hit intentionally omits
     the normal tool lifecycle events; this adds no new streaming event type.
 
+## Markdown Execution Transcripts
+
+Markdown execution transcripts are opt-in per request. Set
+`AgentPropertyKeys.MarkdownTranscriptDirectory` to an absolute directory and
+configure a host-owned redactor on the shared `AgentRuntimeOptions` instance:
+
+```csharp
+var options = new AgentRuntimeOptions
+{
+    TranscriptRedactor = text => secretStore.Redact(text)
+};
+
+var request = new AgentRequest(
+    "Research the configured topic",
+    Parameters: new Dictionary<string, object>
+    {
+        [AgentPropertyKeys.MarkdownTranscriptDirectory] =
+            Path.Combine(appDataDirectory, "transcripts")
+    });
+
+var result = await runtime.RunAsync(request);
+if (result.Metadata.TryGetValue(
+        AgentResultMetadataKeys.MarkdownTranscriptPath,
+        out var transcriptValue)
+    && transcriptValue is string transcriptPath)
+{
+    // Read the completed UTF-8 Markdown file at transcriptPath.
+}
+```
+
+Each execution receives a separate file named with its UTC timestamp and
+execution ID. The file is written incrementally and contains the request,
+turns, model content, model tool decisions, tool results, quality retries,
+status, and final response. The same execution artifact is used across quality
+gate retries and is finalized for successful, failed, blocked, and cancelled
+runs. `AgentResultMetadataKeys.MarkdownTranscriptPath` is present only when
+persistence completed; `AgentResultMetadataKeys.MarkdownTranscriptStatus`
+reports the persistence outcome.
+
+Normal transcript persistence requires `AgentRuntimeOptions.TranscriptRedactor`.
+The runtime applies built-in redaction to common sensitive JSON property names
+and then calls the host redactor for text and serialized arguments. Do not put
+raw secrets in `AgentRequest.Parameters` to configure redaction: the redactor
+should obtain secret context from the host's secret store and return safe text.
+If no redactor is configured, the run continues without creating a transcript
+and reports `RedactorUnavailable` in result metadata. Transcript I/O and
+redactor failures are isolated from the agent result; inspect the status when
+diagnostics are important.
+
+For explicitly controlled local debugging, set
+`AgentPropertyKeys.MarkdownTranscriptDebug` to `true`. Debug mode bypasses both
+built-in and host redaction, so it must never be enabled for sensitive
+production executions. Transcript persistence is unbounded by design; hosts
+that need retention or size limits should apply them to the transcript
+directory and redactor policy.
+
 ## Extension Points
 
 Every step in the pipeline is an interface. To add your own behavior, write

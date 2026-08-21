@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Runtime.Middleware;
+using AiCleverness.Runtime.Transcript;
 
 using Microsoft.Extensions.Logging;
 
@@ -101,16 +102,34 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
 
         var (agentContext, executionContext) =
             await InitializeExecutionAsync(request, progress, cancellationToken);
+        var transcript = executionContext.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript);
 
-        // Build and run the pipeline.
-        var pipeline = BuildPipeline(executionContext);
-        var result = await pipeline(executionContext);
+        try
+        {
+            // Build and run the pipeline.
+            var pipeline = BuildPipeline(executionContext);
+            var result = await pipeline(executionContext);
 
-        return await FinalizeExecutionAsync(
-            agentContext,
-            executionContext,
-            result,
-            cancellationToken);
+            return await FinalizeExecutionAsync(
+                agentContext,
+                executionContext,
+                result,
+                cancellationToken);
+        }
+        catch (OperationCanceledException cancellationException)
+        {
+            transcript?.RecordException(cancellationException, "Cancelled");
+            throw;
+        }
+        catch (Exception exception)
+        {
+            transcript?.RecordException(exception, "Failed");
+            throw;
+        }
+        finally
+        {
+            transcript?.FinalizeTranscript();
+        }
     }
 
     /// <inheritdoc/>
@@ -123,66 +142,88 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
 
         var (agentContext, executionContext) =
             await InitializeExecutionAsync(request, null, cancellationToken);
+        var transcript = executionContext.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript);
         var executionId = executionContext.Metadata.ExecutionId;
         var runStart = DateTimeOffset.UtcNow;
 
-        // Stream pipeline events through an unbounded channel: the pipeline runs on
-        // a background task while the async iterator drains the channel.
-        var channel = Channel.CreateUnbounded<AgentEvent>();
-        executionContext.Items.Set(
-            ExecutionItemKeys.EventEmitter,
-            (Action<AgentEvent>)(agentEvent => channel.Writer.TryWrite(agentEvent)));
-
-        yield return new RunStartedEvent { ExecutionId = executionId, Request = request };
-
-        var pipeline = BuildPipeline(executionContext);
-        AgentResult? pipelineResult = null;
-        Exception? pipelineFailure = null;
-        var pipelineTask = Task.Run(
-            async () =>
-            {
-                try
-                {
-                    pipelineResult = await pipeline(executionContext);
-                }
-                catch (Exception ex)
-                {
-                    pipelineFailure = ex;
-                }
-                finally
-                {
-                    channel.Writer.TryComplete();
-                }
-            },
-            CancellationToken.None);
-
-        // Drain without the caller's token: the tool loop itself observes cancellation
-        // and completes the writer, so the stream ends with a CancellationEvent.
-        await foreach (var agentEvent in channel.Reader.ReadAllAsync(CancellationToken.None))
+        try
         {
-            yield return agentEvent;
+            // Stream pipeline events through an unbounded channel: the pipeline runs on
+            // a background task while the async iterator drains the channel.
+            var channel = Channel.CreateUnbounded<AgentEvent>();
+            executionContext.Items.Set(
+                ExecutionItemKeys.EventEmitter,
+                (Action<AgentEvent>)(agentEvent => channel.Writer.TryWrite(agentEvent)));
+
+            yield return new RunStartedEvent { ExecutionId = executionId, Request = request };
+
+            var pipeline = BuildPipeline(executionContext);
+            AgentResult? pipelineResult = null;
+            Exception? pipelineFailure = null;
+            var pipelineTask = Task.Run(
+                async () =>
+                {
+                    try
+                    {
+                        pipelineResult = await pipeline(executionContext);
+                    }
+                    catch (Exception ex)
+                    {
+                        pipelineFailure = ex;
+                    }
+                    finally
+                    {
+                        channel.Writer.TryComplete();
+                    }
+                },
+                CancellationToken.None);
+
+            // Drain without the caller's token: the tool loop itself observes cancellation
+            // and completes the writer, so the stream ends with a CancellationEvent.
+            await foreach (var agentEvent in channel.Reader.ReadAllAsync(CancellationToken.None))
+            {
+                yield return agentEvent;
+            }
+
+            await pipelineTask;
+            if (pipelineFailure is not null)
+            {
+                transcript?.RecordException(
+                    pipelineFailure,
+                    pipelineFailure is OperationCanceledException ? "Cancelled" : "Failed");
+                ExceptionDispatchInfo.Capture(pipelineFailure).Throw();
+            }
+
+            // Post-hoc completion bookkeeping must not be cancellable: on cancellation
+            // the token is already cancelled, and finalizing with it would turn observer
+            // notifications / bus publishing into an OperationCanceledException instead
+            // of a clean end of the stream.
+            AgentResult finalResult;
+            try
+            {
+                finalResult = await FinalizeExecutionAsync(
+                    agentContext,
+                    executionContext,
+                    pipelineResult!,
+                    CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                transcript?.RecordException(ex, "Failed");
+                throw;
+            }
+
+            yield return new RunCompletedEvent
+                             {
+                                 ExecutionId = executionId,
+                                 Result = finalResult,
+                                 Duration = DateTimeOffset.UtcNow - runStart
+                             };
         }
-
-        await pipelineTask;
-        if (pipelineFailure is not null)
-            ExceptionDispatchInfo.Capture(pipelineFailure).Throw();
-
-        // Post-hoc completion bookkeeping must not be cancellable: on cancellation
-        // the token is already cancelled, and finalizing with it would turn observer
-        // notifications / bus publishing into an OperationCanceledException instead
-        // of a clean end of the stream.
-        var finalResult = await FinalizeExecutionAsync(
-            agentContext,
-            executionContext,
-            pipelineResult!,
-            CancellationToken.None);
-
-        yield return new RunCompletedEvent
-                         {
-                             ExecutionId = executionId,
-                             Result = finalResult,
-                             Duration = DateTimeOffset.UtcNow - runStart
-                         };
+        finally
+        {
+            transcript?.FinalizeTranscript();
+        }
     }
 
     private AgentPipelineDelegate BuildPipeline(DefaultExecutionContext executionContext)
@@ -251,6 +292,20 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
             result = result with { Steps = finalSteps };
         }
 
+        var transcript = executionContext.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript);
+        var transcriptExecutionStatus = result.Success
+                                            ? "Completed"
+                                            : executionContext.State.Status == ExecutionStatus.Blocked
+                                                ? "Blocked"
+                                                : result.FailureKind == EFailureKind.Cancelled
+                                                    ? "Cancelled"
+                                                    : result.FailureKind == EFailureKind.TurnLimitExceeded
+                                                        ? "TurnLimitExceeded"
+                                                        : "Failed";
+        transcript?.Complete(result, transcriptExecutionStatus);
+        transcript?.FinalizeTranscript();
+        result = transcript?.ApplyMetadata(result) ?? result;
+
         // Notify completion (only if not already notified by policy middleware).
         if (executionContext.State.Status != ExecutionStatus.Blocked)
         {
@@ -318,24 +373,46 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
             ExecutionItemKeys.Progress,
             (Action<string>)(message => progress?.Report(message)));
 
-        await ObserverNotifier.NotifyAllAsync(
-            _observers,
-            observer => observer.OnRunStartedAsync(request, agentContext, cancellationToken),
-            _logger,
-            cancellationToken);
+        var transcript = TranscriptContext.Create(
+            request,
+            executionContext.Metadata.ExecutionId,
+            _options,
+            _logger);
+        executionContext.Items.Set(ExecutionItemKeys.Transcript, transcript);
 
-        // Publish execution started event.
-        if (_eventPublisher is not null)
+        try
         {
-            await _eventPublisher.PublishAsync(
-                new ExecutionStartedBusEvent(executionContext.Metadata.ExecutionId, request),
+            await ObserverNotifier.NotifyAllAsync(
+                _observers,
+                observer => observer.OnRunStartedAsync(request, agentContext, cancellationToken),
+                _logger,
                 cancellationToken);
+
+            // Publish execution started event.
+            if (_eventPublisher is not null)
+            {
+                await _eventPublisher.PublishAsync(
+                    new ExecutionStartedBusEvent(executionContext.Metadata.ExecutionId, request),
+                    cancellationToken);
+            }
+
+            // Resolve model profile from capability requirements if present.
+            await ResolveModelProfileAsync(request, agentContext, cancellationToken);
+
+            return (agentContext, executionContext);
         }
-
-        // Resolve model profile from capability requirements if present.
-        await ResolveModelProfileAsync(request, agentContext, cancellationToken);
-
-        return (agentContext, executionContext);
+        catch (OperationCanceledException cancellationException)
+        {
+            transcript.RecordException(cancellationException, "Cancelled");
+            transcript.FinalizeTranscript();
+            throw;
+        }
+        catch (Exception exception)
+        {
+            transcript.RecordException(exception, "Failed");
+            transcript.FinalizeTranscript();
+            throw;
+        }
     }
 
     private async Task<IReadOnlyList<CapabilityProfile>> ResolveModelProfileAsync(

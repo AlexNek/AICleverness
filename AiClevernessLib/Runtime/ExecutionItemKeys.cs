@@ -19,4 +19,7 @@ internal static class ExecutionItemKeys
 
     /// <summary>Shared step log, stored as <c>List&lt;string&gt;</c>.</summary>
     public const string Steps = "steps";
+
+    /// <summary>Per-execution Markdown transcript context.</summary>
+    public const string Transcript = "transcript";
 }

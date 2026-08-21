@@ -67,6 +67,14 @@ public static class AgentPropertyKeys
 
     /// <summary>Tool execution timeout in seconds.</summary>
     public const string ToolTimeoutSeconds = "tool_timeout_seconds";
+
+    /// <summary>
+    /// Absolute directory for the opt-in Markdown execution transcript.
+    /// </summary>
+    public const string MarkdownTranscriptDirectory = "markdown_transcript_directory";
+
+    /// <summary>Explicitly enables unredacted transcript debug mode (bool).</summary>
+    public const string MarkdownTranscriptDebug = "markdown_transcript_debug";
 }
 
 /// <summary>
@@ -79,4 +87,10 @@ public static class AgentResultMetadataKeys
 
     /// <summary>Total number of quality-gate retry attempts.</summary>
     public const string QualityRetryCount = "quality_retry_count";
+
+    /// <summary>Absolute path of a completed Markdown execution transcript.</summary>
+    public const string MarkdownTranscriptPath = "markdown_transcript_path";
+
+    /// <summary>Persistence status of the Markdown execution transcript.</summary>
+    public const string MarkdownTranscriptStatus = "markdown_transcript_status";
 }

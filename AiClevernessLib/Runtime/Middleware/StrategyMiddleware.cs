@@ -1,5 +1,6 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
+using AiCleverness.Runtime.Transcript;
 
 using Microsoft.Extensions.Logging;
 
@@ -55,6 +56,8 @@ internal sealed class StrategyMiddleware : IAgentPipelineMiddleware
                                  });
 
                 var steps = ExecutionSteps.Get(context);
+                context.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript)
+                    ?.AppendModelContent(result.Output);
                 return new AgentResult(true, result.Output, null, steps, FailureKind: EFailureKind.NoFailure);
             }
         }
