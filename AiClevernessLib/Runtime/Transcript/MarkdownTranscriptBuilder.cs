@@ -34,6 +34,10 @@ internal sealed class MarkdownTranscriptBuilder
     public string DebugRequest(IReadOnlyDictionary<string, object> parameters)
     {
         var values = parameters
+            .Where(pair => !string.Equals(
+                pair.Key,
+                AgentPropertyKeys.SystemPrompt,
+                StringComparison.OrdinalIgnoreCase))
             .OrderBy(pair => pair.Key, StringComparer.Ordinal)
             .Select(pair => $"{pair.Key}: {FormatDebugValue(pair.Value)}");
         var builder = new StringBuilder();
@@ -49,6 +53,7 @@ internal sealed class MarkdownTranscriptBuilder
         ExecutionState state,
         ModelExecutionInfo? modelExecutionInfo,
         string systemPrompt,
+        bool includeSystemPrompt,
         string? qualityFeedback,
         int maxTurns,
         float temperature,
@@ -59,7 +64,9 @@ internal sealed class MarkdownTranscriptBuilder
         var builder = new StringBuilder();
         builder.AppendLine("## Debug runtime");
         builder.AppendLine();
-        AppendFencedValue(builder, "System prompt", systemPrompt);
+        if (includeSystemPrompt)
+            AppendFencedValue(builder, "System prompt", systemPrompt);
+
         AppendFencedValue(builder, "Quality feedback", qualityFeedback ?? "(none)");
         AppendFencedValue(builder, "Model", model ?? "unknown");
         AppendFencedValue(builder, "Trace ID", metadata.TraceId ?? "(none)");

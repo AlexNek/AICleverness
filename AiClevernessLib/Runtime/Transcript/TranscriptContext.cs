@@ -46,6 +46,8 @@ internal sealed class TranscriptContext
 
     private bool _completed;
 
+    private bool _debugRuntimePromptWritten;
+
     private bool _terminalWritten;
 
     private TranscriptContext(
@@ -167,18 +169,34 @@ internal sealed class TranscriptContext
         if (!Debug || _sink is null)
             return;
 
-        Append(
-            Builder.DebugRuntime(
-                metadata,
-                state,
-                modelExecutionInfo,
-                systemPrompt,
-                qualityFeedback,
-                maxTurns,
-                temperature,
-                completionTimeoutSeconds,
-                idleTimeoutSeconds,
-                model));
+        lock (_gate)
+        {
+            if (_completed || _sink is null || PersistenceStatus is not null)
+                return;
+
+            try
+            {
+                var includeSystemPrompt = !_debugRuntimePromptWritten;
+                _sink.Append(
+                    Builder.DebugRuntime(
+                        metadata,
+                        state,
+                        modelExecutionInfo,
+                        systemPrompt,
+                        includeSystemPrompt,
+                        qualityFeedback,
+                        maxTurns,
+                        temperature,
+                        completionTimeoutSeconds,
+                        idleTimeoutSeconds,
+                        model));
+                _debugRuntimePromptWritten = true;
+            }
+            catch (Exception ex)
+            {
+                Disable("FinalizationFailed", ex);
+            }
+        }
     }
 
     public void AppendModelContent(string? content)

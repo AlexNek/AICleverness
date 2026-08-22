@@ -225,6 +225,88 @@ public sealed class MarkdownTranscriptTests
     }
 
     [Fact]
+    public async Task RunAsync_DebugTranscriptWritesExplicitSystemPromptOnlyOnceAcrossQualityRetry()
+    {
+        // Arrange
+        const string systemPrompt = "fake explicit system prompt";
+        var directory = NewDirectory();
+        var runtime = new AgentRuntime(
+            new TranscriptTestLlmClient(
+                new LlmResponse("bad answer"),
+                new LlmResponse("good answer")),
+            new ToolRegistry(),
+            qualityGates: [new TranscriptRetryQualityGate()],
+            options: new AgentRuntimeOptions
+            {
+                TranscriptRedactor = static text => text
+            });
+        var request = new AgentRequest(
+            "answer well",
+            Parameters: new Dictionary<string, object>
+            {
+                [AgentPropertyKeys.MarkdownTranscriptDirectory] = directory,
+                [AgentPropertyKeys.MarkdownTranscriptDebug] = true,
+                [AgentPropertyKeys.SystemPrompt] = systemPrompt,
+                [AgentPropertyKeys.MaxQualityRetries] = 1
+            });
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        var path = (string)result.Metadata[AgentResultMetadataKeys.MarkdownTranscriptPath];
+        var content = await File.ReadAllTextAsync(path);
+        content.Split("## Debug runtime", StringSplitOptions.None).Length.Should().Be(3);
+        content.Split("**System prompt:**", StringSplitOptions.None).Length.Should().Be(2);
+        content.Should().Contain("### Quality retry 1");
+        content.Should().Contain("Use the good answer.");
+        content.Should().Contain("max_quality_retries:");
+        content.Should().NotContain($"{AgentPropertyKeys.SystemPrompt}:");
+        content.Should().Contain(systemPrompt);
+    }
+
+    [Fact]
+    public async Task RunAsync_DebugTranscriptWritesDefaultSystemPromptOnlyOnceAcrossQualityRetry()
+    {
+        // Arrange
+        const string defaultSystemPrompt = "fake default system prompt";
+        var directory = NewDirectory();
+        var runtime = new AgentRuntime(
+            new TranscriptTestLlmClient(
+                new LlmResponse("bad answer"),
+                new LlmResponse("good answer")),
+            new ToolRegistry(),
+            qualityGates: [new TranscriptRetryQualityGate()],
+            options: new AgentRuntimeOptions
+            {
+                DefaultSystemPrompt = defaultSystemPrompt,
+                TranscriptRedactor = static text => text
+            });
+        var request = new AgentRequest(
+            "answer well",
+            Parameters: new Dictionary<string, object>
+            {
+                [AgentPropertyKeys.MarkdownTranscriptDirectory] = directory,
+                [AgentPropertyKeys.MarkdownTranscriptDebug] = true,
+                [AgentPropertyKeys.MaxQualityRetries] = 1
+            });
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        var path = (string)result.Metadata[AgentResultMetadataKeys.MarkdownTranscriptPath];
+        var content = await File.ReadAllTextAsync(path);
+        content.Split("## Debug runtime", StringSplitOptions.None).Length.Should().Be(3);
+        content.Split("**System prompt:**", StringSplitOptions.None).Length.Should().Be(2);
+        content.Should().Contain(defaultSystemPrompt);
+        content.Should().NotContain($"{AgentPropertyKeys.SystemPrompt}:");
+        content.Should().Contain("Use the good answer.");
+    }
+
+    [Fact]
     public async Task RunAsync_WhenLlmFails_FinalizesTranscriptWithFailureStatus()
     {
         // Arrange
