@@ -118,6 +118,32 @@ Console.WriteLine(string.Join("\n", result.Steps));  // execution log
 
 That's it. Three pieces (`ILlmClient`, `ITool`, DI wiring) and you have a working execution runtime.
 
+## Demo transcript switches
+
+The hermetic demo can exercise Markdown transcripts without any network access.
+Use `/t` for normal transcript mode:
+
+```powershell
+dotnet run --project AiClevernessLib.Demo -- /t
+```
+
+Use `/d` for debug transcript mode:
+
+```powershell
+dotnet run --project AiClevernessLib.Demo -- /d
+```
+
+`--transcript` is an alias for `/t`; `--transcript-debug` and
+`--debug-transcript` are aliases for `/d`. If both modes are supplied, debug
+mode takes precedence. Both switches write transcripts under the executable
+directory: `AiClevernessLib.Demo\bin\Debug\net10.0\transcripts` (or the
+matching configuration/target-framework directory). Normal mode uses the
+demo's safe identity redactor; `/d` explicitly enables unredacted debug
+transcript output. The demo prints the resolved directory when transcript mode
+is enabled. Library transcript filenames use a local timestamp plus a sanitized
+human-readable task goal; execution IDs remain in transcript content, not in
+filenames.
+
 ---
 
 ## Core Concepts

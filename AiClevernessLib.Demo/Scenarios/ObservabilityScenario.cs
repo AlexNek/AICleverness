@@ -29,7 +29,9 @@ internal static class ObservabilityScenario
 
     private const string ExecutionId = "demo-exec-1";
 
-    public static async Task RunAsync(IServiceProvider provider)
+    public static async Task RunAsync(
+        IServiceProvider provider,
+        DemoTranscriptOptions transcriptOptions)
     {
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
@@ -48,15 +50,16 @@ internal static class ObservabilityScenario
                 services.AddSingleton<IExecutionEventHandler<LlmCallCompletedBusEvent>>(eventCollector);
                 services.AddSingleton<IExecutionEventHandler<ToolInvokedBusEvent>>(eventCollector);
                 services.AddSingleton<IExecutionEventHandler<ToolCompletedBusEvent>>(eventCollector);
-            });
+            },
+            transcriptOptions);
 
         Console.WriteLine("  Live observer trace:");
         var runtime = scoped.GetRequiredService<IAgentRuntime>();
         var started = DateTimeOffset.UtcNow;
         var result = await runtime.RunAsync(
-            new AgentRequest(
+            transcriptOptions.Apply(new AgentRequest(
                 $"What is the weather in {City}?",
-                AllowedToolNames: [WeatherTool.ToolName]));
+                AllowedToolNames: [WeatherTool.ToolName])));
         var totalDuration = DateTimeOffset.UtcNow - started;
         Console.WriteLine($"  Run finished (success: {result.Success})");
         Console.WriteLine();

@@ -13,6 +13,12 @@ namespace AiCleverness.Runtime.Transcript;
 /// </summary>
 internal sealed class TranscriptContext
 {
+    private const int MaxFilenameAttempts = 100;
+
+    private const int MaxTaskSlugLength = 80;
+
+    private static readonly char[] InvalidFilenameCharacters = Path.GetInvalidFileNameChars();
+
     private static readonly HashSet<string> SensitiveKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "authorization",
@@ -95,10 +101,14 @@ internal sealed class TranscriptContext
         try
         {
             var fullDirectory = Path.GetFullPath(directory);
-            var fileName =
-                $"{DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmssfff", CultureInfo.InvariantCulture)}-{executionId}.md";
-            var filePath = Path.Combine(fullDirectory, fileName);
-            var sink = new FileTranscriptSink(filePath);
+            var startedAt = DateTimeOffset.UtcNow;
+            var localTimestamp = startedAt.ToLocalTime();
+            var filenameGoal = debug
+                                   ? request.Goal
+                                   : RedactGoalForFilename(request.Goal, options.TranscriptRedactor!);
+            var fileNamePrefix =
+                $"{localTimestamp.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}-{CreateTaskSlug(filenameGoal)}";
+            var sink = CreateFileSink(fullDirectory, fileNamePrefix);
             var context = new TranscriptContext(
                 sink,
                 options.TranscriptRedactor,
@@ -109,7 +119,7 @@ internal sealed class TranscriptContext
                 context.Builder.Header(
                     context.RedactText(request.Goal),
                     executionId,
-                    DateTimeOffset.UtcNow,
+                    startedAt,
                     debug));
             if (debug)
                 context.AppendDebugRequest(parameters);
@@ -337,6 +347,69 @@ internal sealed class TranscriptContext
             metadata[AgentResultMetadataKeys.MarkdownTranscriptPath] = FilePath;
 
         return result with { Metadata = metadata };
+    }
+
+    private static FileTranscriptSink CreateFileSink(string directory, string fileNamePrefix)
+    {
+        for (var attempt = 1; attempt <= MaxFilenameAttempts; attempt++)
+        {
+            var suffix = attempt == 1 ? string.Empty : $"-{attempt}";
+            var filePath = Path.Combine(directory, $"{fileNamePrefix}{suffix}.md");
+            try
+            {
+                return new FileTranscriptSink(filePath);
+            }
+            catch (IOException) when (File.Exists(filePath))
+            {
+                // A concurrent or earlier execution owns this human-readable name.
+            }
+        }
+
+        throw new IOException(
+            $"Could not create a unique transcript file after {MaxFilenameAttempts} attempts.");
+    }
+
+    private static string RedactGoalForFilename(
+        string goal,
+        Func<string, string> redactor)
+    {
+        var redacted = redactor(goal);
+        return redacted ?? throw new InvalidOperationException(
+            "Transcript redactor returned null for the task filename.");
+    }
+
+    private static string CreateTaskSlug(string goal)
+    {
+        var slug = new StringBuilder(Math.Min(goal.Length, MaxTaskSlugLength));
+        var separatorPending = false;
+
+        foreach (var character in goal)
+        {
+            if (Array.IndexOf(InvalidFilenameCharacters, character) >= 0
+                || !char.IsLetterOrDigit(character))
+            {
+                if (slug.Length > 0)
+                    separatorPending = true;
+
+                continue;
+            }
+
+            if (slug.Length >= MaxTaskSlugLength)
+                break;
+
+            if (separatorPending)
+            {
+                slug.Append('-');
+                separatorPending = false;
+            }
+
+            if (slug.Length >= MaxTaskSlugLength)
+                break;
+
+            slug.Append(character);
+        }
+
+        return slug.Length == 0 ? "task" : slug.ToString().TrimEnd('-');
     }
 
     private static TranscriptContext Disabled(

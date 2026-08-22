@@ -21,7 +21,9 @@ internal static class QualityGateScenario
 {
     private const string Goal = "Explain what AiCleverness does";
 
-    public static async Task RunAsync(IServiceProvider provider)
+    public static async Task RunAsync(
+        IServiceProvider provider,
+        DemoTranscriptOptions transcriptOptions)
     {
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
@@ -34,16 +36,17 @@ internal static class QualityGateScenario
         // Register the quality gate.
         await using var scoped = DemoHost.CreateProvider(
             llm,
-            services => services.AddAgentQualityGate<MinimumLengthGate>());
+            services => services.AddAgentQualityGate<MinimumLengthGate>(),
+            transcriptOptions);
 
         var runtime = scoped.GetRequiredService<IAgentRuntime>();
-        var request = new AgentRequest(
+        var request = transcriptOptions.Apply(new AgentRequest(
             Goal,
             Parameters: new Dictionary<string, object>
-                            {
-                                // Allow one retry when the gate rejects.
-                                [AgentPropertyKeys.MaxQualityRetries] = 1
-                            });
+                        {
+                            // Allow one retry when the gate rejects.
+                            [AgentPropertyKeys.MaxQualityRetries] = 1
+                        }));
 
         var result = await runtime.RunAsync(request);
 

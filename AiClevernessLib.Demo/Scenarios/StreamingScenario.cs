@@ -23,7 +23,9 @@ internal static class StreamingScenario
 {
     private const string City = "Berlin";
 
-    public static async Task RunAsync(IServiceProvider provider)
+    public static async Task RunAsync(
+        IServiceProvider provider,
+        DemoTranscriptOptions transcriptOptions)
     {
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
@@ -36,9 +38,9 @@ internal static class StreamingScenario
         var streaming = provider.GetRequiredService<IAgentRuntime>() as IStreamingAgentRuntime
             ?? throw new InvalidOperationException("The registered runtime does not support streaming.");
 
-        var request = new AgentRequest(
+        var request = transcriptOptions.Apply(new AgentRequest(
             $"What is the weather in {City}?",
-            AllowedToolNames: [WeatherTool.ToolName]);
+            AllowedToolNames: [WeatherTool.ToolName]));
 
         // Each iteration yields one AgentEvent. The pattern-match below shows
         // how a consumer would handle the most common event types.

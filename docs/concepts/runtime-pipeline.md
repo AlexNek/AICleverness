@@ -257,8 +257,7 @@ if (result.Metadata.TryGetValue(
 }
 ```
 
-Each execution receives a separate file named with its UTC timestamp and
-execution ID. The file is written incrementally and contains the request,
+Each execution receives a separate file named with its local timestamp and a bounded, filesystem-safe human-readable task-goal slug. For example, a goal such as `Research provider pricing` produces a name like `20260822-120000-Research-provider-pricing.md`; invalid filename characters and path separators are removed, whitespace and other separators are normalized, and an empty goal slug falls back to `task`. In normal mode the configured host redactor is applied before the goal is used in the slug; debug mode intentionally uses the unredacted goal. If the same local timestamp and slug are already present, the writer retains `CreateNew` and uses a numeric suffix such as `-2` rather than overwriting the existing artifact. Execution IDs remain in transcript content and result metadata for correlation but are never included in filenames. The file is written incrementally and contains the request,
 turns, model content, model tool decisions, tool-call IDs when available, raw
 malformed or non-object argument markers, tool results, quality retries with
 separate quality-attempt and model-failover metadata, status, and final

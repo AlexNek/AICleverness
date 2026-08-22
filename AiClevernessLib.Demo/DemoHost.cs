@@ -16,10 +16,15 @@ internal static class DemoHost
     /// </summary>
     public static ServiceProvider CreateProvider(
         ScriptedLlmClient llm,
-        Action<IServiceCollection>? configure = null)
+        Action<IServiceCollection>? configure = null,
+        DemoTranscriptOptions? transcriptOptions = null)
     {
         var services = new ServiceCollection();
-        services.AddAiClevernessRuntime();
+        services.AddAiClevernessRuntime(options =>
+        {
+            if (transcriptOptions?.Enabled == true && !transcriptOptions.Debug)
+                options.TranscriptRedactor = static text => text;
+        });
         services.AddSingleton(llm);
         services.AddSingleton<ILlmClient>(llm);
         services.AddAgentTool<WeatherTool>();

@@ -22,7 +22,9 @@ internal static class ToolLoopScenario
 {
     private const string City = "Tokyo";
 
-    public static async Task RunAsync(IServiceProvider provider)
+    public static async Task RunAsync(
+        IServiceProvider provider,
+        DemoTranscriptOptions transcriptOptions)
     {
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
@@ -37,9 +39,9 @@ internal static class ToolLoopScenario
 
         // AllowedToolNames restricts which tools the model can use for this run.
         // The runtime sends only these tool definitions to the LLM.
-        var request = new AgentRequest(
+        var request = transcriptOptions.Apply(new AgentRequest(
             $"What is the weather in {City}?",
-            AllowedToolNames: [WeatherTool.ToolName]);
+            AllowedToolNames: [WeatherTool.ToolName]));
 
         var result = await runtime.RunAsync(request);
 
