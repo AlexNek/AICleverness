@@ -37,4 +37,12 @@ public sealed class AgentRuntimeOptions
     /// Can be overridden per-request via <see cref="AgentPropertyKeys.EnableModelFailover"/>.
     /// </summary>
     public bool EnableModelFailover { get; set; }
+
+    /// <summary>
+    /// Host-provided redactor used for opt-in Markdown transcripts. The delegate
+    /// must return content safe to persist and must be thread-safe when the runtime
+    /// is shared across concurrent executions. A missing redactor disables normal
+    /// transcript persistence; explicit debug mode may bypass it.
+    /// </summary>
+    public Func<string, string>? TranscriptRedactor { get; set; }
 }

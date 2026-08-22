@@ -1,6 +1,7 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Runtime.Filtering;
+using AiCleverness.Runtime.Transcript;
 
 using Microsoft.Extensions.Logging;
 
@@ -53,7 +54,10 @@ internal sealed class InputValidationMiddleware : IAgentPipelineMiddleware
                 context.State.StatusDetail = $"Input validation failed: {result.Error}";
 
                 var steps = ExecutionSteps.Get(context);
-                steps.Add($"Input validation failed ({validator.Name}): {result.Error}");
+                var validationMessage = $"Input validation failed ({validator.Name}): {result.Error}";
+                steps.Add(validationMessage);
+                context.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript)
+                    ?.AppendStatus("Input validation failed", result.Error);
 
                 return new AgentResult(false, null, result.Error, steps, FailureKind: EFailureKind.InputValidationFailed);
             }

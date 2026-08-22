@@ -3,6 +3,7 @@ using System.Text.Json;
 
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
+using AiCleverness.Runtime.Transcript;
 
 using Microsoft.Extensions.Logging;
 
@@ -75,6 +76,7 @@ internal sealed class LlmToolLoop
                      ?? (_ => { });
         var emit = executionContext.Items.Get<Action<AgentEvent>>(ExecutionItemKeys.EventEmitter);
         var executionId = executionContext.Metadata.ExecutionId;
+        var transcript = executionContext.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript);
 
         var messages = new List<LlmMessage>(16);
 
@@ -107,6 +109,17 @@ internal sealed class LlmToolLoop
             context.GetProperty<int?>(AgentPropertyKeys.IdleTimeoutSeconds)
             ?? _options.DefaultIdleTimeoutSeconds;
         var options = new LlmCompletionOptions(temperature, null, model);
+        transcript?.AppendDebugRuntime(
+            executionContext.Metadata,
+            executionContext.State,
+            execInfo,
+            systemPrompt,
+            qualityFeedback,
+            maxTurns,
+            temperature,
+            completionTimeoutSeconds,
+            idleTimeoutSeconds,
+            model);
 
         // Set when a failover retry rewinds the loop to the same logical turn —
         // the retry must not increment the state turn counter or emit a second
@@ -174,6 +187,11 @@ internal sealed class LlmToolLoop
             }
 
             retryingSameTurn = false;
+            transcript?.AppendTurn(
+                turn + 1,
+                executionContext.State.QualityRetryCount + 1,
+                Math.Max(1, failoverHandler.Attempt),
+                options.Model);
 
             LlmResponse response;
             var llmCallStarted = DateTimeOffset.UtcNow;
@@ -234,6 +252,7 @@ internal sealed class LlmToolLoop
                 var timeoutError = hasStrategyMessage
                     ? $"{ocEx.Message} on turn {turn}"
                     : $"LLM completion timed out after {completionTimeoutSeconds}s on turn {turn}";
+                transcript?.AppendStatus("LLM timeout", timeoutError);
 
                 // Log inner exception if the provider supplied one — this is where
                 // the real provider error (e.g. "high demand, come later") surfaces.
@@ -332,6 +351,7 @@ internal sealed class LlmToolLoop
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "LLM completion failed on turn {Turn}", turn);
+                transcript?.AppendStatus("LLM failure", ex.Message);
 
                 var classification = _errorClassifier.Classify(ex, cancellationToken);
 
@@ -397,6 +417,8 @@ internal sealed class LlmToolLoop
 
             if (response.ToolCalls is { Count: > 0 })
             {
+                transcript?.AppendModelContent(response.Content);
+
                 // Surface the model's existing content before tool calls. When
                 // content is a workflow JSON object with a top-level reasoning
                 // string, show that field instead of the complete JSON envelope.
@@ -428,10 +450,26 @@ internal sealed class LlmToolLoop
                                       ? $"Tool '{toolCall.Name}' is not allowed for this run."
                                       : $"Tool '{toolCall.Name}' is not registered.";
                         steps.Add(err);
+                        transcript?.AppendToolDecision(
+                            options.Model,
+                            toolCall.Name,
+                            toolCall.Id,
+                            toolCall.Arguments);
+                        transcript?.AppendToolResult(
+                            toolCall.Name,
+                            toolCall.Id,
+                            "Failed",
+                            null,
+                            err);
                         messages.Add(new LlmMessage("tool", err) { ToolCallId = toolCall.Id });
                         continue;
                     }
 
+                    transcript?.AppendToolDecision(
+                        options.Model,
+                        toolCall.Name,
+                        toolCall.Id,
+                        toolCall.Arguments);
                     var arguments = ToolCallArgumentParser.Parse(toolCall.Arguments);
                     var invocation = new ToolInvocation(toolCall.Name, arguments);
 
@@ -561,6 +599,12 @@ internal sealed class LlmToolLoop
                                             : $"  {tool.Name} failed: {result.Error}";
                     steps.Add(resultMsg);
                     report(resultMsg);
+                    transcript?.AppendToolResult(
+                        tool.Name,
+                        toolCall.Id,
+                        cacheHit ? result.Success ? "Cached" : "CachedFailure" : result.Success ? "Succeeded" : "Failed",
+                        result.Success ? result.Output : null,
+                        result.Success ? null : result.Error);
 
                     messages.Add(new LlmMessage("tool", output) { ToolCallId = toolCall.Id });
                 }
@@ -571,6 +615,7 @@ internal sealed class LlmToolLoop
             var content = response.Content;
             if (!string.IsNullOrWhiteSpace(content))
             {
+                transcript?.AppendModelContent(content);
                 var finalMsg = "LLM returned final response.";
                 steps.Add(finalMsg);
                 report(finalMsg);
@@ -591,6 +636,7 @@ internal sealed class LlmToolLoop
         }
 
         var exhausted = $"Exhausted {maxTurns} turns without a final response.";
+        transcript?.AppendStatus("TurnLimitExceeded", exhausted);
         steps.Add(exhausted);
         report(exhausted);
         var finalUsage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);

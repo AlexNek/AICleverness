@@ -227,6 +227,72 @@ reported using the existing content fallback.
     `ToolCompletedAgentEvent`. A pre-invocation cache hit intentionally omits
     the normal tool lifecycle events; this adds no new streaming event type.
 
+## Markdown Execution Transcripts
+
+Markdown execution transcripts are opt-in per request. Set
+`AgentPropertyKeys.MarkdownTranscriptDirectory` to an absolute directory and
+configure a host-owned redactor on the shared `AgentRuntimeOptions` instance:
+
+```csharp
+services.AddAiClevernessRuntime(options =>
+{
+    options.TranscriptRedactor = text => secretStore.Redact(text);
+});
+
+var request = new AgentRequest(
+    "Research the configured topic",
+    Parameters: new Dictionary<string, object>
+    {
+        [AgentPropertyKeys.MarkdownTranscriptDirectory] =
+            Path.Combine(appDataDirectory, "transcripts")
+    });
+
+var result = await runtime.RunAsync(request);
+if (result.Metadata.TryGetValue(
+        AgentResultMetadataKeys.MarkdownTranscriptPath,
+        out var transcriptValue)
+    && transcriptValue is string transcriptPath)
+{
+    // Read the completed UTF-8 Markdown file at transcriptPath.
+}
+```
+
+Each execution receives a separate file named with its local timestamp and a bounded, filesystem-safe human-readable task-goal slug. For example, a goal such as `Research provider pricing` produces a name like `20260822-120000-Research-provider-pricing.md`; invalid filename characters and path separators are removed, whitespace and other separators are normalized, and an empty goal slug falls back to `task`. In normal mode the configured host redactor is applied before the goal is used in the slug; debug mode intentionally uses the unredacted goal. If the same local timestamp and slug are already present, the writer retains `CreateNew` and uses a numeric suffix such as `-2` rather than overwriting the existing artifact. Execution IDs remain in transcript content and result metadata for correlation but are never included in filenames. The file is written incrementally and contains the request,
+turns, model content, model tool decisions, tool-call IDs when available, raw
+malformed or non-object argument markers, tool results, quality retries with
+separate quality-attempt and model-failover metadata, status, and final
+response. The same execution artifact is used across quality gate retries and
+is finalized for successful, failed, blocked, cancelled, and escaped-exception
+runs. `AgentResultMetadataKeys.MarkdownTranscriptPath` is present only when
+persistence completed; `AgentResultMetadataKeys.MarkdownTranscriptStatus`
+reports the persistence outcome.
+
+Normal transcript persistence requires `AgentRuntimeOptions.TranscriptRedactor`.
+The runtime applies built-in redaction to common sensitive JSON property names
+and then calls the host redactor for text and serialized arguments. Malformed
+arguments are passed to the host redactor as explicitly marked raw content;
+valid non-object arguments retain their serialized content with a marker. Do
+not put raw secrets in `AgentRequest.Parameters` to configure redaction: the
+redactor should obtain secret context from the host's secret store and return
+safe text. If an explicitly supplied destination is invalid, or no redactor is
+configured for normal mode, the run continues without creating a transcript,
+logs a warning when a logger is configured, and reports `Unavailable` or
+`RedactorUnavailable` in result metadata. Transcript I/O and redactor failures
+are isolated from the agent result; inspect the status when diagnostics are
+important.
+
+For explicitly controlled local debugging, set
+`AgentPropertyKeys.MarkdownTranscriptDebug` to `true`. Debug mode bypasses both
+built-in and host redaction and records available request parameters, the
+effective system prompt, quality feedback, model/failover information,
+execution provenance, and runtime settings in addition to raw model/tool
+content, outputs, and errors. Provider-specific hidden metadata or reasoning
+is not available through the provider-neutral LLM contracts and is not claimed
+by the transcript. It must never be enabled for sensitive production
+executions. Transcript persistence is unbounded by design; hosts that need
+retention or size limits should apply them to the transcript directory and
+redactor policy.
+
 ## Extension Points
 
 Every step in the pipeline is an interface. To add your own behavior, write

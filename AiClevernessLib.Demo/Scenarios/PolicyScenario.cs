@@ -21,7 +21,9 @@ internal static class PolicyScenario
 {
     private const string DangerousGoal = "Delete all files in my project folder";
 
-    public static async Task RunAsync(IServiceProvider provider)
+    public static async Task RunAsync(
+        IServiceProvider provider,
+        DemoTranscriptOptions transcriptOptions)
     {
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
@@ -29,10 +31,11 @@ internal static class PolicyScenario
         // Register the policy. In production this is done once at startup via DI.
         await using var scoped = DemoHost.CreateProvider(
             llm,
-            services => services.AddAgentPolicy<NoDangerousRequestsPolicy>());
+            services => services.AddAgentPolicy<NoDangerousRequestsPolicy>(),
+            transcriptOptions);
 
         var runtime = scoped.GetRequiredService<IAgentRuntime>();
-        var request = new AgentRequest(DangerousGoal);
+        var request = transcriptOptions.Apply(new AgentRequest(DangerousGoal));
 
         var result = await runtime.RunAsync(request);
 

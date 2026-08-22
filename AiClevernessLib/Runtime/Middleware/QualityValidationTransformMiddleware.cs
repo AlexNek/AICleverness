@@ -1,6 +1,7 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Runtime.Filtering;
+using AiCleverness.Runtime.Transcript;
 
 using Microsoft.Extensions.Logging;
 
@@ -61,6 +62,8 @@ internal sealed class QualityValidationTransformMiddleware : IAgentPipelineMiddl
                     string.Join(Environment.NewLine, gateFailures));
                 var retryMsg = $"Retrying after quality feedback ({attempt}/{maxQualityRetries}).";
                 ExecutionSteps.Add(context, retryMsg);
+                context.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript)
+                    ?.AppendRetry(retryMsg, attempt);
             }
 
             var result = await next(context);
@@ -128,6 +131,8 @@ internal sealed class QualityValidationTransformMiddleware : IAgentPipelineMiddl
 
             var reason = gateResult.Reason ?? $"Quality gate '{gate.Name}' rejected the result.";
             ExecutionSteps.Add(context, $"Quality gate {gate.Name} rejected result: {reason}");
+            context.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript)
+                ?.AppendStatus($"Quality gate rejected: {gate.Name}", reason);
 
             await ObserverNotifier.NotifyAllAsync(
                 _observers,
@@ -193,6 +198,8 @@ internal sealed class QualityValidationTransformMiddleware : IAgentPipelineMiddl
 
             var validationMsg = $"Validator {validator.Name} failed: {validation.Error}";
             ExecutionSteps.Add(context, validationMsg);
+            context.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript)
+                ?.AppendStatus(validationMsg, validation.Error);
             current = current with
                           {
                               Success = false, Reasoning = validation.Error ?? current.Reasoning

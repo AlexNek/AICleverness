@@ -26,7 +26,9 @@ internal static class WorkflowScenario
 
     private const string WorkflowId = "content-review";
 
-    public static async Task RunAsync(IServiceProvider provider)
+    public static async Task RunAsync(
+        IServiceProvider provider,
+        DemoTranscriptOptions transcriptOptions)
     {
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
@@ -35,11 +37,13 @@ internal static class WorkflowScenario
         llm.EnqueueText("Draft: Ship the refactor behind a feature flag.");
         llm.EnqueueText("Review: Approved — the draft is concise and actionable.");
 
-        await using var scoped = DemoHost.CreateProvider(llm);
+        await using var scoped = DemoHost.CreateProvider(
+            llm,
+            transcriptOptions: transcriptOptions);
 
         var runtime = scoped.GetRequiredService<IAgentRuntime>();
         var executor = new SequentialWorkflowExecutor(runtime);
-        var workflow = BuildWorkflow();
+        var workflow = BuildWorkflow(transcriptOptions);
 
         var result = await executor.ExecuteAsync(workflow);
 
@@ -52,7 +56,7 @@ internal static class WorkflowScenario
         }
     }
 
-    private static WorkflowDefinition BuildWorkflow() => new()
+    private static WorkflowDefinition BuildWorkflow(DemoTranscriptOptions transcriptOptions) => new()
     {
         Id = WorkflowId,
         Name = "Draft and review",
@@ -64,7 +68,8 @@ internal static class WorkflowScenario
                 Id = DraftNodeId,
                 Name = "Draft",
                 Type = WorkflowNodeType.Agent,
-                Request = new AgentRequest("Draft one release-note sentence.")
+                Request = transcriptOptions.Apply(
+                    new AgentRequest("Draft one release-note sentence."))
             },
             new WorkflowNode
             {
@@ -72,7 +77,8 @@ internal static class WorkflowScenario
                 Name = "Review",
                 Type = WorkflowNodeType.Agent,
                 DependsOn = [DraftNodeId],
-                Request = new AgentRequest("Review the draft for clarity.")
+                Request = transcriptOptions.Apply(
+                    new AgentRequest("Review the draft for clarity."))
             }
         ]
     };

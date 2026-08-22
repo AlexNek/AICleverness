@@ -1,5 +1,6 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
+using AiCleverness.Runtime.Transcript;
 
 using Microsoft.Extensions.Logging;
 
@@ -57,6 +58,8 @@ internal sealed class PolicyMiddleware : IAgentPipelineMiddleware
                 context.State.MarkCompleted(ExecutionStatus.Blocked);
                 context.State.StatusDetail = $"Blocked by policy {policy.Name}: {reason}";
                 ExecutionSteps.Add(context, $"Blocked by policy {policy.Name}: {reason}");
+                context.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript)
+                    ?.AppendStatus($"Blocked by policy {policy.Name}", reason);
 
                 // Emit streaming event when running under the streaming entry point.
                 var emit =

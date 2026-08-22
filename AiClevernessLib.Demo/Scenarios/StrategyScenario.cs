@@ -21,7 +21,9 @@ internal static class StrategyScenario
 {
     private const string Recipient = "Alice";
 
-    public static async Task RunAsync(IServiceProvider provider)
+    public static async Task RunAsync(
+        IServiceProvider provider,
+        DemoTranscriptOptions transcriptOptions)
     {
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.Reset();
@@ -29,10 +31,12 @@ internal static class StrategyScenario
         // Register the strategy. In production this is done once at startup via DI.
         await using var scoped = DemoHost.CreateProvider(
             llm,
-            services => services.AddAgentStrategy<GreetingStrategy>());
+            services => services.AddAgentStrategy<GreetingStrategy>(),
+            transcriptOptions);
 
         var runtime = scoped.GetRequiredService<IAgentRuntime>();
-        var request = new AgentRequest($"{GreetingStrategy.GoalPrefix}{Recipient}");
+        var request = transcriptOptions.Apply(
+            new AgentRequest($"{GreetingStrategy.GoalPrefix}{Recipient}"));
 
         var result = await runtime.RunAsync(request);
 
