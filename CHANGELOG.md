@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-19
+
 ### Added
 - Opt-in per-execution Markdown transcripts with an explicitly supplied absolute destination, one file per execution, local-time host-redacted and filesystem-safe human-readable task-goal filenames with numeric collision suffixes, separate turn quality/failover metadata, terminal sections for returned and escaped failure/cancellation paths, tool-call IDs and raw malformed-argument preservation, debug runtime/request metadata, result metadata for the completed path/status, and host-configured redaction that fails closed when unavailable
 - The hermetic demo now supports `/t` for normal Markdown transcripts and `/d` for debug transcripts, with long-form aliases, writing artifacts to a `transcripts` directory relative to the demo executable
@@ -99,7 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Developer manual published as a documentation site via MkDocs Material and GitHub Pages
 - NuGet package ships a compact README with use cases and prominent links to the developer manual and the full repository README
 
-[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.3.3...HEAD
+[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.4.0
 [1.3.3]: https://github.com/AlexNek/AICleverness/releases/tag/v1.3.3
 [1.3.2]: https://github.com/AlexNek/AICleverness/releases/tag/v1.3.2
 [1.3.1]: https://github.com/AlexNek/AICleverness/releases/tag/v1.3.1

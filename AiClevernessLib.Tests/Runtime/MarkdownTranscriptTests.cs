@@ -295,7 +295,9 @@ public sealed class MarkdownTranscriptTests
         // Arrange
         var directory = NewDirectory();
         var runtime = CreateRuntime(
-            new TranscriptTestLlmClient(new LlmResponse("concurrent answer")),
+            new TranscriptTestLlmClient(
+                new LlmResponse("concurrent answer"),
+                new LlmResponse("concurrent answer")),
             static text => text);
 
         // Act

@@ -234,10 +234,10 @@ Markdown execution transcripts are opt-in per request. Set
 configure a host-owned redactor on the shared `AgentRuntimeOptions` instance:
 
 ```csharp
-var options = new AgentRuntimeOptions
+services.AddAiClevernessRuntime(options =>
 {
-    TranscriptRedactor = text => secretStore.Redact(text)
-};
+    options.TranscriptRedactor = text => secretStore.Redact(text);
+});
 
 var request = new AgentRequest(
     "Research the configured topic",

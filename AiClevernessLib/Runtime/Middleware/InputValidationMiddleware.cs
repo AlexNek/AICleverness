@@ -57,7 +57,7 @@ internal sealed class InputValidationMiddleware : IAgentPipelineMiddleware
                 var validationMessage = $"Input validation failed ({validator.Name}): {result.Error}";
                 steps.Add(validationMessage);
                 context.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript)
-                    ?.AppendStatus(validationMessage, result.Error);
+                    ?.AppendStatus("Input validation failed", result.Error);
 
                 return new AgentResult(false, null, result.Error, steps, FailureKind: EFailureKind.InputValidationFailed);
             }
