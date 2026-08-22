@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Debug Markdown transcripts now record the effective system prompt once per execution instead of repeating it in request parameters and quality-retry runtime sections
+
 ## [1.4.0] - 2026-08-19
 
 ### Added
