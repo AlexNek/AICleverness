@@ -25,9 +25,11 @@ internal static class DemoHost
             if (transcriptOptions?.Enabled == true && !transcriptOptions.Debug)
                 options.TranscriptRedactor = static text => text;
         });
+        services.AddDecisionTreeExecution();
         services.AddSingleton(llm);
         services.AddSingleton<ILlmClient>(llm);
         services.AddAgentTool<WeatherTool>();
+        services.AddDecisionAction<DecisionCollectEvidenceAction>();
         configure?.Invoke(services);
 
         var provider = services.BuildServiceProvider();

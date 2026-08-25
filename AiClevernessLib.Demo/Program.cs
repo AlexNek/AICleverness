@@ -62,6 +62,10 @@ public static class Program
             "7. Observability: observer trace and execution metrics",
             () => ObservabilityScenario.RunAsync(provider, transcriptOptions));
 
+        await RunScenarioAsync(
+            "8. Decision trees: generic in-memory evidence classification",
+            () => DecisionTreeScenario.RunAsync(provider));
+
         Console.WriteLine("=== Demo Complete ===");
     }
 
