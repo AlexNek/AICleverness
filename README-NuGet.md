@@ -21,6 +21,7 @@ Requires .NET 10.0 or later. Zero external AI provider SDKs — bring your own.
 | Quality-controlled output | Quality gates evaluate every result and force retries until it meets your bar | [Quality Gates](https://alexnek.github.io/AICleverness/execution/quality-gates/) |
 | Real-time chat UX | Stream execution events as `IAsyncEnumerable<AgentEvent>` | [Streaming](https://alexnek.github.io/AICleverness/streaming/streaming-execution/) |
 | Multi-agent pipelines | DAG workflows with explicit dependencies and data flow | [Workflows](https://alexnek.github.io/AICleverness/workflows/multi-agent/) |
+| Declarative decision workflows | JSON decision trees with bounded questions, actions, predicates, budgets, and verdicts | [Decision Trees](https://alexnek.github.io/AICleverness/execution/decision-trees/) |
 | Context-aware agents | Tiered memory — working, long-term, vector — behind one aggregate interface | [Memory Tiers](https://alexnek.github.io/AICleverness/memory/memory-tiers/) |
 | Cost-efficient routing | Deterministic strategies bypass the LLM; planners decompose complex goals | [Policies and Strategies](https://alexnek.github.io/AICleverness/concepts/policies-strategies/) |
 | Auditable AI services | Structured metrics and diagnostic traces for every run | [Observability](https://alexnek.github.io/AICleverness/operations/observability/) |

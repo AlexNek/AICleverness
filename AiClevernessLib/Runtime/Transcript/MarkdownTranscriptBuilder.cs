@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 
 using AiCleverness.Models;
+using AiCleverness.Models.DecisionTree;
 
 namespace AiCleverness.Runtime.Transcript;
 
@@ -172,6 +173,93 @@ internal sealed class MarkdownTranscriptBuilder
             builder.Append(Fenced(output));
         }
 
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    public string DecisionNode(
+        string nodeId,
+        EDecisionNodeType nodeType,
+        TimeSpan duration,
+        string? outcome)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"## Decision node: `{nodeId}`");
+        builder.AppendLine();
+        builder.AppendLine($"**Type:** `{nodeType}`  ");
+        builder.AppendLine($"**Duration:** `{duration.TotalMilliseconds:F0}ms`");
+        if (!string.IsNullOrWhiteSpace(outcome))
+            AppendFencedValue(builder, "Outcome", outcome);
+
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    public string DecisionAction(
+        string nodeId,
+        string actionName,
+        DecisionActionStatus status,
+        string? error)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"### Decision action: `{actionName}`");
+        builder.AppendLine();
+        builder.AppendLine($"**Node:** `{nodeId}`  ");
+        builder.AppendLine($"**Status:** `{status}`");
+        if (!string.IsNullOrWhiteSpace(error))
+            AppendFencedValue(builder, "Error", error);
+
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    public string DecisionQuestion(
+        string nodeId,
+        string answer,
+        string? observation,
+        string? confidence,
+        int attempt)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("### Decision question answered");
+        builder.AppendLine();
+        builder.AppendLine($"**Node:** `{nodeId}`  ");
+        builder.AppendLine($"**Answer:** `{answer}`  ");
+        builder.AppendLine($"**Attempt:** `{attempt}`");
+        if (!string.IsNullOrWhiteSpace(confidence))
+            AppendFencedValue(builder, "Confidence", confidence);
+        if (!string.IsNullOrWhiteSpace(observation))
+            AppendFencedValue(builder, "Observation", observation);
+
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    public string DecisionResult(
+        DecisionTreeOutcome outcome,
+        bool succeeded,
+        string? verdict,
+        string? error,
+        ResourceUsage usage)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("## Decision result");
+        builder.AppendLine();
+        builder.AppendLine($"**Outcome:** `{outcome}`  ");
+        builder.AppendLine($"**Succeeded:** `{succeeded}`");
+        if (!string.IsNullOrWhiteSpace(verdict))
+            AppendFencedValue(builder, "Verdict", verdict);
+        if (!string.IsNullOrWhiteSpace(error))
+            AppendFencedValue(builder, "Error", error);
+
+        builder.AppendLine("### Decision budget");
+        builder.AppendLine();
+        builder.AppendLine($"**Node visits:** `{usage.NodeVisits}`  ");
+        builder.AppendLine($"**LLM calls:** `{usage.LlmCalls}`  ");
+        builder.AppendLine($"**Input tokens:** `{usage.InputTokens}`  ");
+        builder.AppendLine($"**Output tokens:** `{usage.OutputTokens}`  ");
+        builder.AppendLine($"**Total tokens:** `{usage.TotalTokens}`  ");
+        builder.AppendLine($"**Duration:** `{usage.Duration.TotalMilliseconds:F0}ms`");
         builder.AppendLine();
         return builder.ToString();
     }

@@ -53,6 +53,7 @@ nav:
       - Tool Idempotency: tools/tool-idempotency.md
   - Execution Control:
       - Planning: execution/planning.md
+      - Decision Trees: execution/decision-trees.md
       - Quality Gates: execution/quality-gates.md
       - Validators and Transformers: execution/post-processing.md
       - Agent Scoping: execution/agent-scoping.md

@@ -6,16 +6,33 @@ using DecisionTreeModel = AiCleverness.Models.DecisionTree.DecisionTree;
 namespace AiClevernessLib.Demo.Scenarios;
 
 /// <summary>Demonstrates a generic in-memory evidence decision tree.</summary>
-public static class DecisionTreeScenario
+internal static class DecisionTreeScenario
 {
-    public static async Task RunAsync(IServiceProvider provider)
+    public static async Task RunAsync(
+        IServiceProvider provider,
+        DemoTranscriptOptions? transcriptOptions = null)
     {
+        var existingTranscripts = transcriptOptions?.Enabled == true
+                                  && Directory.Exists(transcriptOptions.Directory)
+            ? Directory.GetFiles(transcriptOptions.Directory, "*.md")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.EnqueueText("{\"answer\":\"supported\",\"observation\":\"The evidence is present.\",\"confidence\":\"high\"}");
         var executor = provider.GetRequiredService<DecisionTreeExecutor>();
         var result = await executor.ExecuteAsync(CreateTree());
 
         Console.WriteLine($"Decision outcome: {result.Outcome}; verdict: {result.Verdict}; error: {result.Error}; node visits: {result.Usage.NodeVisits}; LLM calls: {result.Usage.LlmCalls}");
+
+        if (transcriptOptions?.Enabled == true && Directory.Exists(transcriptOptions.Directory))
+        {
+            var transcriptPath = Directory.GetFiles(transcriptOptions.Directory, "*.md")
+                .Where(path => !existingTranscripts.Contains(path))
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+            Console.WriteLine($"Decision transcript: {transcriptPath ?? transcriptOptions.Directory}");
+        }
     }
 
     private static DecisionTreeModel CreateTree()

@@ -64,7 +64,7 @@ public static class Program
 
         await RunScenarioAsync(
             "8. Decision trees: generic in-memory evidence classification",
-            () => DecisionTreeScenario.RunAsync(provider));
+            () => DecisionTreeScenario.RunAsync(provider, transcriptOptions));
 
         Console.WriteLine("=== Demo Complete ===");
     }

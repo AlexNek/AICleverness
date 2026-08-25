@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 
 using AiCleverness.Models;
+using AiCleverness.Models.DecisionTree;
 
 using Microsoft.Extensions.Logging;
 
@@ -257,6 +258,89 @@ internal sealed class TranscriptContext
             return;
 
         Append(Builder.Status(status, detail is null ? null : RedactText(detail)));
+    }
+
+    public void AppendDecisionNode(
+        string nodeId,
+        EDecisionNodeType nodeType,
+        TimeSpan duration,
+        string? outcome)
+    {
+        if (_sink is null)
+            return;
+
+        Append(
+            Builder.DecisionNode(
+                nodeId,
+                nodeType,
+                duration,
+                outcome is null ? null : RedactText(outcome)));
+    }
+
+    public void AppendDecisionAction(
+        string nodeId,
+        string actionName,
+        DecisionActionStatus status,
+        string? error)
+    {
+        if (_sink is null)
+            return;
+
+        Append(
+            Builder.DecisionAction(
+                nodeId,
+                actionName,
+                status,
+                error is null ? null : RedactText(error)));
+    }
+
+    public void AppendDecisionQuestion(
+        string nodeId,
+        string answer,
+        string? observation,
+        string? confidence,
+        int attempt)
+    {
+        if (_sink is null)
+            return;
+
+        Append(
+            Builder.DecisionQuestion(
+                nodeId,
+                RedactText(answer),
+                observation is null ? null : RedactText(observation),
+                confidence is null ? null : RedactText(confidence),
+                attempt));
+    }
+
+    public void CompleteDecision(DecisionTreeResult result)
+    {
+        lock (_gate)
+        {
+            if (_completed || _sink is null || _terminalWritten || PersistenceStatus is not null)
+                return;
+
+            try
+            {
+                var verdict = result.Verdict is null ? null : RedactText(result.Verdict);
+                var error = result.Error is null ? null : RedactText(result.Error);
+                if (PersistenceStatus is not null)
+                    return;
+
+                _sink.Append(
+                    Builder.DecisionResult(
+                        result.Outcome,
+                        result.Succeeded,
+                        verdict,
+                        error,
+                        result.Usage));
+                _terminalWritten = true;
+            }
+            catch (Exception ex)
+            {
+                Disable("FinalizationFailed", ex);
+            }
+        }
     }
 
     public void Complete(AgentResult result, string status)

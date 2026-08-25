@@ -4,6 +4,7 @@ using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Models.DecisionTree;
 using AiCleverness.Runtime.Conversation;
+using AiCleverness.Runtime.Transcript;
 
 using DecisionTreeModel = AiCleverness.Models.DecisionTree.DecisionTree;
 
@@ -22,6 +23,7 @@ public sealed class DecisionTreeExecutor
     private readonly EnumAnswerParser _answerParser;
     private readonly IDecisionTreeLoader _treeLoader;
     private readonly DecisionTreeExecutionOptions? _defaultOptions;
+    private readonly AsyncLocal<TranscriptContext?> _transcript = new();
 
     public DecisionTreeExecutor(
         ILlmCompletionPipeline completionPipeline,
@@ -57,6 +59,8 @@ public sealed class DecisionTreeExecutor
         var data = new DataStore();
         var stopwatch = Stopwatch.StartNew();
         var parameters = templateParameters ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        var transcript = CreateTranscript(tree, executionId);
+        _transcript.Value = transcript;
 
         try
         {
@@ -269,6 +273,11 @@ public sealed class DecisionTreeExecutor
             UpdateDuration(state.ResourceUsage, stopwatch);
             return CreateResult(executionId, state, DecisionTreeOutcome.ValidationFailed, null, exception.Message);
         }
+        finally
+        {
+            transcript?.FinalizeTranscript();
+            _transcript.Value = null;
+        }
     }
 
     private async Task<(EnumAnswer? Answer, int Attempt, bool BudgetExhausted)> AskQuestionAsync(
@@ -348,6 +357,7 @@ public sealed class DecisionTreeExecutor
                 _defaultOptions?.TraceId,
                 _defaultOptions?.CorrelationId),
             cancellationToken);
+        _transcript.Value?.AppendDecisionNode(nodeId, node.Type, duration, outcome);
     }
 
     private async Task EmitActionCompletedAsync(
@@ -379,6 +389,7 @@ public sealed class DecisionTreeExecutor
                 _defaultOptions?.TraceId,
                 _defaultOptions?.CorrelationId),
             cancellationToken);
+        _transcript.Value?.AppendDecisionAction(nodeId, actionName, result.Status, result.Error);
     }
 
     private async Task EmitQuestionAnsweredAsync(
@@ -412,6 +423,12 @@ public sealed class DecisionTreeExecutor
                 _defaultOptions?.TraceId,
                 _defaultOptions?.CorrelationId),
             cancellationToken);
+        _transcript.Value?.AppendDecisionQuestion(
+            nodeId,
+            answer.Value,
+            answer.Observation,
+            answer.Confidence,
+            attempt);
     }
 
     private async Task PublishAsync<TJournal, TBus>(
@@ -460,6 +477,30 @@ public sealed class DecisionTreeExecutor
                 AiClevernessJsonContext.Default.DecisionQuestionAnsweredEvent),
             _ => null
         };
+
+    private TranscriptContext? CreateTranscript(
+        DecisionTreeModel tree,
+        string executionId)
+    {
+        if (string.IsNullOrWhiteSpace(_defaultOptions?.TranscriptDirectory))
+            return null;
+
+        var parameters = new Dictionary<string, object>
+        {
+            [AgentPropertyKeys.MarkdownTranscriptDirectory] = _defaultOptions.TranscriptDirectory!
+        };
+        if (_defaultOptions.TranscriptDebug)
+            parameters[AgentPropertyKeys.MarkdownTranscriptDebug] = true;
+
+        var request = new AgentRequest(
+            $"Decision tree: {tree.TreeId}",
+            Parameters: parameters);
+        var runtimeOptions = new AgentRuntimeOptions
+        {
+            TranscriptRedactor = _defaultOptions.TranscriptRedactor
+        };
+        return TranscriptContext.Create(request, executionId, runtimeOptions, logger: null);
+    }
 
     private IConversationManager CreateConversationManager()
         => _conversationManager is DefaultConversationManager
@@ -525,13 +566,14 @@ public sealed class DecisionTreeExecutor
         };
     }
 
-    private static DecisionTreeResult CreateResult(
+    private DecisionTreeResult CreateResult(
         string executionId,
         DecisionState state,
         DecisionTreeOutcome outcome,
         string? verdict,
         string? error)
-        => new(
+    {
+        var result = new DecisionTreeResult(
             executionId,
             outcome == DecisionTreeOutcome.Terminal,
             verdict,
@@ -539,6 +581,9 @@ public sealed class DecisionTreeExecutor
             state.Classifications.ToArray(),
             state.ResourceUsage,
             error);
+        _transcript.Value?.CompleteDecision(result);
+        return result;
+    }
 
     private static IReadOnlyDictionary<string, T> BuildCatalog<T>(IEnumerable<T> items)
         where T : class

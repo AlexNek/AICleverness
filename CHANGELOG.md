@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Generic decision-tree execution for declarative JSON workflows with action, question, condition, and terminal nodes; bounded LLM classification with explicit unknown handling; application action and predicate extensions; resource budgets; journal and event-bus records; opt-in normal/debug Markdown transcripts with `/t` and `/d` demo switches; AOT-compatible loading; DI registration; and a hermetic demo workflow with usage documentation.
+
 ## [1.4.1] - 2026-08-23
 
 ### Fixed
@@ -106,7 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Developer manual published as a documentation site via MkDocs Material and GitHub Pages
 - NuGet package ships a compact README with use cases and prominent links to the developer manual and the full repository README
 
-[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.4.1...HEAD
 [1.4.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.4.0
 [1.3.3]: https://github.com/AlexNek/AICleverness/releases/tag/v1.3.3
 [1.3.2]: https://github.com/AlexNek/AICleverness/releases/tag/v1.3.2
