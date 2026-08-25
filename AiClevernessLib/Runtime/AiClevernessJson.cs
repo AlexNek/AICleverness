@@ -1,3 +1,5 @@
+using DecisionTreeModel = AiCleverness.Models.DecisionTree.DecisionTree;
+using AiCleverness.Models.DecisionTree;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -45,6 +47,17 @@ internal static class AiClevernessJson
 /// Source-generated JSON serializer context. Provides reflection-free serialization
 /// for Native AOT and trimming support.
 /// </summary>
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true)]
+[JsonSerializable(typeof(DecisionTreeModel))]
+[JsonSerializable(typeof(DecisionNode))]
+[JsonSerializable(typeof(DecisionTransition))]
+[JsonSerializable(typeof(DecisionBudget))]
+[JsonSerializable(typeof(Dictionary<string, DecisionNode>))]
+[JsonSerializable(typeof(Dictionary<string, JsonElement>))]
+[JsonSerializable(typeof(List<DecisionTransition>))]
+[JsonSerializable(typeof(DecisionNodeVisitedEvent))]
+[JsonSerializable(typeof(DecisionActionCompletedEvent))]
+[JsonSerializable(typeof(DecisionQuestionAnsweredEvent))]
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(Dictionary<string, object>))]
 [JsonSerializable(typeof(string))]

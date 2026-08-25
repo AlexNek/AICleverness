@@ -12,6 +12,9 @@ public sealed record ResourceLimits
     /// <summary>Maximum execution wall-clock duration. Null means unlimited.</summary>
     public TimeSpan? MaxDuration { get; init; }
 
+    /// <summary>Maximum number of decision-tree node visits. Null means unlimited.</summary>
+    public int? MaxNodeVisits { get; init; }
+
     /// <summary>Maximum number of LLM calls. Null means unlimited.</summary>
     public int? MaxLlmCalls { get; init; }
 

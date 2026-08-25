@@ -26,6 +26,9 @@ public sealed class ResourceUsage
     /// <summary>Number of tool invocations executed.</summary>
     public int ToolCalls { get; private set; }
 
+    /// <summary>Number of decision-tree node visits.</summary>
+    public int NodeVisits { get; private set; }
+
     /// <summary>Total tokens (input + output).</summary>
     public int TotalTokens => InputTokens + OutputTokens;
 
@@ -34,6 +37,7 @@ public sealed class ResourceUsage
     {
         if (limits.MaxTotalTokens.HasValue && TotalTokens > limits.MaxTotalTokens.Value)
             return true;
+        if (limits.MaxNodeVisits.HasValue && NodeVisits > limits.MaxNodeVisits.Value) return true;
         if (limits.MaxLlmCalls.HasValue && LlmCalls > limits.MaxLlmCalls.Value) return true;
         if (limits.MaxToolCalls.HasValue && ToolCalls > limits.MaxToolCalls.Value) return true;
         if (limits.MaxCost.HasValue && Cost > limits.MaxCost.Value) return true;
@@ -59,6 +63,15 @@ public sealed class ResourceUsage
             OutputTokens += outputTokens;
             LlmCalls++;
             Cost += cost;
+        }
+    }
+
+    /// <summary>Records a decision-tree node visit.</summary>
+    public void RecordNodeVisit()
+    {
+        lock (_lock)
+        {
+            NodeVisits++;
         }
     }
 
