@@ -6,6 +6,7 @@ using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Runtime.Middleware;
 using AiCleverness.Runtime.Transcript;
+using AiCleverness.Runtime.DecisionTree;
 
 using Microsoft.Extensions.Logging;
 
@@ -19,6 +20,8 @@ namespace AiCleverness.Runtime;
 public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
 {
     private readonly IExecutionEventPublisher? _eventPublisher;
+
+    private readonly ILlmCompletionPipeline _completionPipeline;
 
     private readonly IEnumerable<IAgentInputValidator> _inputValidators;
 
@@ -71,7 +74,8 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         IExecutionEventPublisher? eventPublisher = null,
         IModelManager? modelManager = null,
         IModelCatalog? modelCatalog = null,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        ILlmCompletionPipeline? completionPipeline = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
         _tools = tools ?? throw new ArgumentNullException(nameof(tools));
@@ -90,6 +94,13 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         _modelManager = modelManager;
         _modelCatalog = modelCatalog;
         _loggerFactory = loggerFactory;
+        _completionPipeline = completionPipeline
+            ?? new DefaultLlmCompletionPipeline(
+                _llm,
+                _observers,
+                _eventPublisher,
+                loggerFactory: _loggerFactory,
+                modelCatalog: _modelCatalog);
         _logger = loggerFactory?.CreateLogger<AgentRuntime>();
     }
 
@@ -257,15 +268,13 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
 
         // Terminal: the LLM tool loop (constructed per execution).
         var loop = new LlmToolLoop(
-            _llm,
+            _completionPipeline,
             _tools,
             _toolExecutor,
             _options,
             _observers,
             _eventPublisher,
-            _logger,
-            modelCatalog: _modelCatalog,
-            loggerFactory: _loggerFactory);
+            _logger);
         builder.UseTerminal(loop.RunAsync);
 
         return builder.Build();

@@ -32,7 +32,7 @@ public sealed class DecisionTreeLoader : IDecisionTreeLoader
         return tree;
     }
 
-    public void Validate(DecisionTreeModel tree)
+    public DecisionTreeModel Validate(DecisionTreeModel tree)
     {
         ArgumentNullException.ThrowIfNull(tree);
         if (string.IsNullOrWhiteSpace(tree.TreeId))
@@ -41,7 +41,8 @@ public sealed class DecisionTreeLoader : IDecisionTreeLoader
             throw new InvalidOperationException("Decision tree version must be greater than zero.");
         if (string.IsNullOrWhiteSpace(tree.StartNodeId))
             throw new InvalidOperationException("Decision tree must have a non-empty startNodeId.");
-        if (tree.Budget.MaxNodeVisits <= 0 || tree.Budget.MaxLlmCalls < 0
+        if (tree.Budget is null
+            || tree.Budget.MaxNodeVisits <= 0 || tree.Budget.MaxLlmCalls < 0
             || tree.Budget.MaxElapsedTime <= TimeSpan.Zero || tree.Budget.MaxContextTokens <= 0)
             throw new InvalidOperationException("Decision tree budget values must be positive, except that maxLlmCalls may be zero.");
         if (tree.Nodes is null || tree.Nodes.Count == 0)
@@ -72,6 +73,8 @@ public sealed class DecisionTreeLoader : IDecisionTreeLoader
             if (!CanReachTerminal(nodeId, tree.Nodes, new HashSet<string>(StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal)))
                 throw new InvalidOperationException($"Node '{nodeId}' cannot reach a terminal node.");
         }
+
+        return tree;
     }
 
     private void ValidateNode(
@@ -168,7 +171,7 @@ public sealed class DecisionTreeLoader : IDecisionTreeLoader
             var nodeId = pending.Pop();
             if (!result.Add(nodeId))
                 continue;
-            foreach (var transition in tree.Nodes[nodeId].Transitions)
+            foreach (var transition in tree.Nodes[nodeId].Transitions ?? Array.Empty<DecisionTransition>())
                 pending.Push(transition.NextNodeId);
         }
         return result;
@@ -186,7 +189,7 @@ public sealed class DecisionTreeLoader : IDecisionTreeLoader
             return false;
         var node = nodes[nodeId];
         var reaches = node.Type == EDecisionNodeType.Terminal
-                      || node.Transitions.Any(transition =>
+                      || (node.Transitions ?? Array.Empty<DecisionTransition>()).Any(transition =>
                           CanReachTerminal(transition.NextNodeId, nodes, visiting, successful));
         visiting.Remove(nodeId);
         if (reaches)

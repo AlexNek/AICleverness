@@ -324,6 +324,7 @@ public static class AiClevernessServiceCollectionExtensions
         services.TryAddSingleton<IToolRegistry, ToolRegistry>();
         services.TryAddSingleton<IToolExecutor, DefaultToolExecutor>();
         services.TryAddSingleton<IAgentMemory, InMemoryAgentMemory>();
+        services.TryAddSingleton<ILlmCompletionPipeline, DefaultLlmCompletionPipeline>();
         services.TryAddSingleton<IAgentRuntime, AgentRuntime>();
         services.TryAddSingleton<IPlannerRegistry, PlannerRegistry>();
         services.TryAddSingleton<IStrategyRegistry, StrategyRegistry>();
@@ -356,6 +357,7 @@ public static class AiClevernessServiceCollectionExtensions
         services.TryAddSingleton<IExecutionEventPublisher, InMemoryEventBus>();
         services.TryAddSingleton<ILlmCompletionPipeline, DefaultLlmCompletionPipeline>();
         services.TryAddTransient<IConversationManager, DefaultConversationManager>();
+        services.TryAddTransient<IConversationManagerFactory, DefaultConversationManagerFactory>();
         services.TryAddSingleton<IDecisionLlmContextBuilder, DefaultDecisionLlmContextBuilder>();
         services.TryAddSingleton<EnumAnswerParser>();
         services.TryAddSingleton<IDecisionTreeLoader, DecisionTreeLoader>();

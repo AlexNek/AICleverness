@@ -328,7 +328,7 @@ internal sealed class TranscriptContext
 
         Append(
             Builder.DecisionQuestion(
-                nodeId,
+                RedactText(nodeId),
                 RedactText(answer),
                 observation is null ? null : RedactText(observation),
                 confidence is null ? null : RedactText(confidence),

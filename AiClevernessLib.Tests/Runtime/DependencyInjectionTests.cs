@@ -1,5 +1,7 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
+using AiCleverness.Runtime;
+using AiCleverness.Runtime.DecisionTree;
 
 using FluentAssertions;
 
@@ -22,6 +24,7 @@ public sealed class DependencyInjectionTests
         provider.GetService<IToolExecutor>().Should().NotBeNull();
         provider.GetService<IAgentMemory>().Should().NotBeNull();
         provider.GetService<IAgentRuntime>().Should().NotBeNull();
+        provider.GetService<ILlmCompletionPipeline>().Should().NotBeNull();
         provider.GetService<IPlannerRegistry>().Should().NotBeNull();
         provider.GetService<IStrategyRegistry>().Should().NotBeNull();
         provider.GetService<AgentRuntimeOptions>().Should().NotBeNull();
@@ -79,6 +82,19 @@ public sealed class DependencyInjectionTests
             .Should().BeSameAs(provider.GetRequiredService<ITool>());
     }
 
+    [Fact]
+    public void AddDecisionTreeExecution_RegistersSharedPipelineAndConversationFactory()
+    {
+        var services = new ServiceCollection();
+        services.AddDecisionTreeExecution();
+        services.AddAiClevernessLlmClient<StubLlmClient>();
+
+        var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<ILlmCompletionPipeline>().Should().BeOfType<DefaultLlmCompletionPipeline>();
+        provider.GetRequiredService<IConversationManagerFactory>().Should().NotBeNull();
+        provider.GetRequiredService<DecisionTreeExecutor>().Should().NotBeNull();
+    }
     [Fact]
     public void AddAiClevernessRuntime_NullServices_Throws()
     {

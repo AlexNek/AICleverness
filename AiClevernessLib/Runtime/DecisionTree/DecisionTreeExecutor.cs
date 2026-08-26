@@ -18,6 +18,7 @@ public sealed class DecisionTreeExecutor
     private readonly IDecisionLlmContextBuilder _contextBuilder;
     private readonly ILlmCompletionPipeline _completionPipeline;
     private readonly IConversationManager _conversationManager;
+    private readonly IConversationManagerFactory? _conversationManagerFactory;
     private readonly IExecutionEventPublisher? _eventPublisher;
     private readonly IExecutionJournal _journal;
     private readonly EnumAnswerParser _answerParser;
@@ -34,7 +35,8 @@ public sealed class DecisionTreeExecutor
         IEnumerable<IDecisionPredicate> predicates,
         IDecisionLlmContextBuilder contextBuilder,
         IDecisionTreeLoader treeLoader,
-        DecisionTreeExecutionOptions? defaultOptions = null)
+        DecisionTreeExecutionOptions? defaultOptions = null,
+        IConversationManagerFactory? conversationManagerFactory = null)
     {
         _completionPipeline = completionPipeline ?? throw new ArgumentNullException(nameof(completionPipeline));
         _conversationManager = conversationManager ?? throw new ArgumentNullException(nameof(conversationManager));
@@ -42,6 +44,7 @@ public sealed class DecisionTreeExecutor
         _eventPublisher = eventPublisher;
         _contextBuilder = contextBuilder ?? throw new ArgumentNullException(nameof(contextBuilder));
         _treeLoader = treeLoader ?? throw new ArgumentNullException(nameof(treeLoader));
+        _conversationManagerFactory = conversationManagerFactory;
         _defaultOptions = defaultOptions;
         _answerParser = new EnumAnswerParser();
         _actions = BuildCatalog(actions);
@@ -61,11 +64,11 @@ public sealed class DecisionTreeExecutor
         var parameters = templateParameters ?? new Dictionary<string, string>(StringComparer.Ordinal);
         var transcript = CreateTranscript(tree, executionId);
         _transcript.Value = transcript;
-        _transcript.Value?.AppendDecisionOverview(tree);
 
         try
         {
-            new DecisionTreeLoader(_actions.Values, _predicates.Values).Validate(tree);
+            tree = _treeLoader.Validate(tree);
+            _transcript.Value?.AppendDecisionOverview(tree);
 
             var budget = ApplyDefaults(tree.Budget ?? new DecisionBudget());
             var limits = new ResourceLimits
@@ -230,6 +233,14 @@ public sealed class DecisionTreeExecutor
                         }
                         catch (Exception exception)
                         {
+                            await EmitNodeVisitedAsync(
+                                executionId,
+                                currentNodeId,
+                                node,
+                                stopwatch.Elapsed - nodeStarted,
+                                "validationFailed",
+                                null,
+                                cancellationToken);
                             return CreateResult(
                                 executionId,
                                 state,
@@ -512,9 +523,14 @@ public sealed class DecisionTreeExecutor
     }
 
     private IConversationManager CreateConversationManager()
-        => _conversationManager is DefaultConversationManager
-            ? new DefaultConversationManager()
-            : _conversationManager;
+    {
+        if (_conversationManagerFactory is not null)
+            return _conversationManagerFactory.Create();
+        if (_conversationManager is DefaultConversationManager defaultManager)
+            return defaultManager.CreateForExecution();
+        throw new InvalidOperationException(
+            "A custom conversation manager requires an IConversationManagerFactory to guarantee execution isolation.");
+    }
 
     private static DecisionTransition FindTransition(DecisionNode node, string condition)
         => node.Transitions.First(transition =>
@@ -564,14 +580,18 @@ public sealed class DecisionTreeExecutor
             return budget;
         return budget with
         {
-            MaxNodeVisits = budget.MaxNodeVisits == 20 ? _defaultOptions.DefaultMaxNodeVisits : budget.MaxNodeVisits,
-            MaxLlmCalls = budget.MaxLlmCalls == 10 ? _defaultOptions.DefaultMaxLlmCalls : budget.MaxLlmCalls,
-            MaxElapsedTime = budget.MaxElapsedTime == TimeSpan.FromSeconds(120)
-                ? _defaultOptions.DefaultMaxElapsedTime
-                : budget.MaxElapsedTime,
-            MaxContextTokens = budget.MaxContextTokens == 4000
-                ? _defaultOptions.DefaultMaxContextTokens
-                : budget.MaxContextTokens
+            MaxNodeVisits = budget.HasMaxNodeVisits
+                ? budget.MaxNodeVisits
+                : _defaultOptions.DefaultMaxNodeVisits,
+            MaxLlmCalls = budget.HasMaxLlmCalls
+                ? budget.MaxLlmCalls
+                : _defaultOptions.DefaultMaxLlmCalls,
+            MaxElapsedTime = budget.HasMaxElapsedTime
+                ? budget.MaxElapsedTime
+                : _defaultOptions.DefaultMaxElapsedTime,
+            MaxContextTokens = budget.HasMaxContextTokens
+                ? budget.MaxContextTokens
+                : _defaultOptions.DefaultMaxContextTokens
         };
     }
 
