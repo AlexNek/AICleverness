@@ -15,12 +15,18 @@ public sealed class DecisionCollectEvidenceAction : IDecisionAction
         context.Data.Add(
             new DecisionData
             {
-                Id = "demo-evidence",
-                Source = "demo",
+                Id = "sample-release-note-review",
+                Source = "release-review",
                 Type = "evidence",
-                Content = "deterministic in-memory evidence",
+                Content = "Review findings for the release note against all four publication criteria: the note describes the user-visible transcript diagnostics, is concise, contains no secrets or private data, and has no unresolved blocking issues. All criteria passed.",
                 CreatedAt = DateTimeOffset.UtcNow,
-                ActionId = Name
+                ActionId = Name,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["subject"] = "sample release note",
+                    ["reviewStatus"] = "all criteria passed",
+                    ["criteriaChecked"] = "4"
+                }
             });
         return Task.FromResult(
             new DecisionActionResult(null, null, DecisionActionStatus.Success));

@@ -32,6 +32,24 @@ internal sealed class MarkdownTranscriptBuilder
         return builder.ToString();
     }
 
+    public string DecisionOverview(
+        string treeId,
+        int version,
+        string startNodeId,
+        string task)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("## Decision task");
+        builder.AppendLine();
+        builder.AppendLine($"**Tree:** `{treeId}`  ");
+        builder.AppendLine($"**Version:** `{version}`  ");
+        builder.AppendLine($"**Start node:** `{startNodeId}`");
+        AppendFencedValue(builder, "Task", task);
+        builder.AppendLine("---");
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
     public string DebugRequest(IReadOnlyDictionary<string, object> parameters)
     {
         var values = parameters
@@ -177,29 +195,12 @@ internal sealed class MarkdownTranscriptBuilder
         return builder.ToString();
     }
 
-    public string DecisionNode(
-        string nodeId,
-        EDecisionNodeType nodeType,
-        TimeSpan duration,
-        string? outcome)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine($"## Decision node: `{nodeId}`");
-        builder.AppendLine();
-        builder.AppendLine($"**Type:** `{nodeType}`  ");
-        builder.AppendLine($"**Duration:** `{duration.TotalMilliseconds:F0}ms`");
-        if (!string.IsNullOrWhiteSpace(outcome))
-            AppendFencedValue(builder, "Outcome", outcome);
-
-        builder.AppendLine();
-        return builder.ToString();
-    }
-
     public string DecisionAction(
         string nodeId,
         string actionName,
         DecisionActionStatus status,
-        string? error)
+        string? error,
+        string? producedData)
     {
         var builder = new StringBuilder();
         builder.AppendLine($"### Decision action: `{actionName}`");
@@ -208,6 +209,8 @@ internal sealed class MarkdownTranscriptBuilder
         builder.AppendLine($"**Status:** `{status}`");
         if (!string.IsNullOrWhiteSpace(error))
             AppendFencedValue(builder, "Error", error);
+        if (!string.IsNullOrWhiteSpace(producedData))
+            AppendFencedValue(builder, "Produced evidence/data", producedData);
 
         builder.AppendLine();
         return builder.ToString();
@@ -221,15 +224,51 @@ internal sealed class MarkdownTranscriptBuilder
         int attempt)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("### Decision question answered");
+        builder.AppendLine("### Parsed decision");
         builder.AppendLine();
         builder.AppendLine($"**Node:** `{nodeId}`  ");
         builder.AppendLine($"**Answer:** `{answer}`  ");
         builder.AppendLine($"**Attempt:** `{attempt}`");
         if (!string.IsNullOrWhiteSpace(confidence))
             AppendFencedValue(builder, "Confidence", confidence);
-        if (!string.IsNullOrWhiteSpace(observation))
-            AppendFencedValue(builder, "Observation", observation);
+
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    public string DecisionLlmAttempt(
+        string nodeId,
+        int attempt,
+        IReadOnlyList<LlmMessage> messages,
+        string? response,
+        string? finishReason,
+        LlmTokenUsage? usage)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"### Decision LLM attempt {attempt}");
+        builder.AppendLine();
+        builder.AppendLine($"**Node:** `{nodeId}`");
+        builder.AppendLine();
+        builder.AppendLine("**Input messages:**");
+        builder.AppendLine();
+        for (var index = 0; index < messages.Count; index++)
+        {
+            var message = messages[index];
+            builder.AppendLine($"#### Message {index + 1}: `{message.Role}`");
+            builder.AppendLine();
+            builder.Append(Fenced(message.Content ?? "(empty)"));
+        }
+
+        builder.AppendLine("**Raw LLM output:**");
+        builder.Append(Fenced(response ?? "(empty)", "json"));
+        if (!string.IsNullOrWhiteSpace(finishReason))
+            builder.AppendLine($"**Finish reason:** `{finishReason}`");
+        if (usage is not null)
+        {
+            builder.AppendLine($"**Prompt tokens:** `{usage.PromptTokens}`  ");
+            builder.AppendLine($"**Completion tokens:** `{usage.CompletionTokens}`  ");
+            builder.AppendLine($"**Total tokens:** `{usage.TotalTokens}`");
+        }
 
         builder.AppendLine();
         return builder.ToString();
@@ -240,7 +279,8 @@ internal sealed class MarkdownTranscriptBuilder
         bool succeeded,
         string? verdict,
         string? error,
-        ResourceUsage usage)
+        ResourceUsage usage,
+        IReadOnlyList<string> path)
     {
         var builder = new StringBuilder();
         builder.AppendLine("## Decision result");
@@ -251,6 +291,12 @@ internal sealed class MarkdownTranscriptBuilder
             AppendFencedValue(builder, "Verdict", verdict);
         if (!string.IsNullOrWhiteSpace(error))
             AppendFencedValue(builder, "Error", error);
+
+        builder.AppendLine("### Selected path");
+        builder.AppendLine();
+        for (var index = 0; index < path.Count; index++)
+            builder.AppendLine($"{index + 1}. {path[index]}");
+        builder.AppendLine();
 
         builder.AppendLine("### Decision budget");
         builder.AppendLine();

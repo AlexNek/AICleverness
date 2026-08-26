@@ -39,9 +39,9 @@ public sealed class DecisionTreeTranscriptTests
             result.Succeeded.Should().BeTrue();
             var path = Directory.GetFiles(directory, "*.md").Should().ContainSingle().Which;
             var content = await File.ReadAllTextAsync(path);
-            content.Should().Contain("## Decision node:");
             content.Should().Contain("### Decision action:");
-            content.Should().Contain("### Decision question answered");
+            content.Should().Contain("### Selected path");
+            content.Should().Contain("### Parsed decision");
             content.Should().Contain("## Decision result");
             content.Should().Contain("### Decision budget");
             content.Should().Contain("[REDACTED]");

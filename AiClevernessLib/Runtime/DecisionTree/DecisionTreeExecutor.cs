@@ -61,6 +61,7 @@ public sealed class DecisionTreeExecutor
         var parameters = templateParameters ?? new Dictionary<string, string>(StringComparer.Ordinal);
         var transcript = CreateTranscript(tree, executionId);
         _transcript.Value = transcript;
+        _transcript.Value?.AppendDecisionOverview(tree);
 
         try
         {
@@ -96,7 +97,7 @@ public sealed class DecisionTreeExecutor
                 UpdateDuration(state.ResourceUsage, stopwatch);
                 if (await LimitExceededAsync(state.ResourceUsage, limits, cancellationToken))
                 {
-                    await EmitNodeVisitedAsync(executionId, currentNodeId, node, stopwatch.Elapsed - nodeStarted, "budget", cancellationToken);
+                    await EmitNodeVisitedAsync(executionId, currentNodeId, node, stopwatch.Elapsed - nodeStarted, "budget", null, cancellationToken);
                     return CreateResult(executionId, state, DecisionTreeOutcome.BudgetExhausted, null, "Maximum decision node visits exceeded.");
                 }
 
@@ -107,6 +108,7 @@ public sealed class DecisionTreeExecutor
                     case EDecisionNodeType.Action:
                     {
                         var action = _actions[node.ActionName!];
+                        var dataCountBeforeAction = data.GetAll().Count;
                         DecisionActionResult actionResult;
                         try
                         {
@@ -144,6 +146,7 @@ public sealed class DecisionTreeExecutor
                             currentNodeId,
                             node.ActionName!,
                             actionResult,
+                            data.GetAll().Skip(dataCountBeforeAction).ToArray(),
                             cancellationToken);
                         nextNodeId = FindTransition(node, outcome).NextNodeId;
                         break;
@@ -189,6 +192,7 @@ public sealed class DecisionTreeExecutor
                                 unknownAnswer,
                                 2,
                                 cancellationToken);
+                            outcome = "unknown";
                             nextNodeId = unknownTransition.NextNodeId;
                         }
                         else
@@ -244,6 +248,7 @@ public sealed class DecisionTreeExecutor
                             node,
                             stopwatch.Elapsed - nodeStarted,
                             node.Verdict,
+                            null,
                             cancellationToken);
                         var finalOutcome = actionFailed
                             ? DecisionTreeOutcome.ActionFailed
@@ -259,6 +264,7 @@ public sealed class DecisionTreeExecutor
                     node,
                     stopwatch.Elapsed - nodeStarted,
                     outcome,
+                    nextNodeId,
                     cancellationToken);
                 currentNodeId = nextNodeId;
             }
@@ -312,6 +318,7 @@ public sealed class DecisionTreeExecutor
                     new LlmCompletionOptions(0.1f, null, null),
                     attempt),
                 cancellationToken);
+            _transcript.Value?.AppendDecisionLlmAttempt(nodeId, attempt, messages, response);
             var usage = response.Usage;
             state.ResourceUsage.RecordLlmUsage(usage?.PromptTokens ?? 0, usage?.CompletionTokens ?? 0);
             UpdateDuration(state.ResourceUsage, stopwatch);
@@ -333,6 +340,7 @@ public sealed class DecisionTreeExecutor
         DecisionNode node,
         TimeSpan duration,
         string? outcome,
+        string? nextNodeId,
         CancellationToken cancellationToken)
     {
         var timestamp = DateTimeOffset.UtcNow;
@@ -357,7 +365,7 @@ public sealed class DecisionTreeExecutor
                 _defaultOptions?.TraceId,
                 _defaultOptions?.CorrelationId),
             cancellationToken);
-        _transcript.Value?.AppendDecisionNode(nodeId, node.Type, duration, outcome);
+        _transcript.Value?.AppendDecisionNode(nodeId, node, duration, outcome, nextNodeId);
     }
 
     private async Task EmitActionCompletedAsync(
@@ -365,6 +373,7 @@ public sealed class DecisionTreeExecutor
         string nodeId,
         string actionName,
         DecisionActionResult result,
+        IReadOnlyList<DecisionData> producedData,
         CancellationToken cancellationToken)
     {
         var timestamp = DateTimeOffset.UtcNow;
@@ -389,7 +398,7 @@ public sealed class DecisionTreeExecutor
                 _defaultOptions?.TraceId,
                 _defaultOptions?.CorrelationId),
             cancellationToken);
-        _transcript.Value?.AppendDecisionAction(nodeId, actionName, result.Status, result.Error);
+        _transcript.Value?.AppendDecisionAction(nodeId, actionName, result, producedData);
     }
 
     private async Task EmitQuestionAnsweredAsync(

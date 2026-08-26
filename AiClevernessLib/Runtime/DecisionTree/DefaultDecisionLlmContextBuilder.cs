@@ -25,9 +25,12 @@ public sealed class DefaultDecisionLlmContextBuilder : IDecisionLlmContextBuilde
         var system = tree.SystemPrompt
                      ?? "Classify the user request using exactly one of the allowed answers. Return JSON with answer, observation, and confidence.";
         var question = questionNode.Question ?? string.Empty;
+        var task = tree.Task ?? string.Empty;
         foreach (var parameter in templateParameters)
         {
-            question = question.Replace("{{" + parameter.Key + "}}", parameter.Value, StringComparison.Ordinal);
+            var placeholder = "{{" + parameter.Key + "}}";
+            task = task.Replace(placeholder, parameter.Value, StringComparison.Ordinal);
+            question = question.Replace(placeholder, parameter.Value, StringComparison.Ordinal);
         }
 
         var answers = string.Join(", ", questionNode.Answers ?? Array.Empty<string>());
@@ -36,8 +39,9 @@ public sealed class DefaultDecisionLlmContextBuilder : IDecisionLlmContextBuilde
             : string.Join(", ", state.Properties.Select(pair => $"{pair.Key}={pair.Value ?? "null"}"));
         var dataText = data.GetAll().Count == 0
             ? "none"
-            : string.Join(", ", data.GetAll().Select(item => $"{item.Type}:{item.Content}"));
-        var user = $"Question: {question}\nAllowed answers: {answers}\nState: {stateText}\nData: {dataText}";
+            : string.Join(", ", data.GetAll().Select(item =>
+                $"{item.Id} [{item.Type}] from {item.Source}: {item.Content}"));
+        var user = $"Task: {(string.IsNullOrWhiteSpace(task) ? "(not supplied)" : task)}\nQuestion: {question}\nAllowed answers: {answers}\nState: {stateText}\nData: {dataText}";
         return [new LlmMessage("system", system), new LlmMessage("user", user)];
     }
 }

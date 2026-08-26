@@ -8,6 +8,19 @@ namespace AiClevernessLib.Demo.Scenarios;
 /// <summary>Demonstrates a generic in-memory evidence decision tree.</summary>
 internal static class DecisionTreeScenario
 {
+    private const string DemoTask = """
+        Decide whether this release note can be published.
+
+        Release note:
+        Version 1.4.0 adds decision-tree transcript diagnostics. Users can inspect the task, LLM input and output, parsed decision, evidence, and selected path in a Markdown debug transcript.
+
+        Publication criteria:
+        1. The note describes a user-visible change.
+        2. The note is concise.
+        3. The note contains no secrets or private data.
+        4. The note has no unresolved blocking issues.
+        """;
+
     public static async Task RunAsync(
         IServiceProvider provider,
         DemoTranscriptOptions? transcriptOptions = null)
@@ -19,10 +32,11 @@ internal static class DecisionTreeScenario
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
-        llm.EnqueueText("{\"answer\":\"supported\",\"observation\":\"The evidence is present.\",\"confidence\":\"high\"}");
+        llm.EnqueueText("{\"answer\":\"supported\",\"observation\":\"The release note describes the user-visible change, meets all four publication criteria, and has no unresolved blockers.\",\"confidence\":\"high\"}");
         var executor = provider.GetRequiredService<DecisionTreeExecutor>();
         var result = await executor.ExecuteAsync(CreateTree());
 
+        Console.WriteLine($"Decision task: {DemoTask}");
         Console.WriteLine($"Decision outcome: {result.Outcome}; verdict: {result.Verdict}; error: {result.Error}; node visits: {result.Usage.NodeVisits}; LLM calls: {result.Usage.LlmCalls}");
 
         if (transcriptOptions?.Enabled == true && Directory.Exists(transcriptOptions.Directory))
@@ -40,6 +54,8 @@ internal static class DecisionTreeScenario
         {
             TreeId = "demo-evidence-tree",
             Version = 1,
+            Task = DemoTask,
+            SystemPrompt = "Review the task and evidence. Return supported only when the evidence demonstrates that every publication criterion is satisfied. Otherwise return unsupported. Return JSON with answer, observation, and confidence.",
             StartNodeId = "collect",
             Nodes = new Dictionary<string, DecisionNode>(StringComparer.Ordinal)
             {
@@ -57,7 +73,7 @@ internal static class DecisionTreeScenario
                 ["classify"] = new()
                 {
                     Type = EDecisionNodeType.Question,
-                    Question = "Is the evidence sufficient to support the request?",
+                    Question = "Does the release note above satisfy every publication criterion?",
                     Answers = ["supported", "unsupported"],
                     Transitions =
                     [

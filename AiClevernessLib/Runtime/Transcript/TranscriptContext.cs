@@ -7,6 +7,8 @@ using AiCleverness.Models.DecisionTree;
 
 using Microsoft.Extensions.Logging;
 
+using DecisionTreeModel = AiCleverness.Models.DecisionTree.DecisionTree;
+
 namespace AiCleverness.Runtime.Transcript;
 
 /// <summary>
@@ -42,6 +44,8 @@ internal sealed class TranscriptContext
     private readonly Func<string, string>? _redactor;
 
     private readonly ITranscriptSink? _sink;
+
+    private readonly List<string> _decisionPath = [];
 
     private MarkdownTranscriptBuilder? _builder;
 
@@ -260,38 +264,56 @@ internal sealed class TranscriptContext
         Append(Builder.Status(status, detail is null ? null : RedactText(detail)));
     }
 
-    public void AppendDecisionNode(
-        string nodeId,
-        EDecisionNodeType nodeType,
-        TimeSpan duration,
-        string? outcome)
+    public void AppendDecisionOverview(DecisionTreeModel tree)
     {
         if (_sink is null)
             return;
 
         Append(
-            Builder.DecisionNode(
-                nodeId,
-                nodeType,
-                duration,
-                outcome is null ? null : RedactText(outcome)));
+            Builder.DecisionOverview(
+                RedactText(tree.TreeId),
+                tree.Version,
+                RedactText(tree.StartNodeId),
+                RedactText(tree.Task ?? "(task not supplied)")));
+    }
+
+    public void AppendDecisionNode(
+        string nodeId,
+        DecisionNode node,
+        TimeSpan duration,
+        string? outcome,
+        string? nextNodeId)
+    {
+        if (_sink is null)
+            return;
+
+        var nodeLabel = $"`{RedactText(nodeId)}` ({node.Type}, {duration.TotalMilliseconds:F0}ms)";
+        var context = FormatDecisionNodeContext(node)?.Replace(
+            Environment.NewLine,
+            "; ",
+            StringComparison.Ordinal);
+        var pathStep = node.Type == EDecisionNodeType.Terminal
+            ? $"{nodeLabel} -- terminal"
+            : $"{nodeLabel}{(context is null ? string.Empty : $" [{context}]")} -- `{RedactText(outcome ?? "(none)")}` --> `{RedactText(nextNodeId ?? "(none)")}`";
+        _decisionPath.Add(pathStep);
     }
 
     public void AppendDecisionAction(
         string nodeId,
         string actionName,
-        DecisionActionStatus status,
-        string? error)
+        DecisionActionResult result,
+        IReadOnlyList<DecisionData> producedData)
     {
         if (_sink is null)
             return;
 
         Append(
             Builder.DecisionAction(
-                nodeId,
-                actionName,
-                status,
-                error is null ? null : RedactText(error)));
+                RedactText(nodeId),
+                RedactText(actionName),
+                result.Status,
+                result.Error is null ? null : RedactText(result.Error),
+                FormatProducedData(producedData)));
     }
 
     public void AppendDecisionQuestion(
@@ -311,6 +333,30 @@ internal sealed class TranscriptContext
                 observation is null ? null : RedactText(observation),
                 confidence is null ? null : RedactText(confidence),
                 attempt));
+    }
+
+    public void AppendDecisionLlmAttempt(
+        string nodeId,
+        int attempt,
+        IReadOnlyList<LlmMessage> messages,
+        LlmResponse response)
+    {
+        if (_sink is null)
+            return;
+
+        var redactedMessages = messages
+            .Select(message => new LlmMessage(
+                RedactText(message.Role),
+                message.Content is null ? null : RedactText(message.Content)))
+            .ToArray();
+        Append(
+            Builder.DecisionLlmAttempt(
+                RedactText(nodeId),
+                attempt,
+                redactedMessages,
+                response.Content is null ? null : RedactText(response.Content),
+                response.FinishReason is null ? null : RedactText(response.FinishReason),
+                response.Usage));
     }
 
     public void CompleteDecision(DecisionTreeResult result)
@@ -333,7 +379,8 @@ internal sealed class TranscriptContext
                         result.Succeeded,
                         verdict,
                         error,
-                        result.Usage));
+                        result.Usage,
+                        _decisionPath));
                 _terminalWritten = true;
             }
             catch (Exception ex)
@@ -547,6 +594,46 @@ internal sealed class TranscriptContext
                 Disable("FinalizationFailed", ex);
             }
         }
+    }
+
+    private string? FormatDecisionNodeContext(DecisionNode node)
+    {
+        if (node.Type != EDecisionNodeType.Condition)
+            return null;
+
+        return string.Join(
+            Environment.NewLine,
+            $"Predicate: {RedactText(node.PredicateName ?? "(predicate unavailable)")}",
+            $"Parameters: {RedactText(JsonSerializer.Serialize(
+                new Dictionary<string, JsonElement>(node.PredicateParameters ?? new Dictionary<string, JsonElement>()),
+                AiClevernessJson.Context.DictionaryStringJsonElement))}");
+    }
+
+    private string? FormatProducedData(IReadOnlyList<DecisionData>? producedData)
+    {
+        if (producedData is null || producedData.Count == 0)
+            return null;
+
+        return string.Join(
+            Environment.NewLine,
+            producedData.Select(data =>
+            {
+                var metadata = data.Metadata is null
+                    ? "none"
+                    : string.Join(
+                        ", ",
+                        data.Metadata.Select(pair =>
+                            $"{RedactText(pair.Key)}={RedactText(pair.Value)}"));
+                return string.Join(
+                    Environment.NewLine,
+                    $"Id: {RedactText(data.Id)}",
+                    $"Type: {RedactText(data.Type)}",
+                    $"Source: {RedactText(data.Source)}",
+                    $"Content: {RedactText(data.Content)}",
+                    $"Created: {data.CreatedAt:O}",
+                    $"Action: {RedactText(data.ActionId ?? "(none)")}",
+                    $"Metadata: {metadata}");
+            }));
     }
 
     private string RedactArguments(string rawArguments)
