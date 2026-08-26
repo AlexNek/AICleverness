@@ -51,6 +51,10 @@ public sealed class DefaultConversationManager : IConversationManager
         _charsPerToken = charsPerToken > 0 ? charsPerToken : 4;
     }
 
+    /// <summary>Creates an isolated manager that preserves this manager's configuration.</summary>
+    public DefaultConversationManager CreateForExecution()
+        => new(_truncationStrategy, _summarizationStrategy, _charsPerToken);
+
     /// <inheritdoc/>
     public void AddMessage(LlmMessage message)
     {

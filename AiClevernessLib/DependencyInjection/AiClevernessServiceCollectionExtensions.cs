@@ -2,8 +2,11 @@ using System.Diagnostics.CodeAnalysis;
 
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
+using AiCleverness.Models.DecisionTree;
 using AiCleverness.Runtime;
 using AiCleverness.Runtime.Capabilities;
+using AiCleverness.Runtime.Conversation;
+using AiCleverness.Runtime.DecisionTree;
 using AiCleverness.Runtime.Filtering;
 
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -321,6 +324,7 @@ public static class AiClevernessServiceCollectionExtensions
         services.TryAddSingleton<IToolRegistry, ToolRegistry>();
         services.TryAddSingleton<IToolExecutor, DefaultToolExecutor>();
         services.TryAddSingleton<IAgentMemory, InMemoryAgentMemory>();
+        services.TryAddSingleton<ILlmCompletionPipeline, DefaultLlmCompletionPipeline>();
         services.TryAddSingleton<IAgentRuntime, AgentRuntime>();
         services.TryAddSingleton<IPlannerRegistry, PlannerRegistry>();
         services.TryAddSingleton<IStrategyRegistry, StrategyRegistry>();
@@ -331,6 +335,55 @@ public static class AiClevernessServiceCollectionExtensions
                 return options;
             });
 
+        return services;
+    }
+
+    /// <summary>
+    /// Adds the decision-tree execution services and default generic predicates.
+    /// Conversation managers are transient so each resolved executor receives isolated history.
+    /// </summary>
+    public static IServiceCollection AddDecisionTreeExecution(
+        this IServiceCollection services,
+        Action<DecisionTreeExecutionOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.TryAddSingleton(sp =>
+        {
+            var options = new DecisionTreeExecutionOptions();
+            configure?.Invoke(options);
+            return options;
+        });
+        services.TryAddSingleton<IExecutionJournal, InMemoryExecutionJournal>();
+        services.TryAddSingleton<IExecutionEventPublisher, InMemoryEventBus>();
+        services.TryAddSingleton<ILlmCompletionPipeline, DefaultLlmCompletionPipeline>();
+        services.TryAddTransient<IConversationManager, DefaultConversationManager>();
+        services.TryAddTransient<IConversationManagerFactory, DefaultConversationManagerFactory>();
+        services.TryAddSingleton<IDecisionLlmContextBuilder, DefaultDecisionLlmContextBuilder>();
+        services.TryAddSingleton<EnumAnswerParser>();
+        services.TryAddSingleton<IDecisionTreeLoader, DecisionTreeLoader>();
+        services.TryAddTransient<DecisionTreeExecutor>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IDecisionPredicate, PropertyExistsPredicate>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IDecisionPredicate, DataExistsPredicate>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IDecisionPredicate, DataCountAtLeastPredicate>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IDecisionPredicate, PropertyEqualsPredicate>());
+        return services;
+    }
+
+    /// <summary>Registers an application decision action.</summary>
+    public static IServiceCollection AddDecisionAction<TAction>(this IServiceCollection services)
+        where TAction : class, IDecisionAction
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddSingleton<IDecisionAction, TAction>();
+        return services;
+    }
+
+    /// <summary>Registers an application decision predicate.</summary>
+    public static IServiceCollection AddDecisionPredicate<TPredicate>(this IServiceCollection services)
+        where TPredicate : class, IDecisionPredicate
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddSingleton<IDecisionPredicate, TPredicate>();
         return services;
     }
 

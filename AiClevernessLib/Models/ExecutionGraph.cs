@@ -1,3 +1,5 @@
+using AiCleverness.Models.DecisionTree;
+
 namespace AiCleverness.Models;
 
 /// <summary>
@@ -110,6 +112,33 @@ public sealed record ExecutionGraph
                             evt.Timestamp));
                     break;
 
+                case DecisionNodeVisitedEvent dnve:
+                    nodes.Add(
+                        new ExecutionGraphNode(
+                            nodeId,
+                            $"Decision node: {dnve.NodeId} ({dnve.NodeType})",
+                            ExecutionGraphNodeType.DecisionNode,
+                            evt.Timestamp));
+                    break;
+
+                case DecisionActionCompletedEvent dace:
+                    nodes.Add(
+                        new ExecutionGraphNode(
+                            nodeId,
+                            $"Decision action: {dace.ActionName} ({dace.Status})",
+                            ExecutionGraphNodeType.DecisionNode,
+                            evt.Timestamp));
+                    break;
+
+                case DecisionQuestionAnsweredEvent dqae:
+                    nodes.Add(
+                        new ExecutionGraphNode(
+                            nodeId,
+                            $"Decision answer: {dqae.Answer}",
+                            ExecutionGraphNodeType.DecisionNode,
+                            evt.Timestamp));
+                    break;
+
                 case ExecutionCompletedEvent ece:
                     nodes.Add(
                         new ExecutionGraphNode(
@@ -173,6 +202,7 @@ public sealed record ExecutionGraph
                     ExecutionGraphNodeType.ToolCall => $"    {node.Id}[\"{node.Label}\"]",
                     ExecutionGraphNodeType.QualityGate => $"    {node.Id}{{\"{node.Label}\"}}",
                     ExecutionGraphNodeType.Policy => $"    {node.Id}{{\"{node.Label}\"}}",
+                    ExecutionGraphNodeType.DecisionNode => $"    {node.Id}{{\"{node.Label}\"}}",
                     ExecutionGraphNodeType.End => $"    {node.Id}[\"{node.Label}\"]",
                     _ => $"    {node.Id}[\"{node.Label}\"]"
                 };
@@ -225,6 +255,9 @@ public enum ExecutionGraphNodeType
 
     /// <summary>Policy evaluation.</summary>
     Policy,
+
+    /// <summary>Decision-tree node, action, or question event.</summary>
+    DecisionNode,
 
     /// <summary>Execution end.</summary>
     End

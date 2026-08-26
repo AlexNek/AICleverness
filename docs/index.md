@@ -22,6 +22,7 @@ your code.
 | Policies | `IAgentPolicy` | Guards before the run; can stop the run |
 | Strategies | `IAgentStrategy` | Answer the goal with plain code, without the LLM |
 | Planning | `IAgentPlanner` | Split the goal into steps before starting |
+| Decision Trees | `DecisionTreeExecutor` | Run bounded JSON workflows with actions, questions, predicates, and terminal verdicts |
 | Quality Gates | `IAgentQualityGate` | Check the answer; can ask the model to try again |
 | Memory | `IWorkingMemory`, `ILongTermMemory`, `IVectorMemory` | Three memory types behind `IAggregateMemory` |
 | Security | `IPromptGuard`, `IApprovalService`, `IScopeValidator` | Checks on input and output, and approval by a human |

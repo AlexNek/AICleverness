@@ -1,5 +1,7 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
+using AiCleverness.Models.DecisionTree;
+using AiCleverness.Runtime.DecisionTree;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -43,6 +45,7 @@ public sealed class DefaultStartupAnalyzer : IStartupAnalyzer
         ValidateApproval(serviceProvider, findings);
         ValidatePersistence(serviceProvider, findings);
         ValidateObservability(serviceProvider, findings);
+        ValidateDecisionTreeServices(serviceProvider, findings);
 
         var result = new StartupAnalysisResult { Findings = findings.AsReadOnly() };
 
@@ -366,6 +369,37 @@ public sealed class DefaultStartupAnalyzer : IStartupAnalyzer
                         Category = RuntimeValidationCategory.Approval
                     });
         }
+    }
+
+    // ── Decision trees ────────────────────────────────────────────────────────
+
+    private static void ValidateDecisionTreeServices(
+        IServiceProvider sp,
+        List<StartupFinding> findings)
+    {
+        if (sp.GetService<DecisionTreeExecutionOptions>() is null)
+            return;
+
+        CheckRequired<DecisionTreeExecutor>(
+            sp,
+            findings,
+            RuntimeValidationCategory.DiGraph,
+            "Call AddDecisionTreeExecution() to register decision-tree services.");
+        CheckRequired<ILlmCompletionPipeline>(
+            sp,
+            findings,
+            RuntimeValidationCategory.DiGraph,
+            "Register an ILlmCompletionPipeline or call AddDecisionTreeExecution().");
+        CheckRequired<IDecisionTreeLoader>(
+            sp,
+            findings,
+            RuntimeValidationCategory.DiGraph,
+            "Register an IDecisionTreeLoader or call AddDecisionTreeExecution().");
+        CheckRequired<IDecisionLlmContextBuilder>(
+            sp,
+            findings,
+            RuntimeValidationCategory.DiGraph,
+            "Register an IDecisionLlmContextBuilder or call AddDecisionTreeExecution().");
     }
 
     // ── DI Graph ──────────────────────────────────────────────────────────────
