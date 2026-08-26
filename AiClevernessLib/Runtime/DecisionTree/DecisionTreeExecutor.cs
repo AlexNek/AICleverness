@@ -91,7 +91,7 @@ public sealed class DecisionTreeExecutor
                 if (await LimitExceededAsync(state.ResourceUsage, limits, cancellationToken))
                     return CreateResult(executionId, state, DecisionTreeOutcome.BudgetExhausted, null, "Decision resource budget exhausted.");
 
-                var node = tree.Nodes[currentNodeId];
+                var node = GetNode(tree, currentNodeId);
                 var nodeStarted = stopwatch.Elapsed;
                 if (state.ResourceUsage.NodeVisits >= budget.MaxNodeVisits
                     && await LimitReachedAsync(budget.MaxNodeVisits, state.ResourceUsage.NodeVisits, budget.OnExceeded, cancellationToken))
@@ -110,7 +110,7 @@ public sealed class DecisionTreeExecutor
                 {
                     case EDecisionNodeType.Action:
                     {
-                        var action = _actions[node.ActionName!];
+                        var action = GetAction(node.ActionName, currentNodeId);
                         var dataCountBeforeAction = data.GetAll().Count;
                         DecisionActionResult actionResult;
                         try
@@ -220,7 +220,7 @@ public sealed class DecisionTreeExecutor
                     }
                     case EDecisionNodeType.Condition:
                     {
-                        var predicate = _predicates[node.PredicateName!];
+                        var predicate = GetPredicate(node.PredicateName, currentNodeId);
                         bool result;
                         try
                         {
@@ -532,9 +532,51 @@ public sealed class DecisionTreeExecutor
             "A custom conversation manager requires an IConversationManagerFactory to guarantee execution isolation.");
     }
 
+    private static DecisionNode GetNode(DecisionTreeModel tree, string? nodeId)
+    {
+        if (string.IsNullOrWhiteSpace(nodeId))
+            throw new InvalidOperationException("Decision tree node ID is missing.");
+        if (tree.Nodes is null
+            || !tree.Nodes.TryGetValue(nodeId, out var node)
+            || node is null)
+            throw new InvalidOperationException($"Decision tree node '{nodeId}' does not exist.");
+        return node;
+    }
+
+    private IDecisionAction GetAction(string? actionName, string nodeId)
+    {
+        if (string.IsNullOrWhiteSpace(actionName)
+            || !_actions.TryGetValue(actionName, out var action))
+            throw new InvalidOperationException(
+                $"Action '{actionName ?? "<missing>"}' for node '{nodeId}' is not registered.");
+        return action;
+    }
+
+    private IDecisionPredicate GetPredicate(string? predicateName, string nodeId)
+    {
+        if (string.IsNullOrWhiteSpace(predicateName)
+            || !_predicates.TryGetValue(predicateName, out var predicate))
+            throw new InvalidOperationException(
+                $"Predicate '{predicateName ?? "<missing>"}' for node '{nodeId}' is not registered.");
+        return predicate;
+    }
+
     private static DecisionTransition FindTransition(DecisionNode node, string condition)
-        => node.Transitions.First(transition =>
-            string.Equals(transition.Condition, condition, StringComparison.Ordinal));
+    {
+        if (node.Transitions is null)
+            throw new InvalidOperationException("Decision tree node has no transitions.");
+
+        var transition = node.Transitions.FirstOrDefault(candidate =>
+            candidate is not null
+            && string.Equals(candidate.Condition, condition, StringComparison.Ordinal));
+        if (transition is null)
+            throw new InvalidOperationException(
+                $"Decision tree node has no transition for condition '{condition}'.");
+        if (string.IsNullOrWhiteSpace(transition.NextNodeId))
+            throw new InvalidOperationException(
+                $"Decision tree transition for condition '{condition}' has no target node.");
+        return transition;
+    }
 
     private static void UpdateDuration(ResourceUsage usage, Stopwatch stopwatch)
         => usage.Duration = stopwatch.Elapsed;
@@ -547,13 +589,8 @@ public sealed class DecisionTreeExecutor
     {
         if (current < maximum)
             return false;
-        if (action == ResourceLimitAction.Warn)
-            return false;
         if (action == ResourceLimitAction.Throttle)
-        {
             await Task.Delay(1, cancellationToken);
-            return false;
-        }
         return true;
     }
 
@@ -564,6 +601,17 @@ public sealed class DecisionTreeExecutor
     {
         if (!usage.Exceeds(limits))
             return false;
+
+        var hardCountLimitExceeded =
+            (limits.MaxNodeVisits.HasValue && usage.NodeVisits > limits.MaxNodeVisits.Value)
+            || (limits.MaxLlmCalls.HasValue && usage.LlmCalls > limits.MaxLlmCalls.Value);
+        if (hardCountLimitExceeded)
+        {
+            if (limits.OnExceeded == ResourceLimitAction.Throttle)
+                await Task.Delay(1, cancellationToken);
+            return true;
+        }
+
         if (limits.OnExceeded == ResourceLimitAction.Warn)
             return false;
         if (limits.OnExceeded == ResourceLimitAction.Throttle)

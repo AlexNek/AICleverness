@@ -229,6 +229,8 @@ internal sealed class MarkdownTranscriptBuilder
         builder.AppendLine($"**Node:** `{nodeId}`  ");
         builder.AppendLine($"**Answer:** `{answer}`  ");
         builder.AppendLine($"**Attempt:** `{attempt}`");
+        if (!string.IsNullOrWhiteSpace(observation))
+            AppendFencedValue(builder, "Observation", observation);
         if (!string.IsNullOrWhiteSpace(confidence))
             AppendFencedValue(builder, "Confidence", confidence);
 

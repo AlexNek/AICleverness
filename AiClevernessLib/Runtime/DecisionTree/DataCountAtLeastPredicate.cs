@@ -14,7 +14,8 @@ public sealed class DataCountAtLeastPredicate : IDecisionPredicate
         if (!context.Parameters.TryGetValue("type", out var type)
             || type.ValueKind != JsonValueKind.String
             || !context.Parameters.TryGetValue("min", out var minimum)
-            || !minimum.TryGetInt32(out var count))
+            || !minimum.TryGetInt32(out var count)
+            || count < 0)
             return false;
         return context.Data.GetByType(type.GetString() ?? string.Empty).Count >= count;
     }
