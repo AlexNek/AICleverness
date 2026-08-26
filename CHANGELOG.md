@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-26
+
 ### Added
 - Generic decision-tree execution for declarative JSON workflows with action, question, condition, and terminal nodes; bounded LLM classification with explicit unknown handling; application action and predicate extensions; resource budgets; journal and event-bus records; opt-in normal/debug Markdown transcripts with `/t` and `/d` demo switches; AOT-compatible loading; DI registration; and a hermetic demo workflow with usage documentation.
 
