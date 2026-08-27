@@ -9,6 +9,14 @@ internal sealed class DecisionTreeCompletionPipeline : ILlmCompletionPipeline
 
     public int CallCount { get; private set; }
 
+    public int NoContextCallCount { get; private set; }
+
+    public int ContextCallCount { get; private set; }
+
+    public List<LlmCompletionRequest> Requests { get; } = [];
+
+    public List<LlmCompletionExecutionContext> Contexts { get; } = [];
+
     public DecisionTreeCompletionPipeline Enqueue(string content)
     {
         _responses.Enqueue(new LlmResponse(content));
@@ -20,6 +28,20 @@ internal sealed class DecisionTreeCompletionPipeline : ILlmCompletionPipeline
         CancellationToken cancellationToken = default)
     {
         CallCount++;
+        NoContextCallCount++;
+        Requests.Add(request);
+        return Task.FromResult(_responses.Dequeue());
+    }
+
+    public Task<LlmResponse> CompleteAsync(
+        LlmCompletionRequest request,
+        LlmCompletionExecutionContext executionContext,
+        CancellationToken cancellationToken = default)
+    {
+        CallCount++;
+        ContextCallCount++;
+        Requests.Add(request);
+        Contexts.Add(executionContext);
         return Task.FromResult(_responses.Dequeue());
     }
 }

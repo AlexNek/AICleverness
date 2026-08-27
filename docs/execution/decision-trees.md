@@ -52,6 +52,9 @@ services.AddDecisionTreeExecution(options =>
     options.DefaultMaxLlmCalls = 10;
     options.DefaultMaxElapsedTime = TimeSpan.FromSeconds(120);
     options.DefaultMaxContextTokens = 4000;
+    options.EnableModelFailover = true;
+    options.Model = "primary-model";
+    options.ModelFallbackChain = ["fallback-model"];
 });
 
 // Add application extensions before building the provider.
@@ -59,6 +62,8 @@ services.AddDecisionAction<CollectEvidenceAction>();
 
 using var provider = services.BuildServiceProvider();
 ```
+
+When decision-tree model failover is enabled, `Model` is the explicit primary model for the first request and `ModelFallbackChain` is an ordered fallback-only list; do not include the primary in that list. Only failures recognized by the shared LLM error classifier (such as completion timeouts, HTTP 5xx, HTTP 429, and recognized rate-limit signals) advance to the next candidate. Disabled or incomplete failover configuration preserves the no-context completion behavior.
 
 `AddDecisionTreeExecution()` registers the default `ILlmCompletionPipeline`, a transient default conversation manager, the loader, parser, default classify context builder, in-memory journal, in-memory event publisher, and built-in predicates. `AddAiClevernessLlmClient<T>()` remains the provider-neutral LLM adapter used by the default decision completion pipeline.
 

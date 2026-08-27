@@ -79,6 +79,7 @@ public sealed class DecisionTreeExecutor
                 OnExceeded = budget.OnExceeded
             };
             var conversation = CreateConversationManager();
+            var completionContext = TryBuildCompletionContext();
             var currentNodeId = tree.StartNodeId;
             var actionFailed = false;
             var unknown = false;
@@ -172,6 +173,7 @@ public sealed class DecisionTreeExecutor
                             budget,
                             limits,
                             stopwatch,
+                            completionContext,
                             cancellationToken);
                         if (classification.BudgetExhausted)
                             return CreateResult(executionId, state, DecisionTreeOutcome.BudgetExhausted, null, "Decision resource budget exhausted.");
@@ -313,6 +315,7 @@ public sealed class DecisionTreeExecutor
         DecisionBudget budget,
         ResourceLimits limits,
         Stopwatch stopwatch,
+        LlmCompletionExecutionContext? completionContext,
         CancellationToken cancellationToken)
     {
         string? lastRawContent = null;
@@ -327,13 +330,14 @@ public sealed class DecisionTreeExecutor
             var messages = await conversation.GetMessagesForCompletionAsync(
                 budget.MaxContextTokens,
                 cancellationToken);
-            var response = await _completionPipeline.CompleteAsync(
-                new LlmCompletionRequest(
-                    executionId,
-                    messages,
-                    new LlmCompletionOptions(0.1f, null, null),
-                    attempt),
-                cancellationToken);
+            var request = new LlmCompletionRequest(
+                executionId,
+                messages,
+                new LlmCompletionOptions(0.1f, null, completionContext is null ? null : _defaultOptions!.Model),
+                attempt);
+            var response = completionContext is null
+                ? await _completionPipeline.CompleteAsync(request, cancellationToken)
+                : await _completionPipeline.CompleteAsync(request, completionContext, cancellationToken);
             _transcript.Value?.AppendDecisionLlmAttempt(nodeId, attempt, messages, response);
             var usage = response.Usage;
             state.ResourceUsage.RecordLlmUsage(usage?.PromptTokens ?? 0, usage?.CompletionTokens ?? 0);
@@ -626,6 +630,29 @@ public sealed class DecisionTreeExecutor
             return false;
         }
         return true;
+    }
+
+    private LlmCompletionExecutionContext? TryBuildCompletionContext()
+    {
+        if (_defaultOptions?.EnableModelFailover != true
+            || string.IsNullOrWhiteSpace(_defaultOptions.Model)
+            || _defaultOptions.ModelFallbackChain is not { Count: > 0 } fallbackChain)
+            return null;
+
+        var agentContext = new DefaultAgentContext
+        {
+            AgentName = "decision-tree",
+            Goal = "Decision tree LLM",
+            State = new AgentState { Status = "Running" },
+            Memory = new InMemoryAgentMemory()
+        };
+        agentContext.SetProperty(AgentPropertyKeys.EnableModelFailover, true);
+        agentContext.SetProperty(AgentPropertyKeys.Model, _defaultOptions.Model);
+        agentContext.SetProperty(AgentPropertyKeys.ModelFallbackChain, fallbackChain);
+
+        return new LlmCompletionExecutionContext(
+            AgentContext: agentContext,
+            RuntimeOptions: new AgentRuntimeOptions { EnableModelFailover = true });
     }
 
     private DecisionBudget ApplyDefaults(DecisionBudget budget)
