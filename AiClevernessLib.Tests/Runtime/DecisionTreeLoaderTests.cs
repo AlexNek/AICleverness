@@ -76,6 +76,37 @@ public sealed class DecisionTreeLoaderTests
     }
 
     [Fact]
+    public void Validate_RejectsReservedUnknownClassifyAnswer()
+    {
+        var loader = new DecisionTreeLoader();
+        var tree = new DecisionTree
+        {
+            TreeId = "reserved-answer",
+            Version = 1,
+            StartNodeId = "classify",
+            Nodes = new Dictionary<string, DecisionNode>
+            {
+                ["classify"] = new()
+                {
+                    Type = EDecisionNodeType.Classify,
+                    Task = "Classify the request",
+                    Answers = ["unknown"],
+                    Transitions =
+                    [
+                        new() { Condition = "unknown", NextNodeId = "done" }
+                    ]
+                },
+                ["done"] = Terminal("done")
+            }
+        };
+
+        var act = () => loader.Validate(tree);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*reserved answer 'unknown'*");
+    }
+
+    [Fact]
     public void Load_RejectsUnreachableNodes()
     {
         var loader = new DecisionTreeLoader();

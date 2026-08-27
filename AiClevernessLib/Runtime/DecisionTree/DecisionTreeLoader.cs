@@ -111,6 +111,8 @@ public sealed class DecisionTreeLoader : IDecisionTreeLoader
                     throw new InvalidOperationException($"Classify node '{nodeId}' must specify non-empty answers.");
                 if (node.Answers.Distinct(StringComparer.Ordinal).Count() != node.Answers.Count)
                     throw new InvalidOperationException($"Classify node '{nodeId}' contains duplicate answers.");
+                if (node.Answers.Contains("unknown", StringComparer.Ordinal))
+                    throw new InvalidOperationException($"Classify node '{nodeId}' cannot declare reserved answer 'unknown'.");
                 RequireConditions(nodeId, transitions, node.Answers.Append("unknown"));
                 break;
             case EDecisionNodeType.Condition:
