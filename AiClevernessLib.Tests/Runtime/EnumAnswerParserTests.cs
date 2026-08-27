@@ -21,15 +21,17 @@ public sealed class EnumAnswerParserTests
     }
 
     [Fact]
-    public void Parse_JsonWrappedInMarkdownCodeFences_ReturnsAnswer()
+    public void Parse_JsonWrappedInMarkdownCodeFences_ReturnsAnswerAndOptionalFields()
     {
         var parser = new EnumAnswerParser();
-        var fenced = "```json\n{\"answer\":\"yes\",\"observation\":\"found\",\"confidence\":\"high\"}\n```";
+        var fenced = "  \n```json\n{\"answer\":\"yes\",\"observation\":\"found\",\"confidence\":\"high\"}\n```\n  ";
 
         var result = parser.Parse(fenced, AllowedAnswers);
 
         result.Should().NotBeNull();
         result!.Value.Should().Be("yes");
+        result.Observation.Should().Be("found");
+        result.Confidence.Should().Be("high");
     }
 
     [Fact]
@@ -54,6 +56,41 @@ public sealed class EnumAnswerParserTests
 
         result.Should().NotBeNull();
         result!.Value.Should().Be("yes");
+    }
+
+    [Theory]
+    [InlineData("```json\n{\"answer\":\"yes\"}")]
+    [InlineData("```json\n{\"answer\":\"yes\"}\n``` trailing text")]
+    [InlineData("```json {\"answer\":\"yes\"}")]
+    public void Parse_MalformedCodeFence_ReturnsNull(string fenced)
+    {
+        var parser = new EnumAnswerParser();
+
+        var result = parser.Parse(fenced, AllowedAnswers);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_FencedAnswerNotInAllowedValues_ReturnsNull()
+    {
+        var parser = new EnumAnswerParser();
+
+        var result = parser.Parse("```json\n{\"answer\":\"maybe\"}\n```", AllowedAnswers);
+
+        result.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("{\"answer\":123}")]
+    public void Parse_InvalidRootOrAnswerType_ReturnsNull(string json)
+    {
+        var parser = new EnumAnswerParser();
+
+        var result = parser.Parse(json, AllowedAnswers);
+
+        result.Should().BeNull();
     }
 
     [Fact]

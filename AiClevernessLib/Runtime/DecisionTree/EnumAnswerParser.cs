@@ -44,15 +44,22 @@ public sealed class EnumAnswerParser
     private static string StripCodeFences(string content)
     {
         var trimmed = content.Trim();
-        if (!trimmed.StartsWith("```"))
+        if (!trimmed.StartsWith("```", StringComparison.Ordinal))
             return trimmed;
 
-        var firstNewline = trimmed.IndexOf('\n');
-        var lastFence = trimmed.LastIndexOf("```");
-        if (firstNewline >= 0 && lastFence > firstNewline)
-            return trimmed[(firstNewline + 1)..lastFence].Trim();
+        var openingLineEnd = trimmed.IndexOf('\n');
+        var closingFenceStart = trimmed.LastIndexOf("```", StringComparison.Ordinal);
+        if (openingLineEnd < 0
+            || closingFenceStart <= openingLineEnd
+            || closingFenceStart != trimmed.Length - 3
+            || trimmed[closingFenceStart - 1] != '\n')
+            return trimmed;
 
-        return trimmed;
+        var bodyEnd = closingFenceStart;
+        if (bodyEnd > openingLineEnd + 1 && trimmed[bodyEnd - 1] == '\n')
+            bodyEnd--;
+
+        return trimmed[(openingLineEnd + 1)..bodyEnd].Trim();
     }
 
     private static string? ReadOptionalString(JsonElement root, string name)
