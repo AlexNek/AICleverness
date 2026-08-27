@@ -726,14 +726,19 @@ internal sealed class TranscriptContext
 
         var remaining = RemainingDecisionTranscriptCharacters();
         if (!terminal)
+        {
             remaining -= TerminalOmissionMarker.Length;
+            if (remaining <= 0 || content.Length > remaining)
+                return string.Empty;
+
+            _decisionTranscriptCharacters += content.Length;
+            return content;
+        }
+
         if (remaining <= 0)
             return string.Empty;
 
-        var bounded = LimitText(
-            content,
-            remaining,
-            terminal ? TerminalOmissionMarker : "[decision transcript content truncated]");
+        var bounded = LimitText(content, remaining, TerminalOmissionMarker);
         _decisionTranscriptCharacters += bounded.Length;
         return bounded;
     }

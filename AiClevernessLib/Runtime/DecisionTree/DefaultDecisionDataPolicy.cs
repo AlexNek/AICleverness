@@ -87,9 +87,13 @@ public sealed class DefaultDecisionDataPolicy : IDecisionDataPolicy
                 new DecisionData
                 {
                     Id = MarkerId,
-                    Source = MarkerSource,
-                    Type = MarkerType,
-                    Content = $"Decision data policy: omitted {omitted} item(s); truncated {perItemTruncated} item(s); aggregate-truncated {aggregateTruncated} item(s)."
+                    Source = Limit(MarkerSource, _options.MaxFieldLength, "[source truncated]"),
+                    Type = Limit(MarkerType, _options.MaxFieldLength, "[type truncated]"),
+                    Content = CreateMarkerContent(
+                        omitted,
+                        perItemTruncated,
+                        aggregateTruncated,
+                        _options.MaxContentLengthPerItem)
                 });
         }
 
@@ -143,6 +147,27 @@ public sealed class DefaultDecisionDataPolicy : IDecisionDataPolicy
         var type = item.DisplayType ?? item.Type;
         var metadataLength = item.Metadata?.Sum(pair => pair.Key.Length + 1 + pair.Value.Length + 2) ?? 0;
         return id.Length + type.Length + source.Length + content.Length + metadataLength + 11;
+    }
+
+    private static string CreateMarkerContent(
+        int omitted,
+        int perItemTruncated,
+        int aggregateTruncated,
+        int maximum)
+    {
+        var content = $"Decision data policy: omitted {omitted} item(s); truncated {perItemTruncated} item(s); aggregate-truncated {aggregateTruncated} item(s).";
+        if (content.Length <= maximum)
+            return content;
+
+        var compactContent = omitted > 0
+            ? $"omitted {omitted}; t{perItemTruncated}; a{aggregateTruncated}"
+            : perItemTruncated > 0
+                ? $"truncated {perItemTruncated}; o{omitted}; a{aggregateTruncated}"
+                : $"aggregate-truncated {aggregateTruncated}; o{omitted}; t{perItemTruncated}";
+        if (compactContent.Length <= maximum)
+            return compactContent;
+
+        return Limit($"o{omitted};t{perItemTruncated};a{aggregateTruncated}", maximum, "[content truncated]");
     }
 
     private static string? LimitNullable(string? value, int maximum, string marker)

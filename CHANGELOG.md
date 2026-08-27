@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-28
+
 ### Added
 - Bounded decision-tree classification context and transcript policies: metadata, content, aggregate representation, and display-field limits; separate truncation diagnostics; read-only builder snapshots; post-redaction transcript limits with deterministic omission markers; terminal-result preservation; eager configuration validation; and explicit bounded debug-transcript behavior.
 
