@@ -37,9 +37,10 @@ public sealed class DefaultDecisionLlmContextBuilder : IDecisionLlmContextBuilde
         var stateText = state.Properties.Count == 0
             ? "none"
             : string.Join(", ", state.Properties.Select(pair => $"{pair.Key}={pair.Value ?? "null"}"));
-        var dataText = data.GetAll().Count == 0
+        var dataItems = data.GetAll();
+        var dataText = dataItems.Count == 0
             ? "none"
-            : string.Join(", ", data.GetAll().Select(item =>
+            : string.Join(", ", dataItems.Select(item =>
                 $"{item.Id} [{item.Type}] from {item.Source}: {item.Content}"));
         var user = $"Task: {(string.IsNullOrWhiteSpace(task) ? "(not supplied)" : task)}\nClassification task: {classificationTask}\nAllowed answers: {answers}\nState: {stateText}\nData: {dataText}";
         return [new LlmMessage("system", system), new LlmMessage("user", user)];

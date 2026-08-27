@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Decision-tree execution now supports configured model failover through `DecisionTreeExecutionOptions`, using an explicit primary model and ordered fallback-only chain for classifier-recognized transient failures; the active model and remaining candidates persist across classification nodes within one execution.
 - Decision-tree classification answers now accept valid JSON wrapped in language-tagged or bare Markdown code fences while preserving bounded-answer validation.
+- Decision-tree classification now fails closed when preparation omits any user context message, preventing incomplete provider requests while preserving normal-sized decision data.
 
 ## [1.5.0] - 2026-08-26
 

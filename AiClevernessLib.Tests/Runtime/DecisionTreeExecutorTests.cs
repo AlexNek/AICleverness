@@ -337,6 +337,86 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ReturnsActionableUnknownWhenRequiredClassificationInputIsTruncated()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"yes\",\"observation\":\"should-not-be-called\",\"confidence\":\"high\"}");
+        var executor = CreateExecutor(pipeline);
+        var tree = CreateTree() with
+        {
+            Budget = new()
+            {
+                MaxNodeVisits = 5,
+                MaxLlmCalls = 1,
+                MaxElapsedTime = TimeSpan.FromSeconds(10),
+                MaxContextTokens = 100
+            }
+        };
+        var parameters = new Dictionary<string, string>
+        {
+            ["evidence-content"] = new string('x', 2_000)
+        };
+
+        var result = await executor.ExecuteAsync(tree, parameters);
+
+        result.Outcome.Should().Be(DecisionTreeOutcome.Unknown);
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Contain("required user input was omitted");
+        result.Usage.LlmCalls.Should().Be(0);
+        pipeline.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PreservesNormalSizedDecisionDataInCompletionRequest()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
+        var executor = CreateExecutor(pipeline);
+
+        var result = await executor.ExecuteAsync(
+            CreateTree(),
+            new Dictionary<string, string> { ["evidence-content"] = "normal fake evidence" });
+
+        result.Succeeded.Should().BeTrue();
+        pipeline.Requests.Should().ContainSingle();
+        pipeline.Requests[0].Messages.Should().Contain(message =>
+            message.Role == "user"
+            && message.Content != null
+            && message.Content.Contains("normal fake evidence", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ReturnsUnknownWhenAnEarlierRequiredUserMessageIsTruncated()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"should-not-be-called\",\"confidence\":\"high\"}");
+        var contextBuilder = new FixedDecisionLlmContextBuilder(
+        [
+            new LlmMessage("system", "Classify the request."),
+            new LlmMessage("user", new string('e', 1_000)),
+            new LlmMessage("user", "Return exactly one allowed answer.")
+        ]);
+        var executor = CreateExecutor(pipeline, contextBuilder: contextBuilder);
+        var tree = CreateTree() with
+        {
+            Budget = new()
+            {
+                MaxNodeVisits = 5,
+                MaxLlmCalls = 1,
+                MaxElapsedTime = TimeSpan.FromSeconds(10),
+                MaxContextTokens = 100
+            }
+        };
+
+        var result = await executor.ExecuteAsync(tree);
+
+        result.Outcome.Should().Be(DecisionTreeOutcome.Unknown);
+        result.Error.Should().Contain("required user input was omitted");
+        result.Usage.LlmCalls.Should().Be(0);
+        pipeline.CallCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_HaltsWhenTheNodeVisitBudgetIsReached()
     {
         var executor = CreateExecutor();
@@ -847,7 +927,8 @@ public sealed class DecisionTreeExecutorTests
         IExecutionJournal? journal = null,
         IExecutionEventPublisher? publisher = null,
         IConversationManager? conversationManager = null,
-        IConversationManagerFactory? factory = null)
+        IConversationManagerFactory? factory = null,
+        IDecisionLlmContextBuilder? contextBuilder = null)
     {
         var action = new DecisionTreeTestAction();
         var registeredPredicates = predicates?.ToArray() ?? [new DataExistsPredicate()];
@@ -858,7 +939,7 @@ public sealed class DecisionTreeExecutorTests
             publisher,
             [action],
             registeredPredicates,
-            new DefaultDecisionLlmContextBuilder(),
+            contextBuilder ?? new DefaultDecisionLlmContextBuilder(),
             loader ?? new DecisionTreeLoader([action], registeredPredicates),
             defaultOptions,
             factory);

@@ -185,7 +185,8 @@ public sealed class DecisionTreeExecutor
                             var parseDetail = rawSnippet is not null
                                 ? $" Model returned: \"{rawSnippet}\""
                                 : string.Empty;
-                            executionError ??= $"Classification response could not be classified.{parseDetail}";
+                            executionError ??= classification.Error
+                                ?? $"Classification response could not be classified.{parseDetail}";
                             var unknownAnswer = new EnumAnswer("unknown", executionError, null);
                             state.Classifications.Add(
                                 new DecisionClassification(
@@ -199,7 +200,7 @@ public sealed class DecisionTreeExecutor
                                 executionId,
                                 currentNodeId,
                                 unknownAnswer,
-                                2,
+                                classification.Attempt,
                                 cancellationToken);
                             outcome = "unknown";
                             nextNodeId = unknownTransition.NextNodeId;
@@ -303,7 +304,7 @@ public sealed class DecisionTreeExecutor
         }
     }
 
-    private async Task<(EnumAnswer? Answer, int Attempt, bool BudgetExhausted, string? LastRawContent)> RunClassificationAsync(
+    private async Task<(EnumAnswer? Answer, int Attempt, bool BudgetExhausted, string? LastRawContent, string? Error)> RunClassificationAsync(
         string executionId,
         DecisionTreeModel tree,
         string nodeId,
@@ -323,13 +324,28 @@ public sealed class DecisionTreeExecutor
         {
             if (attempt > 1 && state.ResourceUsage.LlmCalls >= budget.MaxLlmCalls
                 && await LimitReachedAsync(budget.MaxLlmCalls, state.ResourceUsage.LlmCalls, budget.OnExceeded, cancellationToken))
-                return (null, attempt, true, lastRawContent);
+                return (null, attempt, true, lastRawContent, null);
             cancellationToken.ThrowIfCancellationRequested();
             var built = _contextBuilder.Build(tree, node, state, data, parameters);
+            var requiredUserMessages = built
+                .Where(message => string.Equals(message.Role, "user", StringComparison.Ordinal))
+                .ToArray();
             conversation.AddMessages(built);
             var messages = await conversation.GetMessagesForCompletionAsync(
                 budget.MaxContextTokens,
                 cancellationToken);
+            if (requiredUserMessages.Length == 0
+                || requiredUserMessages.Any(requiredMessage =>
+                    !messages.Any(message => ReferenceEquals(message, requiredMessage))))
+            {
+                return (
+                    null,
+                    attempt,
+                    false,
+                    lastRawContent,
+                    $"Classification context exceeded MaxContextTokens ({budget.MaxContextTokens}); the required user input was omitted.");
+            }
+
             var request = new LlmCompletionRequest(
                 executionId,
                 messages,
@@ -349,16 +365,16 @@ public sealed class DecisionTreeExecutor
             state.ResourceUsage.RecordLlmUsage(usage?.PromptTokens ?? 0, usage?.CompletionTokens ?? 0);
             UpdateDuration(state.ResourceUsage, stopwatch);
             if (await LimitExceededAsync(state.ResourceUsage, limits, cancellationToken))
-                return (null, attempt, true, response.Content);
+                return (null, attempt, true, response.Content, null);
             conversation.AddMessage(new LlmMessage("assistant", response.Content));
             var parsed = _answerParser.Parse(response.Content, node.Answers!);
             if (parsed is not null)
-                return (parsed, attempt, false, null);
+                return (parsed, attempt, false, null, null);
             lastRawContent = response.Content;
             if (attempt == 1)
                 conversation.AddMessage(new LlmMessage("user", "Return valid JSON using exactly one allowed answer."));
         }
-        return (null, 2, false, lastRawContent);
+        return (null, 2, false, lastRawContent, null);
     }
 
     private async Task EmitNodeVisitedAsync(
