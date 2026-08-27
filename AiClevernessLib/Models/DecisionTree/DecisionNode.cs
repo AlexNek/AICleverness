@@ -8,7 +8,7 @@ public sealed record DecisionNode
     public required EDecisionNodeType Type { get; init; }
     public IReadOnlyList<DecisionTransition> Transitions { get; init; } = Array.Empty<DecisionTransition>();
     public string? ActionName { get; init; }
-    public string? Question { get; init; }
+    public string? Task { get; init; }
     public IReadOnlyList<string>? Answers { get; init; }
     public IReadOnlyDictionary<string, JsonElement>? PredicateParameters { get; init; }
     public string? PredicateName { get; init; }

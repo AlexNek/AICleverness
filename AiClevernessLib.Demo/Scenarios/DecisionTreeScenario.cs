@@ -72,8 +72,8 @@ internal static class DecisionTreeScenario
                 },
                 ["classify"] = new()
                 {
-                    Type = EDecisionNodeType.Question,
-                    Question = "Does the release note above satisfy every publication criterion?",
+                    Type = EDecisionNodeType.Classify,
+                    Task = "Does the release note above satisfy every publication criterion?",
                     Answers = ["supported", "unsupported"],
                     Transitions =
                     [

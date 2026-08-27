@@ -4,7 +4,7 @@ namespace AiCleverness.Models.DecisionTree;
 public enum EDecisionNodeType
 {
     Action,
-    Question,
+    Classify,
     Condition,
     Terminal
 }

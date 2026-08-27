@@ -57,7 +57,7 @@ internal static class AiClevernessJson
 [JsonSerializable(typeof(List<DecisionTransition>))]
 [JsonSerializable(typeof(DecisionNodeVisitedEvent))]
 [JsonSerializable(typeof(DecisionActionCompletedEvent))]
-[JsonSerializable(typeof(DecisionQuestionAnsweredEvent))]
+[JsonSerializable(typeof(DecisionClassificationCompletedEvent))]
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(Dictionary<string, object>))]
 [JsonSerializable(typeof(string))]

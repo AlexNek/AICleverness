@@ -65,8 +65,8 @@ public sealed class DecisionTreeLoaderTests
             StartNodeId = "a",
             Nodes = new Dictionary<string, DecisionNode>
             {
-                ["a"] = Question("a", "b"),
-                ["b"] = Question("b", "a")
+                ["a"] = Classify("a", "b"),
+                ["b"] = Classify("b", "a")
             }
         };
 
@@ -78,11 +78,11 @@ public sealed class DecisionTreeLoaderTests
     private static DecisionNode Terminal(string verdict)
         => new() { Type = EDecisionNodeType.Terminal, Verdict = verdict };
 
-    private static DecisionNode Question(string answer, string next)
+    private static DecisionNode Classify(string answer, string next)
         => new()
         {
-            Type = EDecisionNodeType.Question,
-            Question = answer,
+            Type = EDecisionNodeType.Classify,
+            Task = answer,
             Answers = ["yes"],
             Transitions =
             [

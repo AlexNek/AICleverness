@@ -35,16 +35,16 @@ public sealed class DecisionTreeExecutorTests
         var executor = CreateExecutor(pipeline);
         var tree = new DecisionTreeModel
         {
-            TreeId = "question",
+            TreeId = "classify",
             Version = 1,
-            StartNodeId = "question",
+            StartNodeId = "classify",
             Budget = new() { MaxNodeVisits = 4, MaxLlmCalls = 2, MaxElapsedTime = TimeSpan.FromSeconds(10), MaxContextTokens = 100 },
             Nodes = new Dictionary<string, DecisionNode>
             {
-                ["question"] = new()
+                ["classify"] = new()
                 {
-                    Type = EDecisionNodeType.Question,
-                    Question = "Is it yes?",
+                    Type = EDecisionNodeType.Classify,
+                    Task = "Is it yes?",
                     Answers = ["yes"],
                     Transitions =
                     [
@@ -76,14 +76,14 @@ public sealed class DecisionTreeExecutorTests
         {
             TreeId = "unknown",
             Version = 1,
-            StartNodeId = "question",
+            StartNodeId = "classify",
             Budget = new() { MaxNodeVisits = 3, MaxLlmCalls = 2, MaxElapsedTime = TimeSpan.FromSeconds(10), MaxContextTokens = 100 },
             Nodes = new Dictionary<string, DecisionNode>
             {
-                ["question"] = new()
+                ["classify"] = new()
                 {
-                    Type = EDecisionNodeType.Question,
-                    Question = "Is it yes?",
+                    Type = EDecisionNodeType.Classify,
+                    Task = "Is it yes?",
                     Answers = ["yes"],
                     Transitions =
                     [new() { Condition = "yes", NextNodeId = "done" }, new() { Condition = "unknown", NextNodeId = "unknown" }]
@@ -136,14 +136,14 @@ public sealed class DecisionTreeExecutorTests
         {
             TreeId = "code-fence",
             Version = 1,
-            StartNodeId = "question",
+            StartNodeId = "classify",
             Budget = new() { MaxNodeVisits = 4, MaxLlmCalls = 2, MaxElapsedTime = TimeSpan.FromSeconds(10), MaxContextTokens = 100 },
             Nodes = new Dictionary<string, DecisionNode>
             {
-                ["question"] = new()
+                ["classify"] = new()
                 {
-                    Type = EDecisionNodeType.Question,
-                    Question = "Is it yes?",
+                    Type = EDecisionNodeType.Classify,
+                    Task = "Is it yes?",
                     Answers = ["yes"],
                     Transitions =
                     [
@@ -264,7 +264,7 @@ public sealed class DecisionTreeExecutorTests
     [Theory]
     [InlineData(AiCleverness.Models.ResourceLimitAction.Warn)]
     [InlineData(AiCleverness.Models.ResourceLimitAction.Throttle)]
-    public async Task ExecuteAsync_StopsQuestionCycleAtHardNodeVisitCap(
+    public async Task ExecuteAsync_StopsClassificationCycleAtHardNodeVisitCap(
         AiCleverness.Models.ResourceLimitAction onExceeded)
     {
         // Arrange
@@ -273,7 +273,7 @@ public sealed class DecisionTreeExecutorTests
             .Enqueue("{\"answer\":\"loop\",\"observation\":\"cycle\",\"confidence\":\"high\"}")
             .Enqueue("{\"answer\":\"loop\",\"observation\":\"cycle\",\"confidence\":\"high\"}");
         var executor = CreateExecutor(pipeline);
-        var tree = CreateQuestionCycleTree(new DecisionBudget
+        var tree = CreateClassificationCycleTree(new DecisionBudget
         {
             MaxNodeVisits = 3,
             MaxLlmCalls = 10,
@@ -295,7 +295,7 @@ public sealed class DecisionTreeExecutorTests
     [Theory]
     [InlineData(AiCleverness.Models.ResourceLimitAction.Warn)]
     [InlineData(AiCleverness.Models.ResourceLimitAction.Throttle)]
-    public async Task ExecuteAsync_StopsQuestionCycleAtHardLlmCallCap(
+    public async Task ExecuteAsync_StopsClassificationCycleAtHardLlmCallCap(
         AiCleverness.Models.ResourceLimitAction onExceeded)
     {
         // Arrange
@@ -303,7 +303,7 @@ public sealed class DecisionTreeExecutorTests
             .Enqueue("{\"answer\":\"loop\",\"observation\":\"cycle\",\"confidence\":\"high\"}")
             .Enqueue("{\"answer\":\"loop\",\"observation\":\"cycle\",\"confidence\":\"high\"}");
         var executor = CreateExecutor(pipeline);
-        var tree = CreateQuestionCycleTree(new DecisionBudget
+        var tree = CreateClassificationCycleTree(new DecisionBudget
         {
             MaxNodeVisits = 10,
             MaxLlmCalls = 2,
@@ -394,7 +394,7 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ReturnsValidationFailedForMissingQuestionTransitionFromCustomLoader()
+    public async Task ExecuteAsync_ReturnsValidationFailedForMissingClassificationTransitionFromCustomLoader()
     {
         // Arrange
         var pipeline = new DecisionTreeCompletionPipeline()
@@ -403,8 +403,8 @@ public sealed class DecisionTreeExecutorTests
         var executor = CreateExecutor(pipeline, loader: loader);
         var tree = CreateValidationTree(new DecisionNode
         {
-            Type = EDecisionNodeType.Question,
-            Question = "Is the answer yes?",
+            Type = EDecisionNodeType.Classify,
+            Task = "Is the answer yes?",
             Answers = ["yes"],
             Transitions =
             [new() { Condition = "unknown", NextNodeId = "done" }]
@@ -472,13 +472,13 @@ public sealed class DecisionTreeExecutorTests
             var content = await File.ReadAllTextAsync(path);
             content.Should().Contain("### Decision action:");
             content.Should().Contain("### Selected path");
-            content.Should().Contain("### Parsed decision");
+            content.Should().Contain("### Parsed classification");
             content.Should().Contain("## Decision result");
             content.Should().Contain("### Decision budget");
             content.Should().Contain("[REDACTED]");
             content.Should().NotContain("fake-secret");
             content.Should().NotContain("## Debug runtime");
-            var parsedDecision = ParsedDecisionSection(content);
+            var parsedDecision = ParsedClassificationSection(content);
             parsedDecision.Should().Contain("**Observation:**");
             parsedDecision.Should().Contain("[REDACTED]");
             parsedDecision.Should().NotContain("fake-secret");
@@ -516,7 +516,7 @@ public sealed class DecisionTreeExecutorTests
             content.Should().Contain("debug-secret");
             content.Should().Contain("## Decision result");
             content.Should().Contain("### Decision budget");
-            var parsedDecision = ParsedDecisionSection(content);
+            var parsedDecision = ParsedClassificationSection(content);
             parsedDecision.Should().Contain("**Observation:**");
             parsedDecision.Should().Contain("debug-secret");
         }
@@ -526,9 +526,9 @@ public sealed class DecisionTreeExecutorTests
         }
     }
 
-    private static string ParsedDecisionSection(string content)
+    private static string ParsedClassificationSection(string content)
     {
-        var sections = content.Split("### Parsed decision", StringSplitOptions.None);
+        var sections = content.Split("### Parsed classification", StringSplitOptions.None);
         sections.Should().HaveCount(2);
         var section = sections[1];
         var end = section.IndexOf("## Decision result", StringComparison.Ordinal);
@@ -557,15 +557,15 @@ public sealed class DecisionTreeExecutorTests
                     ActionName = "collect",
                     Transitions =
                     [
-                        new() { Condition = "success", NextNodeId = "question" },
+                        new() { Condition = "success", NextNodeId = "classify" },
                         new() { Condition = "transientFailure", NextNodeId = "failed" },
                         new() { Condition = "permanentFailure", NextNodeId = "failed" }
                     ]
                 },
-                ["question"] = new()
+                ["classify"] = new()
                 {
-                    Type = EDecisionNodeType.Question,
-                    Question = "Is the evidence supported?",
+                    Type = EDecisionNodeType.Classify,
+                    Task = "Is the evidence supported?",
                     Answers = ["supported"],
                     Transitions =
                     [
@@ -649,23 +649,23 @@ public sealed class DecisionTreeExecutorTests
             }
         };
 
-    private static DecisionTreeModel CreateQuestionCycleTree(DecisionBudget budget)
+    private static DecisionTreeModel CreateClassificationCycleTree(DecisionBudget budget)
         => new()
         {
-            TreeId = "question-cycle",
+            TreeId = "classification-cycle",
             Version = 1,
-            StartNodeId = "question",
+            StartNodeId = "classify",
             Budget = budget,
             Nodes = new Dictionary<string, DecisionNode>
             {
-                ["question"] = new()
+                ["classify"] = new()
                 {
-                    Type = EDecisionNodeType.Question,
-                    Question = "Should the cycle continue?",
+                    Type = EDecisionNodeType.Classify,
+                    Task = "Should the cycle continue?",
                     Answers = ["loop"],
                     Transitions =
                     [
-                        new() { Condition = "loop", NextNodeId = "question" },
+                        new() { Condition = "loop", NextNodeId = "classify" },
                         new() { Condition = "unknown", NextNodeId = "done" }
                     ]
                 },

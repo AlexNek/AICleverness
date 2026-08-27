@@ -154,13 +154,13 @@ public sealed class DecisionTreeExecutor
                         nextNodeId = FindTransition(node, outcome).NextNodeId;
                         break;
                     }
-                    case EDecisionNodeType.Question:
+                    case EDecisionNodeType.Classify:
                     {
                         if (state.ResourceUsage.LlmCalls >= budget.MaxLlmCalls
                             && await LimitReachedAsync(budget.MaxLlmCalls, state.ResourceUsage.LlmCalls, budget.OnExceeded, cancellationToken))
                             return CreateResult(executionId, state, DecisionTreeOutcome.BudgetExhausted, null, "Maximum decision LLM calls exceeded.");
 
-                        var question = await AskQuestionAsync(
+                        var classification = await RunClassificationAsync(
                             executionId,
                             tree,
                             currentNodeId,
@@ -173,17 +173,17 @@ public sealed class DecisionTreeExecutor
                             limits,
                             stopwatch,
                             cancellationToken);
-                        if (question.BudgetExhausted)
+                        if (classification.BudgetExhausted)
                             return CreateResult(executionId, state, DecisionTreeOutcome.BudgetExhausted, null, "Decision resource budget exhausted.");
-                        var answer = question.Answer;
+                        var answer = classification.Answer;
                         if (answer is null)
                         {
                             unknown = true;
-                            var rawSnippet = TruncateForDisplay(question.LastRawContent);
+                            var rawSnippet = TruncateForDisplay(classification.LastRawContent);
                             var parseDetail = rawSnippet is not null
                                 ? $" Model returned: \"{rawSnippet}\""
                                 : string.Empty;
-                            executionError ??= $"Question response could not be classified.{parseDetail}";
+                            executionError ??= $"Classification response could not be classified.{parseDetail}";
                             var unknownAnswer = new EnumAnswer("unknown", executionError, null);
                             state.Classifications.Add(
                                 new DecisionClassification(
@@ -193,7 +193,7 @@ public sealed class DecisionTreeExecutor
                                     unknownAnswer.Confidence,
                                     DateTimeOffset.UtcNow));
                             var unknownTransition = FindTransition(node, "unknown");
-                            await EmitQuestionAnsweredAsync(
+                            await EmitClassificationCompletedAsync(
                                 executionId,
                                 currentNodeId,
                                 unknownAnswer,
@@ -211,11 +211,11 @@ public sealed class DecisionTreeExecutor
                                     answer.Observation,
                                     answer.Confidence,
                                     DateTimeOffset.UtcNow));
-                            await EmitQuestionAnsweredAsync(
+                            await EmitClassificationCompletedAsync(
                                 executionId,
                                 currentNodeId,
                                 answer,
-                                question.Attempt,
+                                classification.Attempt,
                                 cancellationToken);
                             outcome = answer.Value;
                             nextNodeId = FindTransition(node, outcome).NextNodeId;
@@ -301,7 +301,7 @@ public sealed class DecisionTreeExecutor
         }
     }
 
-    private async Task<(EnumAnswer? Answer, int Attempt, bool BudgetExhausted, string? LastRawContent)> AskQuestionAsync(
+    private async Task<(EnumAnswer? Answer, int Attempt, bool BudgetExhausted, string? LastRawContent)> RunClassificationAsync(
         string executionId,
         DecisionTreeModel tree,
         string nodeId,
@@ -418,7 +418,7 @@ public sealed class DecisionTreeExecutor
         _transcript.Value?.AppendDecisionAction(nodeId, actionName, result, producedData);
     }
 
-    private async Task EmitQuestionAnsweredAsync(
+    private async Task EmitClassificationCompletedAsync(
         string executionId,
         string nodeId,
         EnumAnswer answer,
@@ -426,7 +426,7 @@ public sealed class DecisionTreeExecutor
         CancellationToken cancellationToken)
     {
         var timestamp = DateTimeOffset.UtcNow;
-        var journalEvent = new DecisionQuestionAnsweredEvent(
+        var journalEvent = new DecisionClassificationCompletedEvent(
             executionId,
             nodeId,
             answer.Value,
@@ -438,7 +438,7 @@ public sealed class DecisionTreeExecutor
             timestamp);
         await PublishAsync(
             journalEvent,
-            new DecisionQuestionAnsweredBusEvent(
+            new DecisionClassificationCompletedBusEvent(
                 executionId,
                 nodeId,
                 answer.Value,
@@ -449,7 +449,7 @@ public sealed class DecisionTreeExecutor
                 _defaultOptions?.TraceId,
                 _defaultOptions?.CorrelationId),
             cancellationToken);
-        _transcript.Value?.AppendDecisionQuestion(
+        _transcript.Value?.AppendDecisionClassification(
             nodeId,
             answer.Value,
             answer.Observation,
@@ -498,9 +498,9 @@ public sealed class DecisionTreeExecutor
             DecisionActionCompletedEvent action => JsonSerializer.Serialize(
                 action,
                 AiClevernessJsonContext.Default.DecisionActionCompletedEvent),
-            DecisionQuestionAnsweredEvent question => JsonSerializer.Serialize(
-                question,
-                AiClevernessJsonContext.Default.DecisionQuestionAnsweredEvent),
+            DecisionClassificationCompletedEvent classification => JsonSerializer.Serialize(
+                classification,
+                AiClevernessJsonContext.Default.DecisionClassificationCompletedEvent),
             _ => null
         };
 

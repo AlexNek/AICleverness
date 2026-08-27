@@ -2,8 +2,8 @@ using AiCleverness.Models;
 
 namespace AiCleverness.Models.DecisionTree;
 
-/// <summary>Journal record emitted after a question answer is classified.</summary>
-public sealed record DecisionQuestionAnsweredEvent(
+/// <summary>Journal record emitted after a classification completes.</summary>
+public sealed record DecisionClassificationCompletedEvent(
     string ExecutionId,
     string NodeId,
     string Answer,
@@ -13,4 +13,4 @@ public sealed record DecisionQuestionAnsweredEvent(
     string? TraceId = null,
     string? CorrelationId = null,
     DateTimeOffset? TimestampOverride = null)
-    : ExecutionEvent("DecisionQuestionAnswered", TimestampOverride ?? DateTimeOffset.UtcNow, ExecutionId, TraceId, CorrelationId);
+    : ExecutionEvent("DecisionClassificationCompleted", TimestampOverride ?? DateTimeOffset.UtcNow, ExecutionId, TraceId, CorrelationId);

@@ -1,6 +1,6 @@
 # Decision Trees
 
-A decision tree is a declarative workflow for bounded classification and branching. The tree definition contains action, question, condition, and terminal nodes. The library executes the workflow; your application supplies the LLM client, domain actions, and any domain-specific predicates.
+A decision tree is a declarative workflow for bounded classification and branching. The tree definition contains action, classify, condition, and terminal nodes. The library executes the workflow; your application supplies the LLM client, domain actions, and any domain-specific predicates.
 
 Decision-tree APIs are in these namespaces:
 
@@ -16,11 +16,11 @@ The executor follows this sequence:
 1. Load and validate the tree.
 2. Create fresh state, data, resource usage, and conversation state for the run.
 3. Visit the start node.
-4. Execute actions, ask bounded questions, or evaluate predicates.
+4. Execute actions, run bounded classifications, or evaluate predicates.
 5. Follow the transition matching the node outcome.
 6. Stop at a terminal node, an explicit `unknown`, cancellation, validation failure, or a resource budget limit.
 
-A question response must be JSON with an allowed answer:
+A classification response must be JSON with an allowed answer:
 
 ```json
 {
@@ -30,7 +30,7 @@ A question response must be JSON with an allowed answer:
 }
 ```
 
-The parser accepts answer values case-insensitively and records the declared answer value. Malformed JSON or an answer outside the allowed list is retried once. A second invalid response follows the question's `unknown` transition.
+The parser accepts answer values case-insensitively and records the declared answer value. Malformed JSON or an answer outside the allowed list is retried once. A second invalid response follows the classify node's `unknown` transition.
 
 ## Register the runtime with DI
 
@@ -60,7 +60,7 @@ services.AddDecisionAction<CollectEvidenceAction>();
 using var provider = services.BuildServiceProvider();
 ```
 
-`AddDecisionTreeExecution()` registers the default `ILlmCompletionPipeline`, a transient default conversation manager, the loader, parser, default question context builder, in-memory journal, in-memory event publisher, and built-in predicates. `AddAiClevernessLlmClient<T>()` remains the provider-neutral LLM adapter used by the default decision completion pipeline.
+`AddDecisionTreeExecution()` registers the default `ILlmCompletionPipeline`, a transient default conversation manager, the loader, parser, default classify context builder, in-memory journal, in-memory event publisher, and built-in predicates. `AddAiClevernessLlmClient<T>()` remains the provider-neutral LLM adapter used by the default decision completion pipeline.
 
 Application actions and predicates are registered as singleton catalog entries. Keep their own mutable state out of fields; execution-specific state is passed through their context.
 
@@ -68,7 +68,7 @@ Application actions and predicates are registered as singleton catalog entries. 
 
 The loader uses source-generated `System.Text.Json` metadata. A valid tree has a non-empty `treeId`, a positive `version`, a `startNodeId`, and a non-empty `nodes` dictionary. The dictionary key is the canonical node ID.
 
-This example collects evidence, asks a bounded question, checks the evidence with a built-in predicate, and returns a verdict:
+This example collects evidence, runs a bounded classification, checks the evidence with a built-in predicate, and returns a verdict:
 
 ```json
 {
@@ -94,8 +94,8 @@ This example collects evidence, asks a bounded question, checks the evidence wit
       ]
     },
     "classify": {
-      "type": "question",
-      "question": "Is this evidence relevant to the requested capability?",
+      "type": "classify",
+      "task": "Is this evidence relevant to the requested capability?",
       "answers": ["supported", "unsupported"],
       "transitions": [
         { "condition": "supported", "nextNodeId": "verify" },
@@ -139,7 +139,7 @@ Required transitions are exact and case-sensitive in the tree definition:
 | Node type | Required transition conditions |
 | --- | --- |
 | `action` | `success`, `transientFailure`, `permanentFailure` |
-| `question` | Every value in `answers`, plus `unknown` |
+| `classify` | Every value in `answers`, plus `unknown` |
 | `condition` | `true`, `false` |
 | `terminal` | No transitions |
 
@@ -294,13 +294,13 @@ Prefer setting explicit budgets in each JSON tree when different workflows need 
 
 ## Journal, event bus, and graphs
 
-Each node visit, action completion, and question answer produces a journal event and a separate bus event. The journal operation happens before bus publication. Observability failures are best effort and do not change the tree result.
+Each node visit, action completion, and classification completion produces a journal event and a separate bus event. The journal operation happens before bus publication. Observability failures are best effort and do not change the tree result.
 
 The journal records are:
 
 - `DecisionNodeVisitedEvent`
 - `DecisionActionCompletedEvent`
-- `DecisionQuestionAnsweredEvent`
+- `DecisionClassificationCompletedEvent`
 
 The corresponding bus records have `BusEvent` suffixes. All records preserve the execution ID, timestamp, trace ID, and correlation ID.
 
@@ -356,7 +356,7 @@ services.AddDecisionTreeExecution(options =>
 });
 ```
 
-Decision transcripts contain node visits, action completions, question classifications, the final decision outcome, and resource usage. Transcript writes are best effort and do not change the decision result. The public `DecisionTreeResult` does not expose a transcript path; applications can inspect the configured directory or consume the public journal/event records.
+Decision transcripts contain node visits, action completions, classification results, the final decision outcome, and resource usage. Transcript writes are best effort and do not change the decision result. The public `DecisionTreeResult` does not expose a transcript path; applications can inspect the configured directory or consume the public journal/event records.
 
 The demo enables these settings with the existing switches:
 
