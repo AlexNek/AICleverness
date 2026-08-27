@@ -66,6 +66,40 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_EmitsClassificationJournalAndBusContracts()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
+        var journal = new InMemoryExecutionJournal();
+        var publisher = new RecordingExecutionEventPublisher();
+        var executor = CreateExecutor(pipeline, journal: journal, publisher: publisher);
+
+        var result = await executor.ExecuteAsync(CreateTree());
+
+        var entries = await journal.ReadAllAsync(result.ExecutionId);
+        var journalEntry = entries.Should()
+            .ContainSingle(entry => entry.EventType == "DecisionClassificationCompleted")
+            .Which;
+        journalEntry.SerializedPayload.Should().NotBeNull();
+        using var payload = JsonDocument.Parse(journalEntry.SerializedPayload!);
+        payload.RootElement.GetProperty("answer").GetString().Should().Be("supported");
+        payload.RootElement.GetProperty("observation").GetString().Should().Be("evidence");
+        payload.RootElement.GetProperty("confidence").GetString().Should().Be("high");
+        payload.RootElement.GetProperty("attempt").GetInt32().Should().Be(1);
+
+        var busEvent = publisher.Events
+            .OfType<DecisionClassificationCompletedBusEvent>()
+            .Should()
+            .ContainSingle()
+            .Which;
+        busEvent.EventType.Should().Be("DecisionClassificationCompleted");
+        busEvent.Answer.Should().Be("supported");
+        busEvent.Observation.Should().Be("evidence");
+        busEvent.Confidence.Should().Be("high");
+        busEvent.Attempt.Should().Be(1);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_RecordsUnknownAfterTheSecondInvalidAnswer()
     {
         var pipeline = new DecisionTreeCompletionPipeline()

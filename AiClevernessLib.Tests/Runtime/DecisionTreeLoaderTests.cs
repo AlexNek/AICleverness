@@ -34,6 +34,48 @@ public sealed class DecisionTreeLoaderTests
     }
 
     [Fact]
+    public void Load_DeserializesTheDocumentedClassifyShape()
+    {
+        var loader = new DecisionTreeLoader();
+        const string json = """
+        {
+          "treeId": "classify",
+          "version": 1,
+          "startNodeId": "classify",
+          "budget": { "maxNodeVisits": 3, "maxLlmCalls": 1, "maxElapsedTime": "00:00:10", "maxContextTokens": 100 },
+          "nodes": {
+            "classify": {
+              "type": "classify",
+              "task": "Is the request supported?",
+              "answers": ["supported"],
+              "transitions": [
+                { "condition": "supported", "nextNodeId": "done" },
+                { "condition": "unknown", "nextNodeId": "unknown" }
+              ]
+            },
+            "done": {
+              "type": "terminal",
+              "verdict": "approved",
+              "transitions": []
+            },
+            "unknown": {
+              "type": "terminal",
+              "verdict": "unknown",
+              "transitions": []
+            }
+          }
+        }
+        """;
+
+        var tree = loader.Load(json);
+
+        tree.Nodes["classify"].Type.Should().Be(EDecisionNodeType.Classify);
+        tree.Nodes["classify"].Task.Should().Be("Is the request supported?");
+        tree.Nodes["classify"].Answers.Should().Equal("supported");
+        tree.Nodes["classify"].Transitions.Should().HaveCount(2);
+    }
+
+    [Fact]
     public void Load_RejectsUnreachableNodes()
     {
         var loader = new DecisionTreeLoader();
