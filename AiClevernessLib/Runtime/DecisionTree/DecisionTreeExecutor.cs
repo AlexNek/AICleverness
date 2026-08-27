@@ -15,6 +15,7 @@ public sealed class DecisionTreeExecutor
 {
     private readonly IReadOnlyDictionary<string, IDecisionAction> _actions;
     private readonly IReadOnlyDictionary<string, IDecisionPredicate> _predicates;
+    private readonly IDecisionDataPolicy _decisionDataPolicy;
     private readonly IDecisionLlmContextBuilder _contextBuilder;
     private readonly ILlmCompletionPipeline _completionPipeline;
     private readonly IConversationManager _conversationManager;
@@ -36,7 +37,8 @@ public sealed class DecisionTreeExecutor
         IDecisionLlmContextBuilder contextBuilder,
         IDecisionTreeLoader treeLoader,
         DecisionTreeExecutionOptions? defaultOptions = null,
-        IConversationManagerFactory? conversationManagerFactory = null)
+        IConversationManagerFactory? conversationManagerFactory = null,
+        IDecisionDataPolicy? decisionDataPolicy = null)
     {
         _completionPipeline = completionPipeline ?? throw new ArgumentNullException(nameof(completionPipeline));
         _conversationManager = conversationManager ?? throw new ArgumentNullException(nameof(conversationManager));
@@ -46,6 +48,10 @@ public sealed class DecisionTreeExecutor
         _treeLoader = treeLoader ?? throw new ArgumentNullException(nameof(treeLoader));
         _conversationManagerFactory = conversationManagerFactory;
         _defaultOptions = defaultOptions;
+        _defaultOptions?.DecisionDataPolicy.Validate();
+        _defaultOptions?.DecisionTranscriptPolicy.Validate();
+        _decisionDataPolicy = decisionDataPolicy
+            ?? new DefaultDecisionDataPolicy(_defaultOptions?.DecisionDataPolicy);
         _answerParser = new EnumAnswerParser();
         _actions = BuildCatalog(actions);
         _predicates = BuildCatalog(predicates);
@@ -326,7 +332,11 @@ public sealed class DecisionTreeExecutor
                 && await LimitReachedAsync(budget.MaxLlmCalls, state.ResourceUsage.LlmCalls, budget.OnExceeded, cancellationToken))
                 return (null, attempt, true, lastRawContent, null);
             cancellationToken.ThrowIfCancellationRequested();
-            var built = _contextBuilder.Build(tree, node, state, data, parameters);
+            var selectedData = _decisionDataPolicy.Select(
+                data.GetAll(),
+                new DecisionDataSelectionContext(tree, node, state, parameters));
+            var boundedData = new DecisionDataSnapshot(selectedData.Items);
+            var built = _contextBuilder.Build(tree, node, state, boundedData, parameters);
             var requiredUserMessages = built
                 .Where(message => string.Equals(message.Role, "user", StringComparison.Ordinal))
                 .ToArray();
@@ -551,7 +561,12 @@ public sealed class DecisionTreeExecutor
         {
             TranscriptRedactor = _defaultOptions.TranscriptRedactor
         };
-        return TranscriptContext.Create(request, executionId, runtimeOptions, logger: null);
+        return TranscriptContext.Create(
+            request,
+            executionId,
+            runtimeOptions,
+            logger: null,
+            decisionTranscriptPolicy: _defaultOptions.DecisionTranscriptPolicy);
     }
 
     private IConversationManager CreateConversationManager()

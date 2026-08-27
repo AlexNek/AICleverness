@@ -282,7 +282,8 @@ internal sealed class MarkdownTranscriptBuilder
         string? verdict,
         string? error,
         ResourceUsage usage,
-        IReadOnlyList<string> path)
+        IReadOnlyList<string> path,
+        int omittedSectionCount = 0)
     {
         var builder = new StringBuilder();
         builder.AppendLine("## Decision result");
@@ -298,6 +299,11 @@ internal sealed class MarkdownTranscriptBuilder
         builder.AppendLine();
         for (var index = 0; index < path.Count; index++)
             builder.AppendLine($"{index + 1}. {path[index]}");
+        if (omittedSectionCount > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine($"**Decision transcript sections omitted:** `{omittedSectionCount}`");
+        }
         builder.AppendLine();
 
         builder.AppendLine("### Decision budget");

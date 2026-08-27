@@ -358,6 +358,9 @@ public static class AiClevernessServiceCollectionExtensions
         services.TryAddSingleton<ILlmCompletionPipeline, DefaultLlmCompletionPipeline>();
         services.TryAddTransient<IConversationManager, DefaultConversationManager>();
         services.TryAddTransient<IConversationManagerFactory, DefaultConversationManagerFactory>();
+        services.TryAddSingleton<IDecisionDataPolicy>(sp =>
+            new DefaultDecisionDataPolicy(
+                sp.GetRequiredService<DecisionTreeExecutionOptions>().DecisionDataPolicy));
         services.TryAddSingleton<IDecisionLlmContextBuilder, DefaultDecisionLlmContextBuilder>();
         services.TryAddSingleton<EnumAnswerParser>();
         services.TryAddSingleton<IDecisionTreeLoader, DecisionTreeLoader>();

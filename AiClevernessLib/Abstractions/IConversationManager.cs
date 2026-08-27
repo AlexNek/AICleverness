@@ -28,7 +28,9 @@ public interface IConversationManager
 
     /// <summary>
     /// Gets messages prepared for an LLM call, applying truncation or summarization
-    /// as needed to fit within the given token budget.
+    /// as needed to fit within the given token budget. Decision classification builders
+    /// depend on object identity for required user messages; custom managers must return
+    /// the same message instances when those messages are retained.
     /// </summary>
     Task<IReadOnlyList<LlmMessage>> GetMessagesForCompletionAsync(
         int maxTokens,

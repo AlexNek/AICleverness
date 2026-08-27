@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Bounded decision-tree classification context and transcript policies: metadata, content, aggregate representation, and display-field limits; separate truncation diagnostics; read-only builder snapshots; post-redaction transcript limits with deterministic omission markers; terminal-result preservation; eager configuration validation; and explicit bounded debug-transcript behavior.
+
 ### Changed
+- **Breaking:** `IDecisionLlmContextBuilder` now receives a read-only `DecisionDataSnapshot` instead of the mutable execution `DataStore`; stable evidence identifiers remain available while bounded display values are provided for prompt rendering.
 - **Breaking:** Renamed decision-tree question nodes to classify nodes across the public API, JSON contract, transcript builders, and journal/event-bus event strings; consumers must migrate `Question`/`question` names to `Classify`/`classify` and `Task`/`task`, and rename classification-completed event types.
 
 ### Fixed

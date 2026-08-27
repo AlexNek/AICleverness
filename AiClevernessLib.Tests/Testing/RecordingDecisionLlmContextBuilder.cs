@@ -1,19 +1,17 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Models.DecisionTree;
+using AiCleverness.Runtime.DecisionTree;
 
 using DecisionTreeModel = AiCleverness.Models.DecisionTree.DecisionTree;
 
 namespace AiClevernessLib.Tests.Testing;
 
-internal sealed class FixedDecisionLlmContextBuilder : IDecisionLlmContextBuilder
+internal sealed class RecordingDecisionLlmContextBuilder : IDecisionLlmContextBuilder
 {
-    private readonly IReadOnlyList<LlmMessage> _messages;
+    private readonly DefaultDecisionLlmContextBuilder _inner = new();
 
-    public FixedDecisionLlmContextBuilder(IReadOnlyList<LlmMessage> messages)
-    {
-        _messages = messages;
-    }
+    public DecisionDataSnapshot? Data { get; private set; }
 
     public IReadOnlyList<LlmMessage> Build(
         DecisionTreeModel tree,
@@ -21,5 +19,8 @@ internal sealed class FixedDecisionLlmContextBuilder : IDecisionLlmContextBuilde
         DecisionState state,
         DecisionDataSnapshot data,
         IReadOnlyDictionary<string, string> templateParameters)
-        => _messages;
+    {
+        Data = data;
+        return _inner.Build(tree, classifyNode, state, data, templateParameters);
+    }
 }
