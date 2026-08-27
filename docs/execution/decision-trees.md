@@ -52,6 +52,9 @@ services.AddDecisionTreeExecution(options =>
     options.DefaultMaxLlmCalls = 10;
     options.DefaultMaxElapsedTime = TimeSpan.FromSeconds(120);
     options.DefaultMaxContextTokens = 4000;
+    options.EnableModelFailover = true;
+    options.Model = "primary-model";
+    options.ModelFallbackChain = ["fallback-model"];
 });
 
 // Add application extensions before building the provider.
@@ -59,6 +62,10 @@ services.AddDecisionAction<CollectEvidenceAction>();
 
 using var provider = services.BuildServiceProvider();
 ```
+
+When decision-tree model failover is enabled, `Model` is the explicit primary model for the first request and `ModelFallbackChain` is an ordered fallback-only list; do not include the primary in that list. The selected model and remaining fallback candidates are preserved across all classification nodes in one tree execution. Only failures recognized by the shared LLM error classifier (such as completion timeouts, HTTP 5xx, HTTP 429, and recognized rate-limit signals) advance to the next candidate. Disabled or incomplete failover configuration preserves the no-context completion behavior.
+
+Custom `ILlmCompletionPipeline` implementations remain source-compatible through the default context overload, but must override that overload to consume execution services and apply model failover. A custom implementation that uses only the legacy overload intentionally receives no execution context or shared failover policy.
 
 `AddDecisionTreeExecution()` registers the default `ILlmCompletionPipeline`, a transient default conversation manager, the loader, parser, default classify context builder, in-memory journal, in-memory event publisher, and built-in predicates. `AddAiClevernessLlmClient<T>()` remains the provider-neutral LLM adapter used by the default decision completion pipeline.
 
@@ -369,6 +376,6 @@ The demo prints the Feature 08 transcript path after scenario 8. Files are writt
 
 ## Current integration boundaries
 
-Decision-tree execution uses the registered `ILlmCompletionPipeline` boundary and the existing journal, event-publisher, resource, graph, and Markdown transcript concepts. The default decision pipeline calls the registered `ILlmClient`; existing agent tool-loop failover remains a separate runtime path in the current implementation.
+Decision-tree execution and the ordinary agent tool loop use the same registered `ILlmCompletionPipeline` boundary and shared model-failover handler. Their orchestration flows remain separate, but completion policy, transient-failure classification, fallback advancement, and model-switch notifications are centralized in the shared runtime.
 
 Decision events are available through the public journal and event-bus contracts. Decision transcript output is provided through the opt-in `DecisionTreeExecutionOptions` settings described above; the executor still does not expose the internal transcript sink or context.

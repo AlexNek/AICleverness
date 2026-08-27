@@ -79,6 +79,7 @@ public sealed class DecisionTreeExecutor
                 OnExceeded = budget.OnExceeded
             };
             var conversation = CreateConversationManager();
+            var completionContext = DecisionTreeCompletionContextFactory.Create(_defaultOptions);
             var currentNodeId = tree.StartNodeId;
             var actionFailed = false;
             var unknown = false;
@@ -172,6 +173,7 @@ public sealed class DecisionTreeExecutor
                             budget,
                             limits,
                             stopwatch,
+                            completionContext,
                             cancellationToken);
                         if (classification.BudgetExhausted)
                             return CreateResult(executionId, state, DecisionTreeOutcome.BudgetExhausted, null, "Decision resource budget exhausted.");
@@ -313,6 +315,7 @@ public sealed class DecisionTreeExecutor
         DecisionBudget budget,
         ResourceLimits limits,
         Stopwatch stopwatch,
+        LlmCompletionExecutionContext? completionContext,
         CancellationToken cancellationToken)
     {
         string? lastRawContent = null;
@@ -327,13 +330,20 @@ public sealed class DecisionTreeExecutor
             var messages = await conversation.GetMessagesForCompletionAsync(
                 budget.MaxContextTokens,
                 cancellationToken);
-            var response = await _completionPipeline.CompleteAsync(
-                new LlmCompletionRequest(
-                    executionId,
-                    messages,
-                    new LlmCompletionOptions(0.1f, null, null),
-                    attempt),
-                cancellationToken);
+            var request = new LlmCompletionRequest(
+                executionId,
+                messages,
+                new LlmCompletionOptions(
+                    0.1f,
+                    null,
+                    completionContext is null
+                        ? null
+                        : completionContext.AgentContext?.GetProperty<string>(AgentPropertyKeys.Model)
+                            ?? _defaultOptions!.Model),
+                attempt);
+            var response = completionContext is null
+                ? await _completionPipeline.CompleteAsync(request, cancellationToken)
+                : await _completionPipeline.CompleteAsync(request, completionContext, cancellationToken);
             _transcript.Value?.AppendDecisionLlmAttempt(nodeId, attempt, messages, response);
             var usage = response.Usage;
             state.ResourceUsage.RecordLlmUsage(usage?.PromptTokens ?? 0, usage?.CompletionTokens ?? 0);

@@ -1,5 +1,8 @@
+using System.Net;
+using System.Net.Http;
 using System.Text.Json;
 using AiCleverness.Abstractions;
+using AiCleverness.Models;
 using AiCleverness.Models.DecisionTree;
 using AiCleverness.Runtime;
 using AiCleverness.Runtime.Conversation;
@@ -63,6 +66,205 @@ public sealed class DecisionTreeExecutorTests
         result.Classifications.Should().ContainSingle().Which.Answer.Should().Be("yes");
         result.Usage.LlmCalls.Should().Be(2);
         pipeline.CallCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UsesNoContextOverloadAndNullModelByDefault()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
+        var executor = CreateExecutor(pipeline);
+
+        await executor.ExecuteAsync(CreateTree());
+
+        pipeline.NoContextCallCount.Should().Be(1);
+        pipeline.ContextCallCount.Should().Be(0);
+        pipeline.Requests.Should().ContainSingle().Which.Options!.Model.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PassesConfiguredPrimaryAndFallbackContext()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
+        var options = new DecisionTreeExecutionOptions
+        {
+            EnableModelFailover = true,
+            Model = "primary",
+            ModelFallbackChain = ["fallback"]
+        };
+        var executor = CreateExecutor(pipeline, defaultOptions: options);
+
+        await executor.ExecuteAsync(CreateTree());
+
+        pipeline.NoContextCallCount.Should().Be(0);
+        pipeline.ContextCallCount.Should().Be(1);
+        pipeline.Requests.Should().ContainSingle().Which.Options!.Model.Should().Be("primary");
+        var context = pipeline.Contexts.Should().ContainSingle().Subject;
+        context.AgentContext.Should().NotBeNull();
+        context.AgentContext!.AgentName.Should().Be("decision-tree");
+        context.AgentContext.Goal.Should().Be("Decision tree LLM");
+        context.AgentContext.State.Status.Should().Be("Running");
+        context.AgentContext.GetProperty<bool>(AgentPropertyKeys.EnableModelFailover).Should().BeTrue();
+        context.AgentContext.GetProperty<string>(AgentPropertyKeys.Model).Should().Be("primary");
+        context.AgentContext.GetProperty<IReadOnlyList<string>>(AgentPropertyKeys.ModelFallbackChain)
+            .Should().Equal("fallback");
+        context.RuntimeOptions!.EnableModelFailover.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DoesNotCreateContextWithoutCompleteFailoverConfiguration()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}")
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
+        var executor = CreateExecutor(
+            pipeline,
+            defaultOptions: new DecisionTreeExecutionOptions
+            {
+                EnableModelFailover = true,
+                Model = "primary",
+                ModelFallbackChain = []
+            });
+
+        await executor.ExecuteAsync(CreateTree());
+
+        pipeline.NoContextCallCount.Should().Be(1);
+        pipeline.ContextCallCount.Should().Be(0);
+        pipeline.Requests.Should().ContainSingle().Which.Options!.Model.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DoesNotCreateContextWhenPrimaryModelIsMissing()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
+        var executor = CreateExecutor(
+            pipeline,
+            defaultOptions: new DecisionTreeExecutionOptions
+            {
+                EnableModelFailover = true,
+                ModelFallbackChain = ["fallback"]
+            });
+
+        await executor.ExecuteAsync(CreateTree());
+
+        pipeline.NoContextCallCount.Should().Be(1);
+        pipeline.ContextCallCount.Should().Be(0);
+        pipeline.Requests.Should().ContainSingle().Which.Options!.Model.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ReusesCompletionContextAcrossClassificationNodes()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"loop\",\"observation\":\"cycle\",\"confidence\":\"high\"}")
+            .Enqueue("{\"answer\":\"loop\",\"observation\":\"cycle\",\"confidence\":\"high\"}")
+            .Enqueue("{\"answer\":\"loop\",\"observation\":\"cycle\",\"confidence\":\"high\"}");
+        var executor = CreateExecutor(
+            pipeline,
+            defaultOptions: new DecisionTreeExecutionOptions
+            {
+                EnableModelFailover = true,
+                Model = "primary",
+                ModelFallbackChain = ["fallback"]
+            });
+
+        await executor.ExecuteAsync(CreateClassificationCycleTree(new DecisionBudget
+        {
+            MaxNodeVisits = 3,
+            MaxLlmCalls = 3,
+            MaxElapsedTime = TimeSpan.FromSeconds(10),
+            MaxContextTokens = 100
+        }));
+
+        pipeline.Contexts.Should().HaveCount(3);
+        pipeline.Contexts.Should().OnlyContain(context => ReferenceEquals(context, pipeline.Contexts[0]));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DefaultPipelineFailsOverOnTransientProviderFailure()
+    {
+        var client = new DecisionTreeFailoverLlmClient(
+            _ => Task.FromException<LlmResponse>(
+                new HttpRequestException("HTTP 503 service unavailable", null, HttpStatusCode.ServiceUnavailable)),
+            _ => Task.FromResult(new LlmResponse(
+                "{\"answer\":\"supported\",\"observation\":\"fallback\",\"confidence\":\"high\"}")));
+        var executor = CreateExecutor(
+            new DefaultLlmCompletionPipeline(client),
+            defaultOptions: new DecisionTreeExecutionOptions
+            {
+                EnableModelFailover = true,
+                Model = "primary",
+                ModelFallbackChain = ["fallback"]
+            });
+
+        var result = await executor.ExecuteAsync(CreateTree());
+
+        result.Succeeded.Should().BeTrue();
+        client.RequestedModels.Should().Equal("primary", "fallback");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PreservesFailoverStateAcrossClassificationNodes()
+    {
+        var client = new DecisionTreeFailoverLlmClient(
+            _ => Task.FromException<LlmResponse>(
+                new HttpRequestException("HTTP 503 service unavailable", null, HttpStatusCode.ServiceUnavailable)),
+            _ => Task.FromResult(new LlmResponse(
+                "{\"answer\":\"loop\",\"observation\":\"fallback\",\"confidence\":\"high\"}")),
+            _ => Task.FromException<LlmResponse>(
+                new HttpRequestException("HTTP 503 service unavailable", null, HttpStatusCode.ServiceUnavailable)),
+            _ => Task.FromResult(new LlmResponse(
+                "{\"answer\":\"loop\",\"observation\":\"fallback\",\"confidence\":\"high\"}")),
+            _ => Task.FromException<LlmResponse>(
+                new HttpRequestException("HTTP 503 service unavailable", null, HttpStatusCode.ServiceUnavailable)));
+        var executor = CreateExecutor(
+            new DefaultLlmCompletionPipeline(client),
+            defaultOptions: new DecisionTreeExecutionOptions
+            {
+                EnableModelFailover = true,
+                Model = "primary",
+                ModelFallbackChain = ["fallback-1", "fallback-2"]
+            });
+
+        var result = await executor.ExecuteAsync(CreateClassificationChainTree(new DecisionBudget
+        {
+            MaxNodeVisits = 4,
+            MaxLlmCalls = 5,
+            MaxElapsedTime = TimeSpan.FromSeconds(10),
+            MaxContextTokens = 100
+        }));
+
+        result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
+        client.RequestedModels.Should().Equal(
+            "primary",
+            "fallback-1",
+            "fallback-1",
+            "fallback-2",
+            "fallback-2");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DefaultPipelineDoesNotFailOverOnPermanentProviderFailure()
+    {
+        var client = new DecisionTreeFailoverLlmClient(
+            _ => Task.FromException<LlmResponse>(new InvalidOperationException("model not found")),
+            _ => Task.FromResult(new LlmResponse(
+                "{\"answer\":\"supported\",\"observation\":\"fallback\",\"confidence\":\"high\"}")));
+        var executor = CreateExecutor(
+            new DefaultLlmCompletionPipeline(client),
+            defaultOptions: new DecisionTreeExecutionOptions
+            {
+                EnableModelFailover = true,
+                Model = "primary",
+                ModelFallbackChain = ["fallback"]
+            });
+
+        var result = await executor.ExecuteAsync(CreateTree());
+
+        result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
+        client.RequestedModels.Should().ContainSingle().Which.Should().Be("primary");
     }
 
     [Fact]
@@ -681,6 +883,35 @@ public sealed class DecisionTreeExecutorTests
                 ["done"] = Terminal("done"),
                 ["failed"] = Terminal("failed")
             }
+        };
+
+    private static DecisionTreeModel CreateClassificationChainTree(DecisionBudget budget)
+        => new()
+        {
+            TreeId = "classification-chain",
+            Version = 1,
+            StartNodeId = "classify-1",
+            Budget = budget,
+            Nodes = new Dictionary<string, DecisionNode>
+            {
+                ["classify-1"] = ClassificationNode("classify-2"),
+                ["classify-2"] = ClassificationNode("classify-3"),
+                ["classify-3"] = ClassificationNode("done"),
+                ["done"] = Terminal("done")
+            }
+        };
+
+    private static DecisionNode ClassificationNode(string nextNodeId)
+        => new()
+        {
+            Type = EDecisionNodeType.Classify,
+            Task = "Should this classification continue?",
+            Answers = ["loop"],
+            Transitions =
+            [
+                new() { Condition = "loop", NextNodeId = nextNodeId },
+                new() { Condition = "unknown", NextNodeId = "done" }
+            ]
         };
 
     private static DecisionTreeModel CreateClassificationCycleTree(DecisionBudget budget)

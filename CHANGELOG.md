@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** Renamed decision-tree question nodes to classify nodes across the public API, JSON contract, transcript builders, and journal/event-bus event strings; consumers must migrate `Question`/`question` names to `Classify`/`classify` and `Task`/`task`, and rename classification-completed event types.
 
 ### Fixed
+- Decision-tree execution now supports configured model failover through `DecisionTreeExecutionOptions`, using an explicit primary model and ordered fallback-only chain for classifier-recognized transient failures; the active model and remaining candidates persist across classification nodes within one execution.
 - Decision-tree classification answers now accept valid JSON wrapped in language-tagged or bare Markdown code fences while preserving bounded-answer validation.
 
 ## [1.5.0] - 2026-08-26
