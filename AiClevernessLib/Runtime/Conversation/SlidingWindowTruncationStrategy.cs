@@ -54,16 +54,5 @@ public sealed class SlidingWindowTruncationStrategy : ITruncationStrategy
     }
 
     private static int EstimateChars(LlmMessage message)
-    {
-        var chars = (message.Content?.Length ?? 0) + message.Role.Length + 4; // overhead
-        if (message.ToolCalls is { Count: > 0 })
-        {
-            foreach (var tc in message.ToolCalls)
-            {
-                chars += tc.Name.Length + (tc.Arguments?.Length ?? 0) + 10;
-            }
-        }
-
-        return chars;
-    }
+        => LlmMessageSizeEstimator.EstimateChars(message);
 }

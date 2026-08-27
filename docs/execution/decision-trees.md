@@ -278,6 +278,8 @@ A tree's `DecisionBudget` maps to the existing `ResourceLimits` and `ResourceUsa
 | `MaxContextTokens` | Maximum context passed to conversation preparation; not a cumulative token limit |
 | `OnExceeded` | `Halt`, `Warn`, or `Throttle` behavior |
 
+`MaxContextTokens` is a preparation budget, not a guarantee that every classification prompt will be truncated successfully. The default classify context builder renders all execution data into one user message. If conversation preparation removes any user message produced for the current classification, the executor does not call the provider; it records an `Unknown` classification with an actionable context-budget error and follows the classify node's `unknown` transition. Applications that need bounded or selective evidence should provide a custom `IDecisionLlmContextBuilder`.
+
 `Halt` returns `DecisionTreeOutcome.BudgetExhausted`. `Warn` continues, and `Throttle` inserts a short delay before continuing. The executor checks cancellation and limits before externally observable work and after recording node visits or LLM usage.
 
 Configure defaults for trees that retain the library's default budget values:

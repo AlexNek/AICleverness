@@ -327,14 +327,16 @@ public sealed class DecisionTreeExecutor
                 return (null, attempt, true, lastRawContent, null);
             cancellationToken.ThrowIfCancellationRequested();
             var built = _contextBuilder.Build(tree, node, state, data, parameters);
-            var requiredUserMessage = built.LastOrDefault(message =>
-                string.Equals(message.Role, "user", StringComparison.Ordinal));
+            var requiredUserMessages = built
+                .Where(message => string.Equals(message.Role, "user", StringComparison.Ordinal))
+                .ToArray();
             conversation.AddMessages(built);
             var messages = await conversation.GetMessagesForCompletionAsync(
                 budget.MaxContextTokens,
                 cancellationToken);
-            if (requiredUserMessage is null
-                || !messages.Any(message => ReferenceEquals(message, requiredUserMessage)))
+            if (requiredUserMessages.Length == 0
+                || requiredUserMessages.Any(requiredMessage =>
+                    !messages.Any(message => ReferenceEquals(message, requiredMessage))))
             {
                 return (
                     null,

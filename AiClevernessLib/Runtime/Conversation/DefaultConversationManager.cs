@@ -22,18 +22,7 @@ public sealed class DefaultConversationManager : IConversationManager
     {
         get
         {
-            var totalChars = 0;
-            foreach (var msg in _messages)
-            {
-                totalChars += (msg.Content?.Length ?? 0) + msg.Role.Length + 4;
-                if (msg.ToolCalls is { Count: > 0 })
-                {
-                    foreach (var tc in msg.ToolCalls)
-                        totalChars += tc.Name.Length + (tc.Arguments?.Length ?? 0) + 10;
-                }
-            }
-
-            return totalChars / _charsPerToken;
+            return LlmMessageSizeEstimator.EstimateTokens(_messages, _charsPerToken);
         }
     }
 
