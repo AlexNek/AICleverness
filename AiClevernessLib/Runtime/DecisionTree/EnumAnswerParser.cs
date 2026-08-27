@@ -6,6 +6,11 @@ namespace AiCleverness.Runtime.DecisionTree;
 /// <summary>Parses the bounded JSON response used by question nodes.</summary>
 public sealed class EnumAnswerParser
 {
+    private const string CodeFenceMarker = "```";
+    private const char CodeFenceCharacter = '`';
+    private const char NewLineCharacter = '\n';
+    private const int MinimumCodeFenceLength = 3;
+
     public EnumAnswer? Parse(string? json, IReadOnlyList<string> allowedValues)
     {
         ArgumentNullException.ThrowIfNull(allowedValues);
@@ -44,22 +49,39 @@ public sealed class EnumAnswerParser
     private static string StripCodeFences(string content)
     {
         var trimmed = content.Trim();
-        if (!trimmed.StartsWith("```", StringComparison.Ordinal))
+        if (!trimmed.StartsWith(CodeFenceMarker, StringComparison.Ordinal))
             return trimmed;
 
-        var openingLineEnd = trimmed.IndexOf('\n');
-        var closingFenceStart = trimmed.LastIndexOf("```", StringComparison.Ordinal);
-        if (openingLineEnd < 0
+        var openingFenceLength = CountFenceLength(trimmed, 0);
+        var openingLineEnd = trimmed.IndexOf(NewLineCharacter);
+        var closingFenceStart = trimmed.Length;
+        while (closingFenceStart > 0 && trimmed[closingFenceStart - 1] == CodeFenceCharacter)
+            closingFenceStart--;
+
+        var closingFenceLength = trimmed.Length - closingFenceStart;
+        if (openingFenceLength < MinimumCodeFenceLength
+            || openingLineEnd < 0
             || closingFenceStart <= openingLineEnd
-            || closingFenceStart != trimmed.Length - 3
-            || trimmed[closingFenceStart - 1] != '\n')
+            || closingFenceStart == trimmed.Length
+            || trimmed[closingFenceStart - 1] != NewLineCharacter
+            || closingFenceLength < openingFenceLength)
             return trimmed;
 
         var bodyEnd = closingFenceStart;
-        if (bodyEnd > openingLineEnd + 1 && trimmed[bodyEnd - 1] == '\n')
+        if (bodyEnd > openingLineEnd + 1 && trimmed[bodyEnd - 1] == NewLineCharacter)
             bodyEnd--;
 
         return trimmed[(openingLineEnd + 1)..bodyEnd].Trim();
+    }
+
+    private static int CountFenceLength(string content, int startIndex)
+    {
+        var length = 0;
+        while (startIndex + length < content.Length
+            && content[startIndex + length] == CodeFenceCharacter)
+            length++;
+
+        return length;
     }
 
     private static string? ReadOptionalString(JsonElement root, string name)
