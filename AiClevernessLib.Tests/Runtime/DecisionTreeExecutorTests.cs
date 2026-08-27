@@ -127,6 +127,44 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ParsesCodeFencedJsonResponse()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("```json\n{\"answer\":\"yes\",\"observation\":\"found\",\"confidence\":\"high\"}\n```");
+        var executor = CreateExecutor(pipeline);
+        var tree = new DecisionTreeModel
+        {
+            TreeId = "code-fence",
+            Version = 1,
+            StartNodeId = "question",
+            Budget = new() { MaxNodeVisits = 4, MaxLlmCalls = 2, MaxElapsedTime = TimeSpan.FromSeconds(10), MaxContextTokens = 100 },
+            Nodes = new Dictionary<string, DecisionNode>
+            {
+                ["question"] = new()
+                {
+                    Type = EDecisionNodeType.Question,
+                    Question = "Is it yes?",
+                    Answers = ["yes"],
+                    Transitions =
+                    [
+                        new() { Condition = "yes", NextNodeId = "done" },
+                        new() { Condition = "unknown", NextNodeId = "unknown" }
+                    ]
+                },
+                ["done"] = Terminal("yes"),
+                ["unknown"] = Terminal("unknown")
+            }
+        };
+
+        var result = await executor.ExecuteAsync(tree);
+
+        result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
+        result.Verdict.Should().Be("yes");
+        result.Classifications.Should().ContainSingle().Which.Answer.Should().Be("yes");
+        pipeline.CallCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_EmitsNodeVisitWhenPredicateFails()
     {
         var predicate = new ThrowingDecisionPredicate();
