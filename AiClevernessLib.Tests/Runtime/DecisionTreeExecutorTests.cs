@@ -337,6 +337,36 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ReturnsActionableUnknownWhenRequiredClassificationInputIsTruncated()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"yes\",\"observation\":\"should-not-be-called\",\"confidence\":\"high\"}");
+        var executor = CreateExecutor(pipeline);
+        var tree = CreateTree() with
+        {
+            Budget = new()
+            {
+                MaxNodeVisits = 5,
+                MaxLlmCalls = 1,
+                MaxElapsedTime = TimeSpan.FromSeconds(10),
+                MaxContextTokens = 100
+            }
+        };
+        var parameters = new Dictionary<string, string>
+        {
+            ["evidence-content"] = new string('x', 2_000)
+        };
+
+        var result = await executor.ExecuteAsync(tree, parameters);
+
+        result.Outcome.Should().Be(DecisionTreeOutcome.Unknown);
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Contain("required user input was omitted");
+        result.Usage.LlmCalls.Should().Be(0);
+        pipeline.CallCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_HaltsWhenTheNodeVisitBudgetIsReached()
     {
         var executor = CreateExecutor();

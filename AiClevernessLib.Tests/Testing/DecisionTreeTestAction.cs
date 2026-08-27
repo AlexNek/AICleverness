@@ -11,13 +11,16 @@ internal sealed class DecisionTreeTestAction : IDecisionAction
         DecisionActionContext context,
         CancellationToken cancellationToken = default)
     {
+        var content = context.TemplateParameters.TryGetValue("evidence-content", out var configuredContent)
+            ? configuredContent
+            : "deterministic evidence";
         context.Data.Add(
             new DecisionData
             {
                 Id = "evidence-1",
                 Source = "test",
                 Type = "evidence",
-                Content = "deterministic evidence",
+                Content = content,
                 CreatedAt = DateTimeOffset.UtcNow,
                 ActionId = Name
             });
