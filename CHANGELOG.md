@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Decision-tree question answers now accept valid JSON wrapped in language-tagged or bare Markdown code fences while preserving bounded-answer validation.
+
 ## [1.5.0] - 2026-08-26
 
 ### Added

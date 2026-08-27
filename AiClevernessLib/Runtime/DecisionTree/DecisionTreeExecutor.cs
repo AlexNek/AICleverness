@@ -179,7 +179,11 @@ public sealed class DecisionTreeExecutor
                         if (answer is null)
                         {
                             unknown = true;
-                            executionError ??= "Question response could not be classified.";
+                            var rawSnippet = TruncateForDisplay(question.LastRawContent);
+                            var parseDetail = rawSnippet is not null
+                                ? $" Model returned: \"{rawSnippet}\""
+                                : string.Empty;
+                            executionError ??= $"Question response could not be classified.{parseDetail}";
                             var unknownAnswer = new EnumAnswer("unknown", executionError, null);
                             state.Classifications.Add(
                                 new DecisionClassification(
@@ -297,7 +301,7 @@ public sealed class DecisionTreeExecutor
         }
     }
 
-    private async Task<(EnumAnswer? Answer, int Attempt, bool BudgetExhausted)> AskQuestionAsync(
+    private async Task<(EnumAnswer? Answer, int Attempt, bool BudgetExhausted, string? LastRawContent)> AskQuestionAsync(
         string executionId,
         DecisionTreeModel tree,
         string nodeId,
@@ -311,11 +315,12 @@ public sealed class DecisionTreeExecutor
         Stopwatch stopwatch,
         CancellationToken cancellationToken)
     {
+        string? lastRawContent = null;
         for (var attempt = 1; attempt <= 2; attempt++)
         {
             if (attempt > 1 && state.ResourceUsage.LlmCalls >= budget.MaxLlmCalls
                 && await LimitReachedAsync(budget.MaxLlmCalls, state.ResourceUsage.LlmCalls, budget.OnExceeded, cancellationToken))
-                return (null, attempt, true);
+                return (null, attempt, true, lastRawContent);
             cancellationToken.ThrowIfCancellationRequested();
             var built = _contextBuilder.Build(tree, node, state, data, parameters);
             conversation.AddMessages(built);
@@ -334,15 +339,16 @@ public sealed class DecisionTreeExecutor
             state.ResourceUsage.RecordLlmUsage(usage?.PromptTokens ?? 0, usage?.CompletionTokens ?? 0);
             UpdateDuration(state.ResourceUsage, stopwatch);
             if (await LimitExceededAsync(state.ResourceUsage, limits, cancellationToken))
-                return (null, attempt, true);
+                return (null, attempt, true, response.Content);
             conversation.AddMessage(new LlmMessage("assistant", response.Content));
             var parsed = _answerParser.Parse(response.Content, node.Answers!);
             if (parsed is not null)
-                return (parsed, attempt, false);
+                return (parsed, attempt, false, null);
+            lastRawContent = response.Content;
             if (attempt == 1)
                 conversation.AddMessage(new LlmMessage("user", "Return valid JSON using exactly one allowed answer."));
         }
-        return (null, 2, false);
+        return (null, 2, false, lastRawContent);
     }
 
     private async Task EmitNodeVisitedAsync(
@@ -679,6 +685,16 @@ public sealed class DecisionTreeExecutor
                 throw new InvalidOperationException($"Decision catalog contains duplicate or empty name '{name}'.");
         }
         return catalog;
+    }
+
+    private static string? TruncateForDisplay(string? content, int maxLength = 120)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return null;
+        var trimmed = content.Trim();
+        if (trimmed.Length <= maxLength)
+            return trimmed;
+        return trimmed[..maxLength] + "...";
     }
 
 }
