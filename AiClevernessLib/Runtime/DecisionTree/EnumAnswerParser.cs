@@ -3,7 +3,7 @@ using AiCleverness.Models.DecisionTree;
 
 namespace AiCleverness.Runtime.DecisionTree;
 
-/// <summary>Parses the bounded JSON response used by question nodes.</summary>
+/// <summary>Parses the bounded JSON response used by classify nodes.</summary>
 public sealed class EnumAnswerParser
 {
     private const string CodeFenceMarker = "```";

@@ -5,12 +5,12 @@ using DecisionTreeModel = AiCleverness.Models.DecisionTree.DecisionTree;
 
 namespace AiCleverness.Abstractions;
 
-/// <summary>Builds provider-neutral messages for a question node.</summary>
+/// <summary>Builds provider-neutral messages for a classify node.</summary>
 public interface IDecisionLlmContextBuilder
 {
     IReadOnlyList<LlmMessage> Build(
         DecisionTreeModel tree,
-        DecisionNode questionNode,
+        DecisionNode classifyNode,
         DecisionState state,
         DataStore data,
         IReadOnlyDictionary<string, string> templateParameters);

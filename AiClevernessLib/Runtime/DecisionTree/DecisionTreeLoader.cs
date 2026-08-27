@@ -98,30 +98,32 @@ public sealed class DecisionTreeLoader : IDecisionTreeLoader
         switch (node.Type)
         {
             case EDecisionNodeType.Action:
-                RequireOnly(nodeId, node.Question, node.Answers, node.PredicateName, node.PredicateParameters, node.Verdict, "action");
+                RequireOnly(nodeId, node.Task, node.Answers, node.PredicateName, node.PredicateParameters, node.Verdict, "action");
                 RequireText(node.ActionName, $"Action node '{nodeId}' must specify actionName.");
                 RequireConditions(nodeId, transitions, ["success", "transientFailure", "permanentFailure"]);
                 if (!_actions.ContainsKey(node.ActionName!))
                     throw new InvalidOperationException($"Action '{node.ActionName}' is not registered.");
                 break;
-            case EDecisionNodeType.Question:
-                RequireOnly(nodeId, node.ActionName, null, node.PredicateName, node.PredicateParameters, node.Verdict, "question");
-                RequireText(node.Question, $"Question node '{nodeId}' must specify question.");
+            case EDecisionNodeType.Classify:
+                RequireOnly(nodeId, node.ActionName, null, node.PredicateName, node.PredicateParameters, node.Verdict, "classify");
+                RequireText(node.Task, $"Classify node '{nodeId}' must specify task.");
                 if (node.Answers is null || node.Answers.Count == 0 || node.Answers.Any(string.IsNullOrWhiteSpace))
-                    throw new InvalidOperationException($"Question node '{nodeId}' must specify non-empty answers.");
+                    throw new InvalidOperationException($"Classify node '{nodeId}' must specify non-empty answers.");
                 if (node.Answers.Distinct(StringComparer.Ordinal).Count() != node.Answers.Count)
-                    throw new InvalidOperationException($"Question node '{nodeId}' contains duplicate answers.");
+                    throw new InvalidOperationException($"Classify node '{nodeId}' contains duplicate answers.");
+                if (node.Answers.Contains("unknown", StringComparer.Ordinal))
+                    throw new InvalidOperationException($"Classify node '{nodeId}' cannot declare reserved answer 'unknown'.");
                 RequireConditions(nodeId, transitions, node.Answers.Append("unknown"));
                 break;
             case EDecisionNodeType.Condition:
-                RequireOnly(nodeId, node.ActionName, node.Answers, node.Question, null, node.Verdict, "condition");
+                RequireOnly(nodeId, node.ActionName, node.Answers, node.Task, null, node.Verdict, "condition");
                 RequireText(node.PredicateName, $"Condition node '{nodeId}' must specify predicateName.");
                 RequireConditions(nodeId, transitions, ["true", "false"]);
                 if (!_predicates.ContainsKey(node.PredicateName!))
                     throw new InvalidOperationException($"Predicate '{node.PredicateName}' is not registered.");
                 break;
             case EDecisionNodeType.Terminal:
-                RequireOnly(nodeId, node.ActionName, node.Answers, node.Question, node.PredicateName, node.PredicateParameters, "terminal");
+                RequireOnly(nodeId, node.ActionName, node.Answers, node.Task, node.PredicateName, node.PredicateParameters, "terminal");
                 RequireText(node.Verdict, $"Terminal node '{nodeId}' must specify verdict.");
                 if (transitions.Count != 0)
                     throw new InvalidOperationException($"Terminal node '{nodeId}' cannot have transitions.");

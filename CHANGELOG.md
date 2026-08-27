@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking:** Renamed decision-tree question nodes to classify nodes across the public API, JSON contract, transcript builders, and journal/event-bus event strings; consumers must migrate `Question`/`question` names to `Classify`/`classify` and `Task`/`task`, and rename classification-completed event types.
+
 ### Fixed
-- Decision-tree question answers now accept valid JSON wrapped in language-tagged or bare Markdown code fences while preserving bounded-answer validation.
+- Decision-tree classification answers now accept valid JSON wrapped in language-tagged or bare Markdown code fences while preserving bounded-answer validation.
 
 ## [1.5.0] - 2026-08-26
 
@@ -114,7 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Developer manual published as a documentation site via MkDocs Material and GitHub Pages
 - NuGet package ships a compact README with use cases and prominent links to the developer manual and the full repository README
 
-[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.5.0
 [1.4.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.4.0
 [1.3.3]: https://github.com/AlexNek/AICleverness/releases/tag/v1.3.3
 [1.3.2]: https://github.com/AlexNek/AICleverness/releases/tag/v1.3.2

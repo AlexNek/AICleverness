@@ -316,7 +316,7 @@ internal sealed class TranscriptContext
                 FormatProducedData(producedData)));
     }
 
-    public void AppendDecisionQuestion(
+    public void AppendDecisionClassification(
         string nodeId,
         string answer,
         string? observation,
@@ -327,7 +327,7 @@ internal sealed class TranscriptContext
             return;
 
         Append(
-            Builder.DecisionQuestion(
+            Builder.DecisionClassification(
                 RedactText(nodeId),
                 RedactText(answer),
                 observation is null ? null : RedactText(observation),

@@ -34,6 +34,79 @@ public sealed class DecisionTreeLoaderTests
     }
 
     [Fact]
+    public void Load_DeserializesTheDocumentedClassifyShape()
+    {
+        var loader = new DecisionTreeLoader();
+        const string json = """
+        {
+          "treeId": "classify",
+          "version": 1,
+          "startNodeId": "classify",
+          "budget": { "maxNodeVisits": 3, "maxLlmCalls": 1, "maxElapsedTime": "00:00:10", "maxContextTokens": 100 },
+          "nodes": {
+            "classify": {
+              "type": "classify",
+              "task": "Is the request supported?",
+              "answers": ["supported"],
+              "transitions": [
+                { "condition": "supported", "nextNodeId": "done" },
+                { "condition": "unknown", "nextNodeId": "unknown" }
+              ]
+            },
+            "done": {
+              "type": "terminal",
+              "verdict": "approved",
+              "transitions": []
+            },
+            "unknown": {
+              "type": "terminal",
+              "verdict": "unknown",
+              "transitions": []
+            }
+          }
+        }
+        """;
+
+        var tree = loader.Load(json);
+
+        tree.Nodes["classify"].Type.Should().Be(EDecisionNodeType.Classify);
+        tree.Nodes["classify"].Task.Should().Be("Is the request supported?");
+        tree.Nodes["classify"].Answers.Should().Equal("supported");
+        tree.Nodes["classify"].Transitions.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Validate_RejectsReservedUnknownClassifyAnswer()
+    {
+        var loader = new DecisionTreeLoader();
+        var tree = new DecisionTree
+        {
+            TreeId = "reserved-answer",
+            Version = 1,
+            StartNodeId = "classify",
+            Nodes = new Dictionary<string, DecisionNode>
+            {
+                ["classify"] = new()
+                {
+                    Type = EDecisionNodeType.Classify,
+                    Task = "Classify the request",
+                    Answers = ["unknown"],
+                    Transitions =
+                    [
+                        new() { Condition = "unknown", NextNodeId = "done" }
+                    ]
+                },
+                ["done"] = Terminal("done")
+            }
+        };
+
+        var act = () => loader.Validate(tree);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*reserved answer 'unknown'*");
+    }
+
+    [Fact]
     public void Load_RejectsUnreachableNodes()
     {
         var loader = new DecisionTreeLoader();
@@ -65,8 +138,8 @@ public sealed class DecisionTreeLoaderTests
             StartNodeId = "a",
             Nodes = new Dictionary<string, DecisionNode>
             {
-                ["a"] = Question("a", "b"),
-                ["b"] = Question("b", "a")
+                ["a"] = Classify("a", "b"),
+                ["b"] = Classify("b", "a")
             }
         };
 
@@ -78,11 +151,11 @@ public sealed class DecisionTreeLoaderTests
     private static DecisionNode Terminal(string verdict)
         => new() { Type = EDecisionNodeType.Terminal, Verdict = verdict };
 
-    private static DecisionNode Question(string answer, string next)
+    private static DecisionNode Classify(string answer, string next)
         => new()
         {
-            Type = EDecisionNodeType.Question,
-            Question = answer,
+            Type = EDecisionNodeType.Classify,
+            Task = answer,
             Answers = ["yes"],
             Transitions =
             [

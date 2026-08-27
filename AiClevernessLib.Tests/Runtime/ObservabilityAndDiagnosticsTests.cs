@@ -1,5 +1,6 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
+using AiCleverness.Models.DecisionTree;
 using AiCleverness.Runtime;
 
 using FluentAssertions;
@@ -498,6 +499,32 @@ public class ObservabilityAndDiagnosticsTests
         graph.Nodes[0].Type.Should().Be(ExecutionGraphNodeType.Start);
         graph.Nodes[^1].Type.Should().Be(ExecutionGraphNodeType.End);
         graph.Edges.Should().HaveCountGreaterThan(0);
+    }
+
+    [Fact]
+    public void ExecutionGraph_FromEvents_ProjectsClassificationCompletion()
+    {
+        var events = new ExecutionEvent[]
+        {
+            new DecisionClassificationCompletedEvent(
+                "exec-1",
+                "classify",
+                "supported",
+                "evidence",
+                "high",
+                1,
+                TimestampOverride: DateTimeOffset.UnixEpoch)
+        };
+
+        var graph = ExecutionGraph.FromEvents(
+            "exec-1",
+            ExecutionStatus.Completed,
+            TimeSpan.FromSeconds(1),
+            events);
+
+        graph.Nodes.Should().Contain(node =>
+            node.Type == ExecutionGraphNodeType.DecisionNode
+            && node.Label == "Decision classification: supported");
     }
 
     [Fact]

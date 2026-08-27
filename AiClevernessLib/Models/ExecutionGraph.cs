@@ -130,11 +130,11 @@ public sealed record ExecutionGraph
                             evt.Timestamp));
                     break;
 
-                case DecisionQuestionAnsweredEvent dqae:
+                case DecisionClassificationCompletedEvent dce:
                     nodes.Add(
                         new ExecutionGraphNode(
                             nodeId,
-                            $"Decision answer: {dqae.Answer}",
+                            $"Decision classification: {dce.Answer}",
                             ExecutionGraphNodeType.DecisionNode,
                             evt.Timestamp));
                     break;
@@ -256,7 +256,7 @@ public enum ExecutionGraphNodeType
     /// <summary>Policy evaluation.</summary>
     Policy,
 
-    /// <summary>Decision-tree node, action, or question event.</summary>
+    /// <summary>Decision-tree node, action, or classification event.</summary>
     DecisionNode,
 
     /// <summary>Execution end.</summary>

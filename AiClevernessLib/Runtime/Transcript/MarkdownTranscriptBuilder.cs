@@ -216,7 +216,7 @@ internal sealed class MarkdownTranscriptBuilder
         return builder.ToString();
     }
 
-    public string DecisionQuestion(
+    public string DecisionClassification(
         string nodeId,
         string answer,
         string? observation,
@@ -224,7 +224,7 @@ internal sealed class MarkdownTranscriptBuilder
         int attempt)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("### Parsed decision");
+        builder.AppendLine("### Parsed classification");
         builder.AppendLine();
         builder.AppendLine($"**Node:** `{nodeId}`  ");
         builder.AppendLine($"**Answer:** `{answer}`  ");
