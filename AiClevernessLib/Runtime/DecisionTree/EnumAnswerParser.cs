@@ -12,9 +12,11 @@ public sealed class EnumAnswerParser
         if (string.IsNullOrWhiteSpace(json) || allowedValues.Count == 0)
             return null;
 
+        var trimmed = StripCodeFences(json);
+
         try
         {
-            using var document = JsonDocument.Parse(json);
+            using var document = JsonDocument.Parse(trimmed);
             if (document.RootElement.ValueKind != JsonValueKind.Object
                 || !document.RootElement.TryGetProperty("answer", out var answerElement)
                 || answerElement.ValueKind != JsonValueKind.String)
@@ -37,6 +39,20 @@ public sealed class EnumAnswerParser
         {
             return null;
         }
+    }
+
+    private static string StripCodeFences(string content)
+    {
+        var trimmed = content.Trim();
+        if (!trimmed.StartsWith("```"))
+            return trimmed;
+
+        var firstNewline = trimmed.IndexOf('\n');
+        var lastFence = trimmed.LastIndexOf("```");
+        if (firstNewline >= 0 && lastFence > firstNewline)
+            return trimmed[(firstNewline + 1)..lastFence].Trim();
+
+        return trimmed;
     }
 
     private static string? ReadOptionalString(JsonElement root, string name)
