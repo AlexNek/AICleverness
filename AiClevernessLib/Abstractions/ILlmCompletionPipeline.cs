@@ -11,7 +11,9 @@ public interface ILlmCompletionPipeline
 
     /// <summary>
     /// Completes a request using the shared runtime policies when execution services are supplied.
-    /// Existing custom pipelines remain compatible through the default implementation.
+    /// Existing custom pipelines remain compatible through the default implementation. Custom
+    /// pipelines that need execution-context policies, including decision-tree model failover,
+    /// must override this overload; otherwise the context is intentionally ignored.
     /// </summary>
     Task<LlmResponse> CompleteAsync(
         LlmCompletionRequest request,

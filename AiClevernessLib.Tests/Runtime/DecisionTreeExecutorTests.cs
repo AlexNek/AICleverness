@@ -206,6 +206,46 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_PreservesFailoverStateAcrossClassificationNodes()
+    {
+        var client = new DecisionTreeFailoverLlmClient(
+            _ => Task.FromException<LlmResponse>(
+                new HttpRequestException("HTTP 503 service unavailable", null, HttpStatusCode.ServiceUnavailable)),
+            _ => Task.FromResult(new LlmResponse(
+                "{\"answer\":\"loop\",\"observation\":\"fallback\",\"confidence\":\"high\"}")),
+            _ => Task.FromException<LlmResponse>(
+                new HttpRequestException("HTTP 503 service unavailable", null, HttpStatusCode.ServiceUnavailable)),
+            _ => Task.FromResult(new LlmResponse(
+                "{\"answer\":\"loop\",\"observation\":\"fallback\",\"confidence\":\"high\"}")),
+            _ => Task.FromException<LlmResponse>(
+                new HttpRequestException("HTTP 503 service unavailable", null, HttpStatusCode.ServiceUnavailable)));
+        var executor = CreateExecutor(
+            new DefaultLlmCompletionPipeline(client),
+            defaultOptions: new DecisionTreeExecutionOptions
+            {
+                EnableModelFailover = true,
+                Model = "primary",
+                ModelFallbackChain = ["fallback-1", "fallback-2"]
+            });
+
+        var result = await executor.ExecuteAsync(CreateClassificationChainTree(new DecisionBudget
+        {
+            MaxNodeVisits = 4,
+            MaxLlmCalls = 5,
+            MaxElapsedTime = TimeSpan.FromSeconds(10),
+            MaxContextTokens = 100
+        }));
+
+        result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
+        client.RequestedModels.Should().Equal(
+            "primary",
+            "fallback-1",
+            "fallback-1",
+            "fallback-2",
+            "fallback-2");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_DefaultPipelineDoesNotFailOverOnPermanentProviderFailure()
     {
         var client = new DecisionTreeFailoverLlmClient(
@@ -843,6 +883,35 @@ public sealed class DecisionTreeExecutorTests
                 ["done"] = Terminal("done"),
                 ["failed"] = Terminal("failed")
             }
+        };
+
+    private static DecisionTreeModel CreateClassificationChainTree(DecisionBudget budget)
+        => new()
+        {
+            TreeId = "classification-chain",
+            Version = 1,
+            StartNodeId = "classify-1",
+            Budget = budget,
+            Nodes = new Dictionary<string, DecisionNode>
+            {
+                ["classify-1"] = ClassificationNode("classify-2"),
+                ["classify-2"] = ClassificationNode("classify-3"),
+                ["classify-3"] = ClassificationNode("done"),
+                ["done"] = Terminal("done")
+            }
+        };
+
+    private static DecisionNode ClassificationNode(string nextNodeId)
+        => new()
+        {
+            Type = EDecisionNodeType.Classify,
+            Task = "Should this classification continue?",
+            Answers = ["loop"],
+            Transitions =
+            [
+                new() { Condition = "loop", NextNodeId = nextNodeId },
+                new() { Condition = "unknown", NextNodeId = "done" }
+            ]
         };
 
     private static DecisionTreeModel CreateClassificationCycleTree(DecisionBudget budget)

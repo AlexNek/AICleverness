@@ -207,6 +207,12 @@ internal sealed class ModelFailoverHandler
         var fromModel = currentOptions.Model ?? "unknown";
         Attempt++;
         var nextCandidate = _candidates.Dequeue();
+        if (context.GetProperty<IReadOnlyList<string>>(AgentPropertyKeys.ModelFallbackChain) is not null)
+        {
+            context.SetProperty<IReadOnlyList<string>>(
+                AgentPropertyKeys.ModelFallbackChain,
+                _candidates.Select(candidate => candidate.Name).ToArray());
+        }
 
         var switchMessage =
             $"Model '{fromModel}' {failureVerb}; switching to '{nextCandidate.Name}' (conversation continues)";

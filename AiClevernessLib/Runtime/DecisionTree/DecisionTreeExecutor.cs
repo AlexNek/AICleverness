@@ -79,7 +79,7 @@ public sealed class DecisionTreeExecutor
                 OnExceeded = budget.OnExceeded
             };
             var conversation = CreateConversationManager();
-            var completionContext = TryBuildCompletionContext();
+            var completionContext = DecisionTreeCompletionContextFactory.Create(_defaultOptions);
             var currentNodeId = tree.StartNodeId;
             var actionFailed = false;
             var unknown = false;
@@ -333,7 +333,13 @@ public sealed class DecisionTreeExecutor
             var request = new LlmCompletionRequest(
                 executionId,
                 messages,
-                new LlmCompletionOptions(0.1f, null, completionContext is null ? null : _defaultOptions!.Model),
+                new LlmCompletionOptions(
+                    0.1f,
+                    null,
+                    completionContext is null
+                        ? null
+                        : completionContext.AgentContext?.GetProperty<string>(AgentPropertyKeys.Model)
+                            ?? _defaultOptions!.Model),
                 attempt);
             var response = completionContext is null
                 ? await _completionPipeline.CompleteAsync(request, cancellationToken)
@@ -630,29 +636,6 @@ public sealed class DecisionTreeExecutor
             return false;
         }
         return true;
-    }
-
-    private LlmCompletionExecutionContext? TryBuildCompletionContext()
-    {
-        if (_defaultOptions?.EnableModelFailover != true
-            || string.IsNullOrWhiteSpace(_defaultOptions.Model)
-            || _defaultOptions.ModelFallbackChain is not { Count: > 0 } fallbackChain)
-            return null;
-
-        var agentContext = new DefaultAgentContext
-        {
-            AgentName = "decision-tree",
-            Goal = "Decision tree LLM",
-            State = new AgentState { Status = "Running" },
-            Memory = new InMemoryAgentMemory()
-        };
-        agentContext.SetProperty(AgentPropertyKeys.EnableModelFailover, true);
-        agentContext.SetProperty(AgentPropertyKeys.Model, _defaultOptions.Model);
-        agentContext.SetProperty(AgentPropertyKeys.ModelFallbackChain, fallbackChain);
-
-        return new LlmCompletionExecutionContext(
-            AgentContext: agentContext,
-            RuntimeOptions: new AgentRuntimeOptions { EnableModelFailover = true });
     }
 
     private DecisionBudget ApplyDefaults(DecisionBudget budget)
