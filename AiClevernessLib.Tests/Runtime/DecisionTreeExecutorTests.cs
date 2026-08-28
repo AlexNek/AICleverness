@@ -386,6 +386,44 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_PassesBoundedDataSnapshotToCustomContextBuilder()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
+        var builder = new RecordingDecisionLlmContextBuilder();
+        var options = new DecisionTreeExecutionOptions();
+        options.DecisionDataPolicy.MaxItems = 1;
+        options.DecisionDataPolicy.MaxContentLengthPerItem = 20;
+        options.DecisionDataPolicy.MaxAggregateRepresentationLength = 100;
+        var executor = CreateExecutor(
+            pipeline,
+            defaultOptions: options,
+            contextBuilder: builder);
+        var tree = CreateTree() with
+        {
+            Budget = new()
+            {
+                MaxNodeVisits = 5,
+                MaxLlmCalls = 1,
+                MaxElapsedTime = TimeSpan.FromSeconds(10),
+                MaxContextTokens = 1_000
+            }
+        };
+
+        var result = await executor.ExecuteAsync(
+            tree,
+            new Dictionary<string, string>
+            {
+                ["evidence-content"] = new string('x', 200)
+            });
+
+        result.Succeeded.Should().BeTrue();
+        builder.Data.Should().NotBeNull();
+        builder.Data!.GetAll().Should().ContainSingle(data => data.Type == "selection");
+        builder.Data.GetAll().First(data => data.Type == "selection").Content.Should().Contain("truncated");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ReturnsUnknownWhenAnEarlierRequiredUserMessageIsTruncated()
     {
         var pipeline = new DecisionTreeCompletionPipeline()
@@ -806,6 +844,61 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_BoundsDecisionTranscriptContentAfterRedaction()
+    {
+        // Arrange
+        var directory = NewDirectory();
+        try
+        {
+            var pipeline = new DecisionTreeCompletionPipeline()
+                .Enqueue("{\"answer\":\"supported\",\"observation\":\"response-secret-very-long\",\"confidence\":\"high\"}");
+            var options = new DecisionTreeExecutionOptions
+            {
+                TranscriptDirectory = directory,
+                TranscriptRedactor = text => text.Replace("secret", "[REDACTED]", StringComparison.Ordinal)
+            };
+            options.DecisionDataPolicy.MaxContentLengthPerItem = 20;
+            options.DecisionDataPolicy.MaxAggregateRepresentationLength = 100;
+            options.DecisionTranscriptPolicy.MaxContentLength = 30;
+            options.DecisionTranscriptPolicy.MaxMessageContentLength = 40;
+            options.DecisionTranscriptPolicy.MaxResponseContentLength = 40;
+            options.DecisionTranscriptPolicy.MaxTotalCharacters = 5_000;
+            var executor = CreateExecutor(pipeline, defaultOptions: options);
+            var tree = CreateTree() with
+            {
+                Budget = new()
+                {
+                    MaxNodeVisits = 5,
+                    MaxLlmCalls = 1,
+                    MaxElapsedTime = TimeSpan.FromSeconds(10),
+                    MaxContextTokens = 1_000
+                }
+            };
+
+            // Act
+            var result = await executor.ExecuteAsync(
+                tree,
+                new Dictionary<string, string>
+                {
+                    ["evidence-content"] = "evidence-secret-very-long"
+                });
+
+            // Assert
+            result.Succeeded.Should().BeTrue();
+            var path = Directory.GetFiles(directory, "*.md").Should().ContainSingle().Which;
+            var content = await File.ReadAllTextAsync(path);
+            content.Should().Contain("[REDACTED]");
+            content.Should().Contain("truncated");
+            content.Should().NotContain("evidence-secret-very-long");
+            content.Should().NotContain("response-secret-very-long");
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_DebugTranscriptPreservesDecisionContent()
     {
         // Arrange
@@ -928,7 +1021,8 @@ public sealed class DecisionTreeExecutorTests
         IExecutionEventPublisher? publisher = null,
         IConversationManager? conversationManager = null,
         IConversationManagerFactory? factory = null,
-        IDecisionLlmContextBuilder? contextBuilder = null)
+        IDecisionLlmContextBuilder? contextBuilder = null,
+        IDecisionDataPolicy? decisionDataPolicy = null)
     {
         var action = new DecisionTreeTestAction();
         var registeredPredicates = predicates?.ToArray() ?? [new DataExistsPredicate()];
@@ -942,7 +1036,8 @@ public sealed class DecisionTreeExecutorTests
             contextBuilder ?? new DefaultDecisionLlmContextBuilder(),
             loader ?? new DecisionTreeLoader([action], registeredPredicates),
             defaultOptions,
-            factory);
+            factory,
+            decisionDataPolicy);
     }
 
     private static DecisionTreeModel CreateValidationTree(DecisionNode startNode)

@@ -28,7 +28,7 @@ public sealed class DefaultDecisionLlmContextBuilderTests
             tree,
             classifyNode,
             new DecisionState(),
-            new DataStore(),
+            new DecisionDataSnapshot([]),
             new Dictionary<string, string> { ["subject"] = "the evidence" });
 
         messages.Should().HaveCount(2);

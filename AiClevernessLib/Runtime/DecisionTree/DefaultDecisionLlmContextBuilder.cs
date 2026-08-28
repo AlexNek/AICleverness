@@ -13,7 +13,7 @@ public sealed class DefaultDecisionLlmContextBuilder : IDecisionLlmContextBuilde
         DecisionTreeModel tree,
         DecisionNode classifyNode,
         DecisionState state,
-        DataStore data,
+        DecisionDataSnapshot data,
         IReadOnlyDictionary<string, string> templateParameters)
     {
         ArgumentNullException.ThrowIfNull(tree);
@@ -41,7 +41,7 @@ public sealed class DefaultDecisionLlmContextBuilder : IDecisionLlmContextBuilde
         var dataText = dataItems.Count == 0
             ? "none"
             : string.Join(", ", dataItems.Select(item =>
-                $"{item.Id} [{item.Type}] from {item.Source}: {item.Content}"));
+                $"{item.DisplayId ?? item.Id} [{item.DisplayType ?? item.Type}] from {item.DisplaySource ?? item.Source}: {item.Content}"));
         var user = $"Task: {(string.IsNullOrWhiteSpace(task) ? "(not supplied)" : task)}\nClassification task: {classificationTask}\nAllowed answers: {answers}\nState: {stateText}\nData: {dataText}";
         return [new LlmMessage("system", system), new LlmMessage("user", user)];
     }

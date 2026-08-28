@@ -1,5 +1,6 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
+using AiCleverness.Models.DecisionTree;
 using AiCleverness.Runtime;
 using AiCleverness.Runtime.DecisionTree;
 
@@ -86,13 +87,15 @@ public sealed class DependencyInjectionTests
     public void AddDecisionTreeExecution_RegistersSharedPipelineAndConversationFactory()
     {
         var services = new ServiceCollection();
-        services.AddDecisionTreeExecution();
+        services.AddDecisionTreeExecution(options => options.DecisionDataPolicy.MaxItems = 3);
         services.AddAiClevernessLlmClient<StubLlmClient>();
 
         var provider = services.BuildServiceProvider();
 
         provider.GetRequiredService<ILlmCompletionPipeline>().Should().BeOfType<DefaultLlmCompletionPipeline>();
         provider.GetRequiredService<IConversationManagerFactory>().Should().NotBeNull();
+        provider.GetRequiredService<IDecisionDataPolicy>().Should().BeOfType<DefaultDecisionDataPolicy>();
+        provider.GetRequiredService<DecisionTreeExecutionOptions>().DecisionDataPolicy.MaxItems.Should().Be(3);
         provider.GetRequiredService<DecisionTreeExecutor>().Should().NotBeNull();
     }
     [Fact]

@@ -8,6 +8,12 @@ public sealed class DecisionTreeExecutionOptions
     public TimeSpan DefaultMaxElapsedTime { get; set; } = TimeSpan.FromSeconds(120);
     public int DefaultMaxContextTokens { get; set; } = 4000;
 
+    /// <summary>Limits used to select and represent decision data in classification prompts.</summary>
+    public DecisionDataPolicyOptions DecisionDataPolicy { get; } = new();
+
+    /// <summary>Limits used when writing decision-specific transcript sections.</summary>
+    public DecisionTranscriptPolicyOptions DecisionTranscriptPolicy { get; } = new();
+
     /// <summary>Primary model identifier used when decision-tree model failover is enabled.</summary>
     public string? Model { get; set; }
 
@@ -25,7 +31,7 @@ public sealed class DecisionTreeExecutionOptions
     /// <summary>Optional absolute directory for decision-tree Markdown transcripts.</summary>
     public string? TranscriptDirectory { get; set; }
 
-    /// <summary>Writes decision-tree transcripts without normal-mode redaction when enabled.</summary>
+    /// <summary>Writes decision-tree transcripts without redaction when enabled. Decision transcript size limits still apply.</summary>
     public bool TranscriptDebug { get; set; }
 
     /// <summary>Host-provided redactor for normal decision-tree transcripts.</summary>

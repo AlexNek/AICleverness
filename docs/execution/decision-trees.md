@@ -278,7 +278,7 @@ A tree's `DecisionBudget` maps to the existing `ResourceLimits` and `ResourceUsa
 | `MaxContextTokens` | Maximum context passed to conversation preparation; not a cumulative token limit |
 | `OnExceeded` | `Halt`, `Warn`, or `Throttle` behavior |
 
-`MaxContextTokens` is a preparation budget, not a guarantee that every classification prompt will be truncated successfully. The default classify context builder renders all execution data into one user message. A custom `IDecisionLlmContextBuilder` must produce at least one user message; if it produces none, the executor returns an `Unknown` classification without calling the provider. If conversation preparation removes any user message produced for the current classification, the executor also does not call the provider; it records an `Unknown` classification with an actionable context-budget error and follows the classify node's `unknown` transition. Applications that need bounded or selective evidence should provide a custom `IDecisionLlmContextBuilder`.
+`MaxContextTokens` is a preparation budget, not a guarantee that every classification prompt will be truncated successfully. Before prompt construction, the executor applies the configured `IDecisionDataPolicy` to create a bounded, read-only `DecisionDataSnapshot` for both the default and custom context builders. The default builder renders bounded display values for identifiers, types, and sources; the original stable values remain available on the snapshot items. The policy also bounds metadata and reports omitted, per-item-truncated, and aggregate-truncated counts. A custom policy is responsible for returning its own bounded representation. A custom `IDecisionLlmContextBuilder` must produce at least one user message; if it produces none, the executor returns an `Unknown` classification without calling the provider. If conversation preparation removes any user message produced for the current classification, the executor also does not call the provider; it records an `Unknown` classification with an actionable context-budget error and follows the classify node's `unknown` transition. Custom conversation managers must preserve the identity of required user messages.
 
 `Halt` returns `DecisionTreeOutcome.BudgetExhausted`. `Warn` continues, and `Throttle` inserts a short delay before continuing. The executor checks cancellation and limits before externally observable work and after recording node visits or LLM usage.
 
@@ -291,6 +291,21 @@ services.AddDecisionTreeExecution(options =>
     options.DefaultMaxLlmCalls = 5;
     options.DefaultMaxElapsedTime = TimeSpan.FromSeconds(60);
     options.DefaultMaxContextTokens = 2000;
+    options.DecisionDataPolicy.MaxItems = 50;
+    options.DecisionDataPolicy.MaxContentLengthPerItem = 4000;
+    options.DecisionDataPolicy.MaxAggregateRepresentationLength = 12000;
+    options.DecisionDataPolicy.MaxFieldLength = 256;
+    options.DecisionDataPolicy.MaxMetadataEntries = 20;
+    options.DecisionDataPolicy.MaxMetadataKeyLength = 256;
+    options.DecisionDataPolicy.MaxMetadataValueLength = 1000;
+    options.DecisionTranscriptPolicy.MaxProducedItemsPerAction = 100;
+    options.DecisionTranscriptPolicy.MaxContentLength = 4000;
+    options.DecisionTranscriptPolicy.MaxMetadataEntries = 20;
+    options.DecisionTranscriptPolicy.MaxMetadataKeyLength = 256;
+    options.DecisionTranscriptPolicy.MaxMetadataValueLength = 1000;
+    options.DecisionTranscriptPolicy.MaxMessageContentLength = 8000;
+    options.DecisionTranscriptPolicy.MaxResponseContentLength = 8000;
+    options.DecisionTranscriptPolicy.MaxTotalCharacters = 100000;
     options.TraceId = "decision-service";
     options.CorrelationId = "request-123";
     options.TranscriptDirectory = Path.GetFullPath("transcripts");
@@ -300,6 +315,42 @@ services.AddDecisionTreeExecution(options =>
 ```
 
 Prefer setting explicit budgets in each JSON tree when different workflows need different limits.
+
+### Custom decision-data policy and context builder
+
+The default policy is registered automatically. Custom policies and context builders must be registered before `AddDecisionTreeExecution()` because the default decision services use `TryAdd` registration; the first registration wins:
+
+```csharp
+services.AddSingleton<IDecisionDataPolicy, ApplicationDecisionDataPolicy>();
+services.AddSingleton<IDecisionLlmContextBuilder, ApplicationDecisionContextBuilder>();
+services.AddDecisionTreeExecution();
+```
+
+A custom `IDecisionDataPolicy` owns the bounds of the representation it returns. The executor does not reapply the default policy to an explicit custom policy. The context builder receives a read-only `DecisionDataSnapshot`, not the execution `DataStore`, and cannot add records to it. Stable `Id`, `Type`, and `Source` values are retained for correlation; use `DisplayId`, `DisplayType`, and `DisplaySource` when rendering bounded prompt text:
+
+```csharp
+public sealed class ApplicationDecisionContextBuilder : IDecisionLlmContextBuilder
+{
+    public IReadOnlyList<LlmMessage> Build(
+        DecisionTree tree,
+        DecisionNode classifyNode,
+        DecisionState state,
+        DecisionDataSnapshot data,
+        IReadOnlyDictionary<string, string> templateParameters)
+    {
+        var evidence = string.Join(", ", data.GetAll().Select(item =>
+            $"{item.DisplayId ?? item.Id} [{item.DisplayType ?? item.Type}] "
+            + $"from {item.DisplaySource ?? item.Source}: {item.Content}"));
+        return
+        [
+            new("system", tree.SystemPrompt ?? "Classify the request."),
+            new("user", $"Task: {classifyNode.Task}\nData: {evidence}")
+        ];
+    }
+}
+```
+
+The conversation is cumulative within one decision execution. Repeated classification nodes append new classification prompts, assistant responses, and retry instructions; selecting bounded data for a new prompt does not deduplicate or remove earlier conversation history. A custom builder must produce at least one user-role message, and a custom conversation manager must preserve the identity of retained required user messages.
 
 ## Journal, event bus, and graphs
 
@@ -352,6 +403,14 @@ services.AddDecisionTreeExecution(options =>
     options.TranscriptDirectory = Path.GetFullPath("transcripts");
     options.TranscriptDebug = false;
     options.TranscriptRedactor = text => text;
+    options.DecisionTranscriptPolicy.MaxProducedItemsPerAction = 100;
+    options.DecisionTranscriptPolicy.MaxContentLength = 4000;
+    options.DecisionTranscriptPolicy.MaxMetadataEntries = 20;
+    options.DecisionTranscriptPolicy.MaxMetadataKeyLength = 256;
+    options.DecisionTranscriptPolicy.MaxMetadataValueLength = 1000;
+    options.DecisionTranscriptPolicy.MaxMessageContentLength = 8000;
+    options.DecisionTranscriptPolicy.MaxResponseContentLength = 8000;
+    options.DecisionTranscriptPolicy.MaxTotalCharacters = 100000;
 });
 ```
 
@@ -365,7 +424,7 @@ services.AddDecisionTreeExecution(options =>
 });
 ```
 
-Decision transcripts contain node visits, action completions, classification results, the final decision outcome, and resource usage. Transcript writes are best effort and do not change the decision result. The public `DecisionTreeResult` does not expose a transcript path; applications can inspect the configured directory or consume the public journal/event records.
+Decision transcripts contain node visits, action completions, classification results, the final decision outcome, and resource usage. Decision transcript policy limits apply after normal-mode redaction, including produced-data items/content, metadata, prepared messages, model responses, and the optional total decision-section character budget. When the total budget prevents a section from being written, the terminal result records the number of omitted sections; the terminal result is reserved space and is never silently marked as written without output. Transcript writes are best effort, but invalid policy values are rejected before execution. Debug mode bypasses redaction but remains subject to all configured decision transcript size limits. The public `DecisionTreeResult` does not expose a transcript path; applications can inspect the configured directory or consume the public journal/event records.
 
 The demo enables these settings with the existing switches:
 

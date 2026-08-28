@@ -10,4 +10,13 @@ public sealed record DecisionData
     public DateTimeOffset CreatedAt { get; init; }
     public string? ActionId { get; init; }
     public IReadOnlyDictionary<string, string>? Metadata { get; init; }
+
+    /// <summary>Optional bounded display value for <see cref="Id"/> in prompt rendering.</summary>
+    public string? DisplayId { get; init; }
+
+    /// <summary>Optional bounded display value for <see cref="Source"/> in prompt rendering.</summary>
+    public string? DisplaySource { get; init; }
+
+    /// <summary>Optional bounded display value for <see cref="Type"/> in prompt rendering.</summary>
+    public string? DisplayType { get; init; }
 }

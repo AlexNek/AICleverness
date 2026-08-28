@@ -20,6 +20,8 @@ internal sealed class TranscriptContext
 
     private const int MaxTaskSlugLength = 80;
 
+    private const string TerminalOmissionMarker = "[decision result omitted due to total transcript limit]";
+
     private static readonly char[] InvalidFilenameCharacters = Path.GetInvalidFileNameChars();
 
     private static readonly HashSet<string> SensitiveKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -45,6 +47,8 @@ internal sealed class TranscriptContext
 
     private readonly ITranscriptSink? _sink;
 
+    private readonly DecisionTranscriptPolicyOptions? _decisionTranscriptPolicy;
+
     private readonly List<string> _decisionPath = [];
 
     private MarkdownTranscriptBuilder? _builder;
@@ -55,18 +59,24 @@ internal sealed class TranscriptContext
 
     private bool _terminalWritten;
 
+    private int _decisionTranscriptCharacters;
+
+    private int _omittedDecisionSectionCount;
+
     private TranscriptContext(
         ITranscriptSink? sink,
         Func<string, string>? redactor,
         bool debug,
         string? status,
-        ILogger? logger)
+        ILogger? logger,
+        DecisionTranscriptPolicyOptions? decisionTranscriptPolicy = null)
     {
         _sink = sink;
         _redactor = redactor;
         Debug = debug;
         PersistenceStatus = status;
         _logger = logger;
+        _decisionTranscriptPolicy = decisionTranscriptPolicy;
         FilePath = sink?.FilePath;
     }
 
@@ -84,8 +94,10 @@ internal sealed class TranscriptContext
         AgentRequest request,
         string executionId,
         AgentRuntimeOptions options,
-        ILogger? logger)
+        ILogger? logger,
+        DecisionTranscriptPolicyOptions? decisionTranscriptPolicy = null)
     {
+        decisionTranscriptPolicy?.Validate();
         var parameters = request.Parameters;
         var debug = parameters.TryGetValue(AgentPropertyKeys.MarkdownTranscriptDebug, out var debugValue)
                     && debugValue is bool debugEnabled
@@ -121,7 +133,8 @@ internal sealed class TranscriptContext
                 options.TranscriptRedactor,
                 debug,
                 status: null,
-                logger);
+                logger,
+                decisionTranscriptPolicy);
             context.Append(
                 context.Builder.Header(
                     context.RedactText(request.Goal),
@@ -269,7 +282,7 @@ internal sealed class TranscriptContext
         if (_sink is null)
             return;
 
-        Append(
+        AppendDecisionSection(
             Builder.DecisionOverview(
                 RedactText(tree.TreeId),
                 tree.Version,
@@ -295,7 +308,7 @@ internal sealed class TranscriptContext
         var pathStep = node.Type == EDecisionNodeType.Terminal
             ? $"{nodeLabel} -- terminal"
             : $"{nodeLabel}{(context is null ? string.Empty : $" [{context}]")} -- `{RedactText(outcome ?? "(none)")}` --> `{RedactText(nextNodeId ?? "(none)")}`";
-        _decisionPath.Add(pathStep);
+        _decisionPath.Add(LimitDecisionField(pathStep, "[path step truncated]"));
     }
 
     public void AppendDecisionAction(
@@ -307,7 +320,7 @@ internal sealed class TranscriptContext
         if (_sink is null)
             return;
 
-        Append(
+        AppendDecisionSection(
             Builder.DecisionAction(
                 RedactText(nodeId),
                 RedactText(actionName),
@@ -326,7 +339,7 @@ internal sealed class TranscriptContext
         if (_sink is null)
             return;
 
-        Append(
+        AppendDecisionSection(
             Builder.DecisionClassification(
                 RedactText(nodeId),
                 RedactText(answer),
@@ -346,15 +359,25 @@ internal sealed class TranscriptContext
 
         var redactedMessages = messages
             .Select(message => new LlmMessage(
-                RedactText(message.Role),
-                message.Content is null ? null : RedactText(message.Content)))
+                LimitDecisionField(RedactText(message.Role), "[role truncated]"),
+                message.Content is null
+                    ? null
+                    : LimitDecisionContent(
+                        RedactText(message.Content),
+                        "[message content truncated]",
+                        _decisionTranscriptPolicy?.MaxMessageContentLength)))
             .ToArray();
-        Append(
+        AppendDecisionSection(
             Builder.DecisionLlmAttempt(
                 RedactText(nodeId),
                 attempt,
                 redactedMessages,
-                response.Content is null ? null : RedactText(response.Content),
+                response.Content is null
+                    ? null
+                    : LimitDecisionContent(
+                        RedactText(response.Content),
+                        "[response content truncated]",
+                        _decisionTranscriptPolicy?.MaxResponseContentLength),
                 response.FinishReason is null ? null : RedactText(response.FinishReason),
                 response.Usage));
     }
@@ -373,15 +396,17 @@ internal sealed class TranscriptContext
                 if (PersistenceStatus is not null)
                     return;
 
-                _sink.Append(
-                    Builder.DecisionResult(
-                        result.Outcome,
-                        result.Succeeded,
-                        verdict,
-                        error,
-                        result.Usage,
-                        _decisionPath));
-                _terminalWritten = true;
+                if (TryAppendDecisionSectionLocked(
+                        Builder.DecisionResult(
+                            result.Outcome,
+                            result.Succeeded,
+                            verdict,
+                            error,
+                            result.Usage,
+                            _decisionPath,
+                            _omittedDecisionSectionCount),
+                        terminal: true))
+                    _terminalWritten = true;
             }
             catch (Exception ex)
             {
@@ -614,26 +639,150 @@ internal sealed class TranscriptContext
         if (producedData is null || producedData.Count == 0)
             return null;
 
+        var policy = _decisionTranscriptPolicy;
+        var maximumItems = policy?.MaxProducedItemsPerAction ?? producedData.Count;
+        var included = producedData.Take(maximumItems).ToArray();
+        var omitted = producedData.Count - included.Length;
         return string.Join(
             Environment.NewLine,
-            producedData.Select(data =>
+            included.Select(data =>
             {
                 var metadata = data.Metadata is null
                     ? "none"
                     : string.Join(
                         ", ",
-                        data.Metadata.Select(pair =>
-                            $"{RedactText(pair.Key)}={RedactText(pair.Value)}"));
+                        data.Metadata
+                            .Take(policy?.MaxMetadataEntries ?? data.Metadata.Count)
+                            .Select(pair =>
+                                $"{LimitDecisionField(RedactText(pair.Key), "[metadata key truncated]", policy?.MaxMetadataKeyLength)}="
+                                + $"{LimitDecisionField(RedactText(pair.Value), "[metadata value truncated]", policy?.MaxMetadataValueLength)}"));
+                var omittedMetadata = data.Metadata is null
+                    ? 0
+                    : data.Metadata.Count - (policy?.MaxMetadataEntries ?? data.Metadata.Count);
+                if (omittedMetadata > 0)
+                    metadata += $", [metadata entries omitted: {omittedMetadata}]";
                 return string.Join(
                     Environment.NewLine,
-                    $"Id: {RedactText(data.Id)}",
-                    $"Type: {RedactText(data.Type)}",
-                    $"Source: {RedactText(data.Source)}",
-                    $"Content: {RedactText(data.Content)}",
+                    $"Id: {LimitDecisionField(RedactText(data.Id), "[id truncated]")}",
+                    $"Type: {LimitDecisionField(RedactText(data.Type), "[type truncated]")}",
+                    $"Source: {LimitDecisionField(RedactText(data.Source), "[source truncated]")}",
+                    $"Content: {LimitDecisionContent(RedactText(data.Content), "[content truncated]")}",
                     $"Created: {data.CreatedAt:O}",
-                    $"Action: {RedactText(data.ActionId ?? "(none)")}",
+                    $"Action: {LimitDecisionField(RedactText(data.ActionId ?? "(none)"), "[action truncated]")}",
                     $"Metadata: {metadata}");
-            }));
+            }))
+            + (omitted > 0
+                ? Environment.NewLine + $"[produced data items omitted: {omitted}]"
+                : string.Empty);
+    }
+
+    private void AppendDecisionSection(string content)
+    {
+        lock (_gate)
+        {
+            TryAppendDecisionSectionLocked(content);
+        }
+    }
+
+    private bool TryAppendDecisionSectionLocked(string content, bool terminal = false)
+    {
+        if (_completed || _sink is null || PersistenceStatus is not null)
+            return false;
+
+        try
+        {
+            var bounded = LimitDecisionSection(content, terminal);
+            if (bounded.Length == 0)
+            {
+                if (terminal)
+                {
+                    var remaining = RemainingDecisionTranscriptCharacters();
+                    if (remaining <= 0)
+                        return false;
+                    bounded = LimitText(TerminalOmissionMarker, remaining, TerminalOmissionMarker);
+                    _decisionTranscriptCharacters += bounded.Length;
+                }
+                else
+                {
+                    _omittedDecisionSectionCount++;
+                    return false;
+                }
+            }
+
+            _sink.Append(bounded);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Disable("FinalizationFailed", ex);
+            return false;
+        }
+    }
+
+    private string LimitDecisionSection(string content, bool terminal)
+    {
+        if (_decisionTranscriptPolicy?.MaxTotalCharacters is not int)
+            return content;
+
+        var remaining = RemainingDecisionTranscriptCharacters();
+        if (!terminal)
+        {
+            remaining -= TerminalOmissionMarker.Length;
+            if (remaining <= 0 || content.Length > remaining)
+                return string.Empty;
+
+            _decisionTranscriptCharacters += content.Length;
+            return content;
+        }
+
+        if (remaining <= 0)
+            return string.Empty;
+
+        var bounded = LimitText(content, remaining, TerminalOmissionMarker);
+        _decisionTranscriptCharacters += bounded.Length;
+        return bounded;
+    }
+
+    private int RemainingDecisionTranscriptCharacters()
+        => _decisionTranscriptPolicy?.MaxTotalCharacters is int maximum
+            ? maximum - _decisionTranscriptCharacters
+            : int.MaxValue;
+
+    private string LimitDecisionField(
+        string value,
+        string marker,
+        int? maximum = null)
+    {
+        if (_decisionTranscriptPolicy is null)
+            return value;
+
+        return LimitText(
+            value,
+            maximum ?? _decisionTranscriptPolicy.MaxMessageContentLength,
+            marker);
+    }
+
+    private string LimitDecisionContent(
+        string value,
+        string marker,
+        int? maximum = null)
+    {
+        if (_decisionTranscriptPolicy is null)
+            return value;
+
+        return LimitText(
+            value,
+            maximum ?? _decisionTranscriptPolicy.MaxContentLength,
+            marker);
+    }
+
+    private static string LimitText(string value, int maximum, string marker)
+    {
+        if (value.Length <= maximum)
+            return value;
+        if (maximum <= marker.Length)
+            return marker[..maximum];
+        return value[..(maximum - marker.Length)] + marker;
     }
 
     private string RedactArguments(string rawArguments)
