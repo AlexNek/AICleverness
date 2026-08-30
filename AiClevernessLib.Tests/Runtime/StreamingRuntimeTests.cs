@@ -371,10 +371,11 @@ public sealed class StreamingRuntimeTests
         // Arrange
         var providerException = new LlmProviderException(
             new InvalidOperationException("provider capacity failure"),
-            provider: "google",
-            errorCode: "RESOURCE_EXHAUSTED",
+            provider: "test-provider",
+            errorCode: "capacity-code",
             statusCode: System.Net.HttpStatusCode.ServiceUnavailable,
-            retryAfter: TimeSpan.FromSeconds(8));
+            retryAfter: TimeSpan.FromSeconds(8),
+            isTransient: true);
         var llm = new ThrowingLlmClient(providerException);
         var tools = new ToolRegistry();
         var publisher = new RecordingPublisher();
@@ -387,8 +388,8 @@ public sealed class StreamingRuntimeTests
         // Assert
         var expectedMetadata = new LlmProviderFailureMetadata
         {
-            Provider = "google",
-            ErrorCode = "RESOURCE_EXHAUSTED",
+            Provider = "test-provider",
+            ErrorCode = "capacity-code",
             StatusCode = System.Net.HttpStatusCode.ServiceUnavailable,
             RetryAfter = TimeSpan.FromSeconds(8)
         };

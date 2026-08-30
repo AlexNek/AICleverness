@@ -155,6 +155,19 @@ public sealed class DefaultLlmErrorClassifierTests
     }
 
     [Fact]
+    public void Classify_UnrelatedRateLimitIdentifier_ReturnsPermanent()
+    {
+        // Arrange
+        var ex = new Exception("invalid request: rate_limit_parameter is not accepted");
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Fact]
     public void Classify_TooManyRequestsText_ReturnsTransientAdvance()
     {
         // Arrange
@@ -167,44 +180,100 @@ public sealed class DefaultLlmErrorClassifierTests
         result.Should().Be(EFailureClassification.TransientAdvance);
     }
 
-    [Theory]
-    [InlineData("anthropic", "overloaded_error")]
-    [InlineData("google", "RESOURCE_EXHAUSTED")]
-    [InlineData("gemini", "RESOURCE_EXHAUSTED")]
-    [InlineData("openai", "rate_limit_exceeded")]
-    public void Classify_KnownProviderCapacityCode_ReturnsTransientAdvance(
-        string provider,
-        string errorCode)
+    [Fact]
+    public void Classify_ProviderCodeWithoutAdapterClassification_ReturnsPermanent()
     {
         // Arrange
         var ex = new LlmProviderException(
-            new InvalidOperationException("provider rejected the request"),
-            provider: provider,
-            errorCode: errorCode);
+            new InvalidOperationException("provider capacity failure"),
+            provider: "adapter-provider",
+            errorCode: "capacity-code");
 
         // Act
         var result = _sut.Classify(ex, _callerCts.Token);
 
         // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Fact]
+    public void Classify_ConfiguredProviderErrorMapping_ReturnsConfiguredClassification()
+    {
+        // Arrange
+        var options = new LlmFailureClassificationOptions();
+        options.ProviderErrorMappings[new LlmProviderErrorKey("adapter-provider", "capacity-code")] =
+            EFailureClassification.TransientAdvance;
+        var sut = new DefaultLlmErrorClassifier(options);
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider capacity failure"),
+            provider: "ADAPTER-PROVIDER",
+            errorCode: " capacity-code ");
+
+        // Act
+        var result = sut.Classify(ex, _callerCts.Token);
+
+        // Assert
         result.Should().Be(EFailureClassification.TransientAdvance);
     }
 
-    [Theory]
-    [InlineData(null, "overloaded_error")]
-    [InlineData("unknown-provider", "overloaded_error")]
-    [InlineData("anthropic", "unknown_code")]
-    public void Classify_UnknownOrIncompleteProviderCode_ReturnsPermanent(
-        string? provider,
-        string? errorCode)
+    [Fact]
+    public void Classify_ConfiguredProviderStatusMapping_ReturnsConfiguredClassification()
     {
         // Arrange
+        var options = new LlmFailureClassificationOptions();
+        options.ProviderStatusMappings[new LlmProviderStatusKey(
+            "adapter-provider",
+            (HttpStatusCode)529)] = EFailureClassification.TransientAdvance;
+        var sut = new DefaultLlmErrorClassifier(options);
         var ex = new LlmProviderException(
-            new InvalidOperationException("provider error"),
-            provider: provider,
-            errorCode: errorCode);
+            new InvalidOperationException("provider overload"),
+            provider: "adapter-provider",
+            statusCode: (HttpStatusCode)529);
 
         // Act
-        var result = _sut.Classify(ex, _callerCts.Token);
+        var result = sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.TransientAdvance);
+    }
+
+    [Fact]
+    public void Classify_ExplicitAdapterClassificationTakesPrecedenceOverConfiguredMapping()
+    {
+        // Arrange
+        var options = new LlmFailureClassificationOptions();
+        options.ProviderErrorMappings[new LlmProviderErrorKey("adapter-provider", "capacity-code")] =
+            EFailureClassification.Permanent;
+        var sut = new DefaultLlmErrorClassifier(options);
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider capacity failure"),
+            provider: "adapter-provider",
+            errorCode: "capacity-code",
+            isTransient: true);
+
+        // Act
+        var result = sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.TransientAdvance);
+    }
+
+    [Fact]
+    public void Classify_HardPermanentStatusTakesPrecedenceOverConfiguredMapping()
+    {
+        // Arrange
+        var options = new LlmFailureClassificationOptions();
+        options.ProviderStatusMappings[new LlmProviderStatusKey(
+            "adapter-provider",
+            HttpStatusCode.Unauthorized)] = EFailureClassification.TransientAdvance;
+        var sut = new DefaultLlmErrorClassifier(options);
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider rejected the request"),
+            provider: "adapter-provider",
+            statusCode: HttpStatusCode.Unauthorized);
+
+        // Act
+        var result = sut.Classify(ex, _callerCts.Token);
 
         // Assert
         result.Should().Be(EFailureClassification.Permanent);
@@ -217,8 +286,8 @@ public sealed class DefaultLlmErrorClassifierTests
         _callerCts.Cancel();
         var ex = new LlmProviderException(
             new OperationCanceledException(),
-            provider: "anthropic",
-            errorCode: "overloaded_error",
+            provider: "adapter-provider",
+            errorCode: "capacity-code",
             isTransient: true);
 
         // Act
@@ -278,19 +347,19 @@ public sealed class DefaultLlmErrorClassifierTests
     }
 
     [Fact]
-    public void Classify_AnthropicOverloadStatus529_ReturnsTransientAdvance()
+    public void Classify_UnclassifiedStatus529_ReturnsPermanent()
     {
         // Arrange
         var ex = new LlmProviderException(
-            new InvalidOperationException("overloaded"),
-            provider: "anthropic",
+            new InvalidOperationException("unclassified provider status"),
+            provider: "adapter-provider",
             statusCode: (HttpStatusCode)529);
 
         // Act
         var result = _sut.Classify(ex, _callerCts.Token);
 
         // Assert
-        result.Should().Be(EFailureClassification.TransientAdvance);
+        result.Should().Be(EFailureClassification.Permanent);
     }
 
     [Fact]
@@ -299,7 +368,7 @@ public sealed class DefaultLlmErrorClassifierTests
         // Arrange
         var ex = new LlmProviderException(
             new InvalidOperationException("unauthorized"),
-            provider: "anthropic",
+            provider: "adapter-provider",
             statusCode: HttpStatusCode.Unauthorized,
             isTransient: true);
 

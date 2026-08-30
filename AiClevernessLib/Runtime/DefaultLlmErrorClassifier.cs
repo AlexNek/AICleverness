@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
 
@@ -11,35 +12,27 @@ namespace AiCleverness.Runtime;
 /// </summary>
 internal sealed class DefaultLlmErrorClassifier : ILlmErrorClassifier
 {
-    private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> TransientProviderErrorCodes =
-        new Dictionary<string, IReadOnlySet<string>>(StringComparer.OrdinalIgnoreCase)
-        {
-            // Anthropic documents overloaded_error as a temporary provider condition.
-            ["anthropic"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "overloaded_error"
-            },
-            // Google/Gemini adapters commonly surface this provider code for capacity.
-            ["google"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "RESOURCE_EXHAUSTED"
-            },
-            ["gemini"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "RESOURCE_EXHAUSTED"
-            },
-            // OpenAI's exact rate-limit code is a provider-confirmed transient signal.
-            ["openai"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "rate_limit_exceeded"
-            }
-        };
+    private readonly LlmFailureClassificationOptions _classificationOptions;
 
-    private static readonly IReadOnlySet<string> ProvidersSupportingOverload529 =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "anthropic"
-        };
+    internal DefaultLlmErrorClassifier(LlmFailureClassificationOptions? classificationOptions = null)
+    {
+        _classificationOptions = classificationOptions ?? new LlmFailureClassificationOptions();
+    }
+
+    private const int ClientErrorMinimum = 400;
+    private const int ClientErrorMaximum = 499;
+    private const int ServerErrorMinimum = 500;
+    private const int ServerErrorMaximum = 599;
+
+    private const string LegacyHttpStatusMarker = "HTTP ";
+    private const int LegacyStatusCodeDigitCount = 3;
+    private const char AsciiDigitMinimum = '0';
+    private const char AsciiDigitMaximum = '9';
+
+    private const string RateLimitExceededPattern = "Rate limit exceeded";
+    private const string SnakeCaseRateLimitReachedPattern = "rate_limit reached";
+    private const string TooManyRequestsPattern = "Too many requests";
+    private const string FreeModelsPerMinutePattern = "free-models-per-min";
 
     public EFailureClassification Classify(Exception exception, CancellationToken callerToken)
     {
@@ -65,18 +58,16 @@ internal sealed class DefaultLlmErrorClassifier : ILlmErrorClassifier
             if (providerException.IsTransient == true)
                 return EFailureClassification.TransientAdvance;
 
-            if (IsMappedProviderCode(providerException))
-                return EFailureClassification.TransientAdvance;
+            if (TryGetConfiguredClassification(providerException, out var configuredClassification))
+                return configuredClassification;
 
-            var structuredClassification = ClassifyStatus(
-                providerException.StatusCode,
-                providerException.Provider);
+            var structuredClassification = ClassifyStatus(providerException.StatusCode);
             if (structuredClassification is not null)
                 return structuredClassification.Value;
         }
         else if (exception is HttpRequestException httpException)
         {
-            var structuredClassification = ClassifyStatus(httpException.StatusCode, provider: null);
+            var structuredClassification = ClassifyStatus(httpException.StatusCode);
             if (structuredClassification is not null)
                 return structuredClassification.Value;
         }
@@ -95,65 +86,76 @@ internal sealed class DefaultLlmErrorClassifier : ILlmErrorClassifier
         return EFailureClassification.Permanent;
     }
 
-    private static bool IsMappedProviderCode(LlmProviderException exception)
+    private bool TryGetConfiguredClassification(
+        LlmProviderException exception,
+        out EFailureClassification classification)
     {
-        if (string.IsNullOrWhiteSpace(exception.Provider)
-            || string.IsNullOrWhiteSpace(exception.ErrorCode))
-            return false;
+        if (!string.IsNullOrWhiteSpace(exception.Provider))
+        {
+            if (!string.IsNullOrWhiteSpace(exception.ErrorCode)
+                && _classificationOptions.ProviderErrorMappings.TryGetValue(
+                    new LlmProviderErrorKey(exception.Provider, exception.ErrorCode),
+                    out classification))
+            {
+                return true;
+            }
 
-        return TransientProviderErrorCodes.TryGetValue(
-                   exception.Provider.Trim(),
-                   out var codes)
-               && codes.Contains(exception.ErrorCode.Trim());
+            if (exception.StatusCode is not null
+                && _classificationOptions.ProviderStatusMappings.TryGetValue(
+                    new LlmProviderStatusKey(exception.Provider, exception.StatusCode.Value),
+                    out classification))
+            {
+                return true;
+            }
+        }
+
+        classification = default;
+        return false;
     }
 
     private static EFailureClassification? ClassifyStatus(
-        HttpStatusCode? statusCode,
-        string? provider)
+        HttpStatusCode? statusCode)
     {
         if (statusCode is null)
             return null;
 
-        var numericStatus = (int)statusCode.Value;
-        if (numericStatus == 408 || numericStatus == 429)
+        if (statusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests)
             return EFailureClassification.TransientAdvance;
 
         if (IsHardPermanentStatus(statusCode))
             return EFailureClassification.Permanent;
 
-        if (numericStatus == 529)
-        {
-            return provider is not null
-                   && ProvidersSupportingOverload529.Contains(provider.Trim())
-                ? EFailureClassification.TransientAdvance
-                : EFailureClassification.Permanent;
-        }
-
-        if (numericStatus is 500 or 502 or 503 or 504)
+        if (IsTransientServerStatus(statusCode.Value))
             return EFailureClassification.TransientAdvance;
-
-        if (numericStatus is >= 400 and <= 499)
-            return EFailureClassification.Permanent;
-
-        if (numericStatus is >= 500 and <= 599)
-            return EFailureClassification.Permanent;
 
         return EFailureClassification.Permanent;
     }
 
+    private static bool IsTransientServerStatus(HttpStatusCode statusCode) =>
+        statusCode is
+            HttpStatusCode.InternalServerError
+            or HttpStatusCode.BadGateway
+            or HttpStatusCode.ServiceUnavailable
+            or HttpStatusCode.GatewayTimeout;
+
     private static EFailureClassification? ClassifyLegacyHttpStatus(int statusCode)
     {
-        if (statusCode == 408 || statusCode == 429)
+        if (statusCode == (int)HttpStatusCode.RequestTimeout
+            || statusCode == (int)HttpStatusCode.TooManyRequests)
+        {
             return EFailureClassification.TransientAdvance;
+        }
 
         // Preserve the released HTTP 5xx message compatibility rule while
         // excluding hard-permanent unsupported-operation statuses.
-        if (statusCode is >= 500 and <= 599)
+        if (statusCode is >= ServerErrorMinimum and <= ServerErrorMaximum)
+        {
             return IsHardPermanentStatus((HttpStatusCode)statusCode)
                 ? EFailureClassification.Permanent
                 : EFailureClassification.TransientAdvance;
+        }
 
-        if (statusCode is >= 400 and <= 499)
+        if (statusCode is >= ClientErrorMinimum and <= ClientErrorMaximum)
             return EFailureClassification.Permanent;
 
         return null;
@@ -165,20 +167,23 @@ internal sealed class DefaultLlmErrorClassifier : ILlmErrorClassifier
             return false;
 
         var numericStatus = (int)statusCode.Value;
-        return (numericStatus is >= 400 and <= 499 && numericStatus is not 408 and not 429)
-               || numericStatus is 501 or 505;
+        return (numericStatus is >= ClientErrorMinimum and <= ClientErrorMaximum
+                && statusCode is not HttpStatusCode.RequestTimeout
+                && statusCode is not HttpStatusCode.TooManyRequests)
+               || statusCode is HttpStatusCode.NotImplemented
+                   or HttpStatusCode.HttpVersionNotSupported;
     }
 
     private static bool IsRateLimitMessage(string message)
     {
-        if (TryGetHttpStatusCode(message) == 429)
+        if (TryGetHttpStatusCode(message) == (int)HttpStatusCode.TooManyRequests)
             return true;
 
         // These exact legacy patterns remain supported for existing adapters.
-        return message.Contains("Rate limit exceeded", StringComparison.OrdinalIgnoreCase)
-               || message.Contains("rate_limit", StringComparison.OrdinalIgnoreCase)
-               || message.Contains("Too many requests", StringComparison.OrdinalIgnoreCase)
-               || message.Contains("free-models-per-min", StringComparison.OrdinalIgnoreCase);
+        return message.Contains(RateLimitExceededPattern, StringComparison.OrdinalIgnoreCase)
+               || message.Contains(SnakeCaseRateLimitReachedPattern, StringComparison.OrdinalIgnoreCase)
+               || message.Contains(TooManyRequestsPattern, StringComparison.OrdinalIgnoreCase)
+               || message.Contains(FreeModelsPerMinutePattern, StringComparison.OrdinalIgnoreCase);
     }
 
     private static int? TryGetHttpStatusCode(string message)
@@ -186,32 +191,37 @@ internal sealed class DefaultLlmErrorClassifier : ILlmErrorClassifier
         var searchStart = 0;
         while (searchStart < message.Length)
         {
-            var markerIndex = message.IndexOf("HTTP ", searchStart, StringComparison.OrdinalIgnoreCase);
+            var markerIndex = message.IndexOf(
+                LegacyHttpStatusMarker,
+                searchStart,
+                StringComparison.OrdinalIgnoreCase);
             if (markerIndex < 0)
                 return null;
 
-            var codeStart = markerIndex + 5;
-            if (codeStart + 3 <= message.Length
+            var codeStart = markerIndex + LegacyHttpStatusMarker.Length;
+            if (codeStart + LegacyStatusCodeDigitCount <= message.Length
                 && IsAsciiDigit(message[codeStart])
                 && IsAsciiDigit(message[codeStart + 1])
                 && IsAsciiDigit(message[codeStart + 2]))
             {
-                var codeEnd = codeStart + 3;
+                var codeEnd = codeStart + LegacyStatusCodeDigitCount;
                 if (codeEnd == message.Length
                     || message[codeEnd] == ':'
                     || char.IsWhiteSpace(message[codeEnd]))
                 {
-                    return (message[codeStart] - '0') * 100
-                           + (message[codeStart + 1] - '0') * 10
-                           + message[codeStart + 2] - '0';
+                    return int.Parse(
+                        message.AsSpan(codeStart, LegacyStatusCodeDigitCount),
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture);
                 }
             }
 
-            searchStart = markerIndex + 5;
+            searchStart = codeStart;
         }
 
         return null;
     }
 
-    private static bool IsAsciiDigit(char value) => value is >= '0' and <= '9';
+    private static bool IsAsciiDigit(char value) =>
+        value is >= AsciiDigitMinimum and <= AsciiDigitMaximum;
 }

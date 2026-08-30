@@ -121,3 +121,10 @@ The `[Unreleased]` section must always describe the **final user-facing state re
 - ❌ NEVER run `git commit`, `git push`, `git tag`, or any history-rewriting command — commits are made by the user only, with the user's own commit text
 - ✅ Leave finished changes in the working tree for the user to review, stage, and commit
 - ✅ You may suggest commit message text when asked, but never execute the commit yourself
+
+## Issue-document content rules (MANDATORY)
+
+- `github-issue.md` files are user-facing requirements documents only.
+- ❌ NEVER include source-code references in an issue: file paths, namespaces, class/type/method names, project paths, code snippets, implementation structure, or test/build commands.
+- ✅ Describe the problem, user impact, expected behavior, compatibility expectations, scope, and acceptance criteria at the product/behavior level.
+- ✅ Keep implementation details, source locations, and validation commands in the associated technical plan or review record, not in the issue document.

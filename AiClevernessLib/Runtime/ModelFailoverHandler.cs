@@ -194,6 +194,7 @@ internal sealed class ModelFailoverHandler
         string failureError,
         string failureVerb,
         string reason,
+        LlmProviderFailureMetadata? providerFailure,
         List<string> steps,
         Action<string> report,
         Action<AgentEvent>? emit,
@@ -225,8 +226,9 @@ internal sealed class ModelFailoverHandler
                          {
                              ExecutionId = executionId,
                              Error = failureError,
-                             Phase = "LlmCompletion",
-                             IsTransient = true
+                             Phase = LlmFailurePhases.LlmCompletion,
+                             IsTransient = true,
+                             ProviderFailure = providerFailure
                          });
 
         await NotifySwitchAsync(

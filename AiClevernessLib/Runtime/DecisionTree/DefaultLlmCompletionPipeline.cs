@@ -24,6 +24,28 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
         ILogger<DefaultLlmCompletionPipeline>? logger = null,
         IModelCatalog? modelCatalog = null,
         ILoggerFactory? loggerFactory = null)
+        : this(
+            llm,
+            new LlmFailureClassificationOptions(),
+            observers,
+            eventPublisher,
+            logger,
+            modelCatalog,
+            loggerFactory)
+    {
+    }
+
+    /// <summary>
+    /// Creates a completion pipeline using application-owned failure mappings.
+    /// </summary>
+    public DefaultLlmCompletionPipeline(
+        ILlmClient llm,
+        LlmFailureClassificationOptions classificationOptions,
+        IEnumerable<IAgentObserver>? observers = null,
+        IExecutionEventPublisher? eventPublisher = null,
+        ILogger<DefaultLlmCompletionPipeline>? logger = null,
+        IModelCatalog? modelCatalog = null,
+        ILoggerFactory? loggerFactory = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
         _observers = observers ?? Array.Empty<IAgentObserver>();
@@ -31,7 +53,8 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
         _logger = logger;
         _modelCatalog = modelCatalog;
         _loggerFactory = loggerFactory;
-        _errorClassifier = new DefaultLlmErrorClassifier();
+        ArgumentNullException.ThrowIfNull(classificationOptions);
+        _errorClassifier = new DefaultLlmErrorClassifier(classificationOptions);
         _strategy = LlmCallStrategyFactory.Create(_llm, _loggerFactory);
     }
 
@@ -146,6 +169,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
                         exception.Message,
                         timeout ? "timed out" : "failed",
                         exception.Message,
+                        providerFailure,
                         steps,
                         report,
                         emit,

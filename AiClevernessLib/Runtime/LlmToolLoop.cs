@@ -198,8 +198,8 @@ internal sealed class LlmToolLoop
                     : $"LLM error on turn {turn}: {exception.Message}";
                 var phase = exception.FailoverEnabled
                              && exception.Classification == EFailureClassification.TransientAdvance
-                    ? "ModelFailover"
-                    : "LlmCompletion";
+                    ? LlmFailurePhases.ModelFailover
+                    : LlmFailurePhases.LlmCompletion;
                 transcript?.AppendStatus(
                     exception.Timeout ? "LLM timeout" : "LLM failure",
                     errorMessage);
@@ -213,7 +213,7 @@ internal sealed class LlmToolLoop
                     IsTransient = exception.Classification == EFailureClassification.TransientAdvance,
                     ProviderFailure = exception.ProviderFailure
                 });
-                var failureKind = phase == "ModelFailover"
+                var failureKind = phase == LlmFailurePhases.ModelFailover
                     ? EFailureKind.FailoverExhausted
                     : exception.Timeout ? EFailureKind.LlmTimeout : EFailureKind.LlmError;
                 return new AgentResult(
@@ -255,7 +255,7 @@ internal sealed class LlmToolLoop
                 {
                     ExecutionId = executionId,
                     Error = exception.Message,
-                    Phase = "LlmCompletion",
+                    Phase = LlmFailurePhases.LlmCompletion,
                     IsTransient = false
                 });
                 return new AgentResult(

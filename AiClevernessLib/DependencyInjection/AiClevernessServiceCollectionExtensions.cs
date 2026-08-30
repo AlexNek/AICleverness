@@ -309,7 +309,7 @@ public static class AiClevernessServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddAiClevernessRuntime(this IServiceCollection services)
     {
-        return services.AddAiClevernessRuntime(null);
+        return services.AddAiClevernessRuntime(null, null);
     }
 
     /// <summary>
@@ -319,11 +319,33 @@ public static class AiClevernessServiceCollectionExtensions
         this IServiceCollection services,
         Action<AgentRuntimeOptions>? configure)
     {
+        return services.AddAiClevernessRuntime(configure, null);
+    }
+
+    /// <summary>
+    /// Adds the core runtime services and configures runtime and failure-classification defaults.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">Optional runtime configuration.</param>
+    /// <param name="configureFailureClassification">
+    /// Optional application-owned provider error and status mappings.
+    /// </param>
+    public static IServiceCollection AddAiClevernessRuntime(
+        this IServiceCollection services,
+        Action<AgentRuntimeOptions>? configure,
+        Action<LlmFailureClassificationOptions>? configureFailureClassification)
+    {
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddSingleton<IToolRegistry, ToolRegistry>();
         services.TryAddSingleton<IToolExecutor, DefaultToolExecutor>();
         services.TryAddSingleton<IAgentMemory, InMemoryAgentMemory>();
+        services.TryAddSingleton(sp =>
+        {
+            var options = new LlmFailureClassificationOptions();
+            configureFailureClassification?.Invoke(options);
+            return options;
+        });
         services.TryAddSingleton<ILlmCompletionPipeline, DefaultLlmCompletionPipeline>();
         services.TryAddSingleton<IAgentRuntime, AgentRuntime>();
         services.TryAddSingleton<IPlannerRegistry, PlannerRegistry>();
