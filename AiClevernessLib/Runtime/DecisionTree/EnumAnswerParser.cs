@@ -46,7 +46,7 @@ public sealed class EnumAnswerParser
         }
     }
 
-    private static string StripCodeFences(string content)
+    internal static string StripCodeFences(string content)
     {
         var trimmed = content.Trim();
         if (!trimmed.StartsWith(CodeFenceMarker, StringComparison.Ordinal))
