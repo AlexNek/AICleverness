@@ -707,8 +707,10 @@ public sealed class DecisionTreeExecutor
             outcome,
             state.Classifications.ToArray(),
             state.ResourceUsage,
-            error,
-            stateProperties);
+            error)
+        {
+            StateProperties = stateProperties
+        };
         _transcript.Value?.CompleteDecision(result);
         return result;
     }

@@ -24,6 +24,20 @@ internal sealed class DecisionTreeTestAction : IDecisionAction
                 CreatedAt = DateTimeOffset.UtcNow,
                 ActionId = Key
             });
-        return Task.FromResult(new DecisionActionResult(null, null, DecisionActionStatus.Success));
+        var actionProperties = (IReadOnlyDictionary<string, string>?)null;
+        if (context.TemplateParameters.TryGetValue("state-property", out var stateProperty))
+        {
+            context.State.Properties["directProperty"] = stateProperty;
+            context.State.Properties["nullProperty"] = null;
+            actionProperties = new Dictionary<string, string>
+            {
+                ["returnedProperty"] = stateProperty
+            };
+        }
+
+        return Task.FromResult(new DecisionActionResult(
+            null,
+            actionProperties,
+            DecisionActionStatus.Success));
     }
 }

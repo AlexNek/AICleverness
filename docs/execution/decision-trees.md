@@ -93,7 +93,7 @@ This example collects evidence, runs a bounded classification, checks the eviden
   "nodes": {
     "collect": {
       "type": "action",
-      "actionName": "collectEvidence",
+      "actionKey": "collectEvidence",
       "transitions": [
         { "condition": "success", "nextNodeId": "classify" },
         { "condition": "transientFailure", "nextNodeId": "failed" },
@@ -112,7 +112,7 @@ This example collects evidence, runs a bounded classification, checks the eviden
     },
     "verify": {
       "type": "condition",
-      "predicateName": "dataExists",
+      "predicateKey": "dataExists",
       "predicateParameters": {
         "type": "evidence"
       },
@@ -191,7 +191,18 @@ Console.WriteLine($"LLM calls: {result.Usage.LlmCalls}");
 Console.WriteLine($"Tokens: {result.Usage.TotalTokens}");
 ```
 
-`DecisionTreeResult` contains the execution ID, success flag, terminal verdict, outcome, parsed classifications, final `ResourceUsage`, and an optional error. Possible outcomes are `Terminal`, `Unknown`, `ActionFailed`, `BudgetExhausted`, `Cancelled`, and `ValidationFailed`.
+`DecisionTreeResult` contains the execution ID, success flag, terminal verdict, outcome, parsed classifications, final `ResourceUsage`, an optional error, and `StateProperties`, which contains the non-null values produced by decision actions. Possible outcomes are `Terminal`, `Unknown`, `ActionFailed`, `BudgetExhausted`, `Cancelled`, and `ValidationFailed`.
+
+Read action-produced values from the result with a null-safe lookup and type check:
+
+```csharp
+if (result.StateProperties?.TryGetValue("evidenceCollected", out var value) == true
+    && value is string evidenceCollected
+    && string.Equals(evidenceCollected, "true", StringComparison.Ordinal))
+{
+    Console.WriteLine("Evidence was collected.");
+}
+```
 
 ## Implement an action
 
@@ -203,7 +214,7 @@ using AiCleverness.Models.DecisionTree;
 
 public sealed class CollectEvidenceAction : IDecisionAction
 {
-    public string Name => "collectEvidence";
+    public string Key => "collectEvidence";
 
     public Task<DecisionActionResult> ExecuteAsync(
         DecisionActionContext context,
@@ -253,7 +264,7 @@ using AiCleverness.Models.DecisionTree;
 
 public sealed class HasApprovalFlagPredicate : IDecisionPredicate
 {
-    public string Name => "hasApprovalFlag";
+    public string Key => "hasApprovalFlag";
 
     public bool Evaluate(DecisionPredicateContext context)
         => context.State.Properties.TryGetValue("approved", out var value)

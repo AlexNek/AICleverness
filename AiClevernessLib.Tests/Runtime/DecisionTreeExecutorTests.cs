@@ -30,6 +30,53 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ExposesActionStatePropertiesAndFiltersNullValues()
+    {
+        var executor = CreateExecutor();
+        var tree = CreateActionConditionTree();
+
+        var result = await executor.ExecuteAsync(
+            tree,
+            new Dictionary<string, string>
+            {
+                ["state-property"] = "discovered-value"
+            });
+
+        result.StateProperties.Should().NotBeNull();
+        result.StateProperties.Should().ContainKey("directProperty")
+            .WhoseValue.Should().Be("discovered-value");
+        result.StateProperties.Should().ContainKey("returnedProperty")
+            .WhoseValue.Should().Be("discovered-value");
+        result.StateProperties.Should().NotContainKey("nullProperty");
+    }
+
+    [Fact]
+    public void DecisionTreeResult_PreservesTheLegacyConstructor()
+    {
+        var usage = new ResourceUsage();
+        var result = new DecisionTreeResult(
+            "execution-id",
+            true,
+            "winner",
+            DecisionTreeOutcome.Terminal,
+            [],
+            usage,
+            Error: null);
+
+        result.StateProperties.Should().BeNull();
+
+        var (executionId, succeeded, verdict, outcome, classifications, deconstructedUsage, error) = result;
+
+        executionId.Should().Be("execution-id");
+        succeeded.Should().BeTrue();
+        verdict.Should().Be("winner");
+        outcome.Should().Be(DecisionTreeOutcome.Terminal);
+        classifications.Should().BeEmpty();
+        deconstructedUsage.Should().BeSameAs(usage);
+        error.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ReasksOnceAndRecordsTheParsedClassification()
     {
         var pipeline = new DecisionTreeCompletionPipeline()
