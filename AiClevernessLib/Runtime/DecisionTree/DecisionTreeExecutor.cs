@@ -14,6 +14,7 @@ namespace AiCleverness.Runtime.DecisionTree;
 public sealed class DecisionTreeExecutor
 {
     private const int DefaultDisplayMaxLength = 120;
+    private const int MaxClassificationAttempts = 2;
 
     private readonly IReadOnlyDictionary<string, IDecisionAction> _actions;
     private readonly IReadOnlyDictionary<string, IDecisionPredicate> _predicates;
@@ -328,7 +329,7 @@ public sealed class DecisionTreeExecutor
         CancellationToken cancellationToken)
     {
         string? lastRawContent = null;
-        for (var attempt = 1; attempt <= 2; attempt++)
+        for (var attempt = 1; attempt <= MaxClassificationAttempts; attempt++)
         {
             if (attempt > 1 && state.ResourceUsage.LlmCalls >= budget.MaxLlmCalls
                 && await LimitReachedAsync(budget.MaxLlmCalls, state.ResourceUsage.LlmCalls, budget.OnExceeded, cancellationToken))
@@ -340,7 +341,7 @@ public sealed class DecisionTreeExecutor
             var boundedData = new DecisionDataSnapshot(selectedData.Items);
             var built = _contextBuilder.Build(tree, node, state, boundedData, parameters);
             var requiredUserMessages = built
-                .Where(message => string.Equals(message.Role, "user", StringComparison.Ordinal))
+                .Where(message => string.Equals(message.Role, LlmMessageRoles.User, StringComparison.Ordinal))
                 .ToArray();
             conversation.AddMessages(built);
             var messages = await conversation.GetMessagesForCompletionAsync(
@@ -386,7 +387,7 @@ public sealed class DecisionTreeExecutor
             if (attempt == 1)
                 conversation.AddMessage(new LlmMessage(LlmMessageRoles.User, "Return valid JSON using exactly one allowed answer."));
         }
-        return (null, 2, false, lastRawContent, null);
+        return (null, MaxClassificationAttempts, false, lastRawContent, null);
     }
 
     private async Task EmitNodeVisitedAsync(

@@ -23,6 +23,9 @@ internal sealed class LlmToolLoop
     private const int MaxReasoningDisplayLength = 500;
     private const int MaxDecisionArgumentLength = 200;
     private const int MaxToolResultPreviewLength = 100;
+    private const int FirstLineSplitCount = 2;
+    private const int EllipsisCharacterCount = 3;
+    private const string Ellipsis = "...";
     private const string ToolFailedStatus = "Failed";
     private const string ToolCachedStatus = "Cached";
     private const string ToolCachedFailureStatus = "CachedFailure";
@@ -581,7 +584,7 @@ internal sealed class LlmToolLoop
 
         var firstLine = output.Split(
                 new[] { '\r', '\n' },
-                2,
+                FirstLineSplitCount,
                 StringSplitOptions.None)[0]
             .Trim();
         if (firstLine.Length == 0)
@@ -617,7 +620,7 @@ internal sealed class LlmToolLoop
     private static string TruncateReasoning(string text, int maxLength)
     {
         return text.Length > maxLength
-            ? string.Concat(text.AsSpan(0, maxLength), "...")
+            ? string.Concat(text.AsSpan(0, maxLength), Ellipsis)
             : text;
     }
 
@@ -628,12 +631,12 @@ internal sealed class LlmToolLoop
             return text;
         }
 
-        if (maxLength <= 3)
+        if (maxLength <= EllipsisCharacterCount)
         {
             return new string('.', maxLength);
         }
 
-        return string.Concat(text.AsSpan(0, maxLength - 3), "...");
+        return string.Concat(text.AsSpan(0, maxLength - EllipsisCharacterCount), Ellipsis);
     }
 
 }

@@ -10,16 +10,18 @@ namespace AiCleverness.Runtime.Workflows;
 /// </summary>
 public sealed class CoordinatorReviewerPattern
 {
+    private const int DefaultMaxReviewCycles = 3;
+
     private readonly int _maxReviewCycles;
 
     private readonly IAgentRuntime _runtime;
 
     /// <param name="runtime">The agent runtime for executing both agents.</param>
     /// <param name="maxReviewCycles">Maximum number of review-and-retry cycles (default: 3).</param>
-    public CoordinatorReviewerPattern(IAgentRuntime runtime, int maxReviewCycles = 3)
+    public CoordinatorReviewerPattern(IAgentRuntime runtime, int maxReviewCycles = DefaultMaxReviewCycles)
     {
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
-        _maxReviewCycles = maxReviewCycles > 0 ? maxReviewCycles : 3;
+        _maxReviewCycles = maxReviewCycles > 0 ? maxReviewCycles : DefaultMaxReviewCycles;
     }
 
     /// <summary>

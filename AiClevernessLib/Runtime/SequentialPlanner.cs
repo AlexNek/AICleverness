@@ -20,8 +20,6 @@ public sealed class SequentialPlanner : INamedAgentPlanner
     private const string JsonTypeProperty = "type";
     private const string JsonDescriptionProperty = "description";
     private const string JsonToolProperty = "tool";
-    private const string DefaultStepType = "action";
-    private const string StepNamePrefix = "step-";
 
     private readonly ILlmClient _llm;
 
@@ -84,7 +82,8 @@ public sealed class SequentialPlanner : INamedAgentPlanner
 
         var messages = new List<LlmMessage>
                            {
-                               new("system", systemPrompt), new("user", userPrompt)
+                               new(LlmMessageRoles.System, systemPrompt),
+                               new(LlmMessageRoles.User, userPrompt)
                            };
 
         try
@@ -115,10 +114,10 @@ public sealed class SequentialPlanner : INamedAgentPlanner
 
             foreach (var element in doc.RootElement.EnumerateArray())
             {
-                var name = element.GetProperty(JsonNameProperty).GetString() ?? $"{StepNamePrefix}{steps.Count + 1}";
+                var name = element.GetProperty(JsonNameProperty).GetString() ?? $"{PlannerVocabulary.StepNamePrefix}{steps.Count + 1}";
                 var type = element.TryGetProperty(JsonTypeProperty, out var typeProp)
-                               ? typeProp.GetString() ?? DefaultStepType
-                               : DefaultStepType;
+                               ? typeProp.GetString() ?? PlannerVocabulary.ActionStepType
+                               : PlannerVocabulary.ActionStepType;
                 var description = element.TryGetProperty(JsonDescriptionProperty, out var descProp)
                                       ? descProp.GetString()
                                       : null;

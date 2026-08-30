@@ -57,9 +57,9 @@ public sealed class DefaultPlanner : INamedAgentPlanner
         var messages = new List<LlmMessage>
                            {
                                new(
-                                   "system",
+                                   LlmMessageRoles.System,
                                    "You produce step-by-step plans as JSON arrays of strings."),
-                               new("user", prompt)
+                               new(LlmMessageRoles.User, prompt)
                            };
 
         try
@@ -82,8 +82,8 @@ public sealed class DefaultPlanner : INamedAgentPlanner
 
             return steps
                 .Select((description, index) => new PlannedStep(
-                    $"step-{index + 1}",
-                    "action",
+                    $"{PlannerVocabulary.StepNamePrefix}{index + 1}",
+                    PlannerVocabulary.ActionStepType,
                     description))
                 .ToList();
         }
