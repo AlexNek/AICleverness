@@ -115,6 +115,11 @@ The `[Unreleased]` section must always describe the **final user-facing state re
 - Never refactor, "simplify", or restructure adjacent working code unless explicitly asked.
 - If a change seems to require touching unrelated structure, stop and ask first.
 
+## Planning and issue-document immutability (MANDATORY)
+
+- ❌ Do not modify `github-issue.md`, feature specifications, implementation plans, or other task-definition documents after implementation begins or completes unless the user explicitly requests that specific document change in the current task.
+- ✅ Treat those documents as historical requirements and planning records. Do not rewrite them to reflect implementation status, test results, or later design decisions without a clear task.
+
 ## Git discipline (MANDATORY)
 
 - ❌ NEVER run `git commit`, `git push`, `git tag`, or any history-rewriting command — commits are made by the user only, with the user's own commit text
