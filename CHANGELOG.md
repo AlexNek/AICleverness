@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `DecisionTreeResult.StateProperties` exposes a snapshot of non-null action-produced execution state values through a read-only dictionary while preserving the existing result constructor for binary compatibility.
+
 ### Changed
-- **Breaking:** Decision-tree contracts now use `ActionKey`/`PredicateKey` instead of `ActionName`/`PredicateName`, and action and predicate implementations expose `Key` instead of `Name`. Decision trees and nodes now support optional `Name`/`Description` metadata, while `DecisionTreeResult` exposes optional `StateProperties`. Migrate C# references and implementations, rename JSON `actionName`/`predicateName` fields to `actionKey`/`predicateKey`, and read action-produced state from `result.StateProperties`.
+- **Breaking:** Decision-tree contracts now use `ActionKey`/`PredicateKey` instead of `ActionName`/`PredicateName`, and action and predicate implementations expose `Key` instead of `Name`. Decision trees and nodes now support optional `Name`/`Description` metadata. Migrate C# references and implementations, and rename JSON `actionName`/`predicateName` fields to `actionKey`/`predicateKey`.
 - Decision transcripts now normalize valid language-tagged and bare Markdown fences around structured LLM responses into one readable JSON block.
 
 ## [1.6.0] - 2026-08-28
