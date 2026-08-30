@@ -210,7 +210,8 @@ internal sealed class LlmToolLoop
                     ExecutionId = executionId,
                     Error = errorMessage,
                     Phase = phase,
-                    IsTransient = exception.Classification == EFailureClassification.TransientAdvance
+                    IsTransient = exception.Classification == EFailureClassification.TransientAdvance,
+                    ProviderFailure = exception.ProviderFailure
                 });
                 var failureKind = phase == "ModelFailover"
                     ? EFailureKind.FailoverExhausted

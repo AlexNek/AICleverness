@@ -98,6 +98,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
                     response.Usage,
                     error: null,
                     classification: null,
+                    providerFailure: null,
                     startedAt,
                     cancellationToken);
                 return response;
@@ -109,7 +110,19 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
             catch (Exception exception)
             {
                 var classification = _errorClassifier.Classify(exception, cancellationToken);
+                var providerFailure = LlmProviderFailureMetadata.FromException(exception);
                 var timeout = exception is OperationCanceledException && !cancellationToken.IsCancellationRequested;
+                if (providerFailure is not null)
+                {
+                    _logger?.LogWarning(
+                        "LLM completion provider failure classified as {Classification}: provider={Provider}, code={ErrorCode}, status={StatusCode}, retryAfter={RetryAfter}",
+                        classification,
+                        providerFailure.Provider,
+                        providerFailure.ErrorCode,
+                        providerFailure.StatusCode,
+                        providerFailure.RetryAfter);
+                }
+
                 await NotifyCompletedAsync(
                     request,
                     currentOptions,
@@ -119,6 +132,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
                     usage: null,
                     exception.Message,
                     classification,
+                    providerFailure,
                     startedAt,
                     cancellationToken);
 
@@ -205,6 +219,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
         LlmTokenUsage? usage,
         string? error,
         EFailureClassification? classification,
+        LlmProviderFailureMetadata? providerFailure,
         DateTimeOffset startedAt,
         CancellationToken cancellationToken)
     {
@@ -220,6 +235,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
             Success = error is null,
             Error = error,
             Classification = classification,
+            ProviderFailure = providerFailure,
             StartedAt = startedAt
         };
 
@@ -250,7 +266,10 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
                     usage,
                     Success: error is null,
                     Turn: request.Turn,
-                    Error: error),
+                    Error: error)
+                {
+                    ProviderFailure = providerFailure
+                },
                 cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

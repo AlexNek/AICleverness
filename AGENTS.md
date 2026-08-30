@@ -70,10 +70,6 @@ AiClevernessLib.Demo   →  AiClevernessLib  ←  AiClevernessLib.Tests
 
 `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
-### Rule: packages without a first release
-
-- While the package has never been released (CHANGELOG contains no versioned sections, only `[Unreleased]`), do NOT update `CHANGELOG.md` for code changes — there are no released users to inform. Changelog content is written only when a release is prepared.
-
 ### Format rules
 
 - Top-level heading: `# Changelog`

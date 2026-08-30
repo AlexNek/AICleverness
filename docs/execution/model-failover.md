@@ -128,16 +128,46 @@ services.AddAiClevernessRuntime(options =>
 
 ## Error Classification
 
-The `DefaultLlmErrorClassifier` classifies failures:
+The shared `DefaultLlmErrorClassifier` classifies failures without performing
+retries itself. `TransientAdvance` allows the failover handler to advance to
+the next candidate; `Permanent` stops the current run.
 
 | Failure | Classification | Action |
 | --- | --- | --- |
 | Per-turn timeout (`OperationCanceledException`, caller token alive) | `TransientAdvance` | Advance to next candidate |
-| User cancellation | `Permanent` | Abort |
-| Any other exception | `Permanent` | Abort |
+| Caller cancellation, including a provider exception wrapping cancellation | `Permanent` | Abort |
+| Explicit provider `IsTransient = true` | `TransientAdvance` | Advance to next candidate |
+| Explicit provider `IsTransient = false` | `Permanent` | Abort |
+| HTTP 408, 429, 500, 502, 503, or 504 | `TransientAdvance` | Advance to next candidate |
+| HTTP 4xx, 501, 505, or other HTTP 5xx | `Permanent` | Abort |
+| Anthropic HTTP 529 | `TransientAdvance` | Advance to next candidate |
+| Anthropic `overloaded_error`, Google/Gemini `RESOURCE_EXHAUSTED`, or OpenAI `rate_limit_exceeded` | `TransientAdvance` | Advance to next candidate |
+| Unknown or incomplete provider code | `Permanent` | Abort |
 
-Rate-limit and unavailable-model signals can be added to the classifier
-without touching the tool loop.
+Provider adapters can preserve their original exception and expose structured
+metadata without depending on provider-specific runtime types:
+
+```csharp
+throw new LlmProviderException(
+    providerException,
+    provider: "anthropic",
+    errorCode: "overloaded_error",
+    statusCode: (HttpStatusCode)529,
+    retryAfter: TimeSpan.FromSeconds(10));
+```
+
+`RetryAfter` is diagnostic only; the runtime does not delay or retry the same
+model. Hard-permanent HTTP statuses take precedence over conflicting transient
+metadata, and legacy `HTTP nnn` and rate-limit message patterns remain
+supported for adapters that have not migrated.
+
+## Provider Failure Diagnostics
+
+When a provider exception is present, the same immutable
+`LlmProviderFailureMetadata` snapshot is available on `LlmCallInfo.ProviderFailure`,
+`LlmCallCompletedBusEvent.ProviderFailure`, and terminal streaming
+`FailureEvent.ProviderFailure`. These properties are nullable and remain null
+for successful calls and legacy exceptions without provider metadata.
 
 ## Interaction with Quality Gates
 

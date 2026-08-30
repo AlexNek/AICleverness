@@ -1,3 +1,5 @@
+using System.Net;
+
 using AiCleverness.Models;
 using AiCleverness.Runtime;
 
@@ -165,16 +167,165 @@ public sealed class DefaultLlmErrorClassifierTests
         result.Should().Be(EFailureClassification.TransientAdvance);
     }
 
-    [Fact]
-    public void Classify_FreeModelsPerMin_ReturnsTransientAdvance()
+    [Theory]
+    [InlineData("anthropic", "overloaded_error")]
+    [InlineData("google", "RESOURCE_EXHAUSTED")]
+    [InlineData("gemini", "RESOURCE_EXHAUSTED")]
+    [InlineData("openai", "rate_limit_exceeded")]
+    public void Classify_KnownProviderCapacityCode_ReturnsTransientAdvance(
+        string provider,
+        string errorCode)
     {
-        // Arrange — OpenRouter-specific rate limit pattern
-        var ex = new Exception("free-models-per-min limit hit");
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider rejected the request"),
+            provider: provider,
+            errorCode: errorCode);
 
         // Act
         var result = _sut.Classify(ex, _callerCts.Token);
 
         // Assert
         result.Should().Be(EFailureClassification.TransientAdvance);
+    }
+
+    [Theory]
+    [InlineData(null, "overloaded_error")]
+    [InlineData("unknown-provider", "overloaded_error")]
+    [InlineData("anthropic", "unknown_code")]
+    public void Classify_UnknownOrIncompleteProviderCode_ReturnsPermanent(
+        string? provider,
+        string? errorCode)
+    {
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider error"),
+            provider: provider,
+            errorCode: errorCode);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Fact]
+    public void Classify_WrappedCallerCancellation_ReturnsPermanent()
+    {
+        // Arrange
+        _callerCts.Cancel();
+        var ex = new LlmProviderException(
+            new OperationCanceledException(),
+            provider: "anthropic",
+            errorCode: "overloaded_error",
+            isTransient: true);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Theory]
+    [InlineData(true, EFailureClassification.TransientAdvance)]
+    [InlineData(false, EFailureClassification.Permanent)]
+    public void Classify_ExplicitTransientMetadata_TakesPrecedenceWithoutHardStatus(
+        bool isTransient,
+        EFailureClassification expected)
+    {
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("explicit provider classification"),
+            provider: "test-provider",
+            isTransient: isTransient);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.RequestTimeout, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.TooManyRequests, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.InternalServerError, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.BadGateway, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.GatewayTimeout, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.BadRequest, EFailureClassification.Permanent)]
+    [InlineData(HttpStatusCode.Unauthorized, EFailureClassification.Permanent)]
+    [InlineData(HttpStatusCode.NotFound, EFailureClassification.Permanent)]
+    [InlineData(HttpStatusCode.NotImplemented, EFailureClassification.Permanent)]
+    [InlineData(HttpStatusCode.HttpVersionNotSupported, EFailureClassification.Permanent)]
+    public void Classify_StructuredStatus_ReturnsExpectedClassification(
+        HttpStatusCode statusCode,
+        EFailureClassification expected)
+    {
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider status"),
+            provider: "test-provider",
+            statusCode: statusCode);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Classify_AnthropicOverloadStatus529_ReturnsTransientAdvance()
+    {
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("overloaded"),
+            provider: "anthropic",
+            statusCode: (HttpStatusCode)529);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.TransientAdvance);
+    }
+
+    [Fact]
+    public void Classify_ConflictingTransientMetadata_DoesNotOverrideHardPermanentStatus()
+    {
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("unauthorized"),
+            provider: "anthropic",
+            statusCode: HttpStatusCode.Unauthorized,
+            isTransient: true);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Theory]
+    [InlineData("HTTP 599: provider unavailable", EFailureClassification.TransientAdvance)]
+    [InlineData("HTTP 501: not implemented", EFailureClassification.Permanent)]
+    [InlineData("HTTP 505: unsupported version", EFailureClassification.Permanent)]
+    [InlineData("HTTP 5033: malformed status", EFailureClassification.Permanent)]
+    public void Classify_LegacyHttpStatus_PreservesCompatibilityAndRejectsMalformedStatus(
+        string message,
+        EFailureClassification expected)
+    {
+        // Arrange
+        var ex = new Exception(message);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(expected);
     }
 }

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `DecisionTreeResult.StateProperties` exposes a snapshot of non-null action-produced execution state values through a read-only dictionary while preserving the existing result constructor for binary compatibility.
+- Provider overload and capacity classification now supports additive `LlmProviderException` metadata, provider-specific transient mappings, hard-permanent status handling, failover advancement, and nullable diagnostics on LLM call observers, bus events, and terminal failure events.
 
 ### Changed
 - **Breaking:** Decision-tree contracts now use `ActionKey`/`PredicateKey` instead of `ActionName`/`PredicateName`, and action and predicate implementations expose `Key` instead of `Name`. Decision trees and nodes now support optional `Name`/`Description` metadata. Migrate C# references and implementations, and rename JSON `actionName`/`predicateName` fields to `actionKey`/`predicateKey`.

@@ -13,6 +13,9 @@ public sealed record LlmCallInfo
     /// <summary>Classification applied by the error classifier (null on success).</summary>
     public EFailureClassification? Classification { get; init; }
 
+    /// <summary>Structured provider metadata when the call failed through an adapter.</summary>
+    public LlmProviderFailureMetadata? ProviderFailure { get; init; }
+
     /// <summary>Wall-clock duration of this LLM call.</summary>
     public required TimeSpan Duration { get; init; }
 
