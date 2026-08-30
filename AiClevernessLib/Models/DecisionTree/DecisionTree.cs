@@ -3,6 +3,8 @@ namespace AiCleverness.Models.DecisionTree;
 /// <summary>Declarative decision tree executed by the decision-tree executor.</summary>
 public sealed record DecisionTree
 {
+    public string? Name { get; init; }
+    public string? Description { get; init; }
     public DecisionBudget Budget { get; init; } = new();
     public IReadOnlyDictionary<string, DecisionNode> Nodes { get; init; } =
         new Dictionary<string, DecisionNode>(StringComparer.Ordinal);

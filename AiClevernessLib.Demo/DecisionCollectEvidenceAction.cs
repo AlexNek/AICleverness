@@ -6,7 +6,7 @@ namespace AiClevernessLib.Demo;
 /// <summary>Small in-memory demo action used only by the decision-tree scenario.</summary>
 public sealed class DecisionCollectEvidenceAction : IDecisionAction
 {
-    public string Name => "collectEvidence";
+    public string Key => "collectEvidence";
 
     public Task<DecisionActionResult> ExecuteAsync(
         DecisionActionContext context,
@@ -20,7 +20,7 @@ public sealed class DecisionCollectEvidenceAction : IDecisionAction
                 Type = "evidence",
                 Content = "Review findings for the release note against all four publication criteria: the note describes the user-visible transcript diagnostics, is concise, contains no secrets or private data, and has no unresolved blocking issues. All criteria passed.",
                 CreatedAt = DateTimeOffset.UtcNow,
-                ActionId = Name,
+                ActionId = Key,
                 Metadata = new Dictionary<string, string>
                 {
                     ["subject"] = "sample release note",

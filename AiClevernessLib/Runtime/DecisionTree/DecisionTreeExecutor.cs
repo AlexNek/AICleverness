@@ -117,7 +117,7 @@ public sealed class DecisionTreeExecutor
                 {
                     case EDecisionNodeType.Action:
                     {
-                        var action = GetAction(node.ActionName, currentNodeId);
+                        var action = GetAction(node.ActionKey, currentNodeId);
                         var dataCountBeforeAction = data.GetAll().Count;
                         DecisionActionResult actionResult;
                         try
@@ -154,7 +154,7 @@ public sealed class DecisionTreeExecutor
                         await EmitActionCompletedAsync(
                             executionId,
                             currentNodeId,
-                            node.ActionName!,
+                            node.ActionKey!,
                             actionResult,
                             data.GetAll().Skip(dataCountBeforeAction).ToArray(),
                             cancellationToken);
@@ -233,7 +233,7 @@ public sealed class DecisionTreeExecutor
                     }
                     case EDecisionNodeType.Condition:
                     {
-                        var predicate = GetPredicate(node.PredicateName, currentNodeId);
+                        var predicate = GetPredicate(node.PredicateKey, currentNodeId);
                         bool result;
                         try
                         {
@@ -259,7 +259,7 @@ public sealed class DecisionTreeExecutor
                                 state,
                                 DecisionTreeOutcome.ValidationFailed,
                                 null,
-                                $"Predicate '{node.PredicateName}' failed: {exception.Message}");
+                                $"Predicate '{node.PredicateKey}' failed: {exception.Message}");
                         }
                         outcome = result ? "true" : "false";
                         nextNodeId = FindTransition(node, outcome).NextNodeId;
@@ -424,7 +424,7 @@ public sealed class DecisionTreeExecutor
     private async Task EmitActionCompletedAsync(
         string executionId,
         string nodeId,
-        string actionName,
+        string actionKey,
         DecisionActionResult result,
         IReadOnlyList<DecisionData> producedData,
         CancellationToken cancellationToken)
@@ -433,7 +433,7 @@ public sealed class DecisionTreeExecutor
         var journalEvent = new DecisionActionCompletedEvent(
             executionId,
             nodeId,
-            actionName,
+            actionKey,
             result.Status,
             result.Error,
             _defaultOptions?.TraceId,
@@ -444,14 +444,14 @@ public sealed class DecisionTreeExecutor
             new DecisionActionCompletedBusEvent(
                 executionId,
                 nodeId,
-                actionName,
+                actionKey,
                 result.Status,
                 result.Error,
                 timestamp,
                 _defaultOptions?.TraceId,
                 _defaultOptions?.CorrelationId),
             cancellationToken);
-        _transcript.Value?.AppendDecisionAction(nodeId, actionName, result, producedData);
+        _transcript.Value?.AppendDecisionAction(nodeId, actionKey, result, producedData);
     }
 
     private async Task EmitClassificationCompletedAsync(
@@ -590,21 +590,21 @@ public sealed class DecisionTreeExecutor
         return node;
     }
 
-    private IDecisionAction GetAction(string? actionName, string nodeId)
+    private IDecisionAction GetAction(string? actionKey, string nodeId)
     {
-        if (string.IsNullOrWhiteSpace(actionName)
-            || !_actions.TryGetValue(actionName, out var action))
+        if (string.IsNullOrWhiteSpace(actionKey)
+            || !_actions.TryGetValue(actionKey, out var action))
             throw new InvalidOperationException(
-                $"Action '{actionName ?? "<missing>"}' for node '{nodeId}' is not registered.");
+                $"Action '{actionKey ?? "<missing>"}' for node '{nodeId}' is not registered.");
         return action;
     }
 
-    private IDecisionPredicate GetPredicate(string? predicateName, string nodeId)
+    private IDecisionPredicate GetPredicate(string? predicateKey, string nodeId)
     {
-        if (string.IsNullOrWhiteSpace(predicateName)
-            || !_predicates.TryGetValue(predicateName, out var predicate))
+        if (string.IsNullOrWhiteSpace(predicateKey)
+            || !_predicates.TryGetValue(predicateKey, out var predicate))
             throw new InvalidOperationException(
-                $"Predicate '{predicateName ?? "<missing>"}' for node '{nodeId}' is not registered.");
+                $"Predicate '{predicateKey ?? "<missing>"}' for node '{nodeId}' is not registered.");
         return predicate;
     }
 
@@ -697,6 +697,9 @@ public sealed class DecisionTreeExecutor
         string? verdict,
         string? error)
     {
+        var stateProperties = state.Properties
+            .Where(kvp => kvp.Value is not null)
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value!);
         var result = new DecisionTreeResult(
             executionId,
             outcome == DecisionTreeOutcome.Terminal,
@@ -704,7 +707,8 @@ public sealed class DecisionTreeExecutor
             outcome,
             state.Classifications.ToArray(),
             state.ResourceUsage,
-            error);
+            error,
+            stateProperties);
         _transcript.Value?.CompleteDecision(result);
         return result;
     }
@@ -718,12 +722,12 @@ public sealed class DecisionTreeExecutor
         {
             var name = item switch
             {
-                IDecisionAction action => action.Name,
-                IDecisionPredicate predicate => predicate.Name,
+                IDecisionAction action => action.Key,
+                IDecisionPredicate predicate => predicate.Key,
                 _ => throw new InvalidOperationException("Unsupported decision catalog item.")
             };
             if (string.IsNullOrWhiteSpace(name) || !catalog.TryAdd(name, item))
-                throw new InvalidOperationException($"Decision catalog contains duplicate or empty name '{name}'.");
+                throw new InvalidOperationException($"Decision catalog contains duplicate or empty key '{name}'.");
         }
         return catalog;
     }

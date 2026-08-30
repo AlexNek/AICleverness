@@ -6,7 +6,7 @@ namespace AiCleverness.Models.DecisionTree;
 public sealed record DecisionActionCompletedEvent(
     string ExecutionId,
     string NodeId,
-    string ActionName,
+    string ActionKey,
     DecisionActionStatus Status,
     string? Error = null,
     string? TraceId = null,

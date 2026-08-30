@@ -540,7 +540,7 @@ public sealed class DecisionTreeExecutorTests
                 ["check"] = new()
                 {
                     Type = EDecisionNodeType.Condition,
-                    PredicateName = predicate.Name,
+                    PredicateKey = predicate.Key,
                     Transitions =
                     [
                         new() { Condition = "true", NextNodeId = "done" },
@@ -685,7 +685,7 @@ public sealed class DecisionTreeExecutorTests
         var tree = CreateValidationTree(new DecisionNode
         {
             Type = EDecisionNodeType.Action,
-            ActionName = "missing-action",
+            ActionKey = "missing-action",
             Transitions =
             [
                 new() { Condition = "success", NextNodeId = "done" },
@@ -711,7 +711,7 @@ public sealed class DecisionTreeExecutorTests
         var tree = CreateValidationTree(new DecisionNode
         {
             Type = EDecisionNodeType.Condition,
-            PredicateName = "missing-predicate",
+            PredicateKey = "missing-predicate",
             Transitions =
             [
                 new() { Condition = "true", NextNodeId = "done" },
@@ -736,7 +736,7 @@ public sealed class DecisionTreeExecutorTests
         var tree = CreateValidationTree(new DecisionNode
         {
             Type = EDecisionNodeType.Action,
-            ActionName = "collect"
+            ActionKey = "collect"
         });
 
         // Act
@@ -781,7 +781,7 @@ public sealed class DecisionTreeExecutorTests
         var tree = CreateValidationTree(new DecisionNode
         {
             Type = EDecisionNodeType.Action,
-            ActionName = "collect",
+            ActionKey = "collect",
             Transitions =
             [
                 new() { Condition = "success", NextNodeId = "missing-node" },
@@ -963,7 +963,7 @@ public sealed class DecisionTreeExecutorTests
                 ["collect"] = new()
                 {
                     Type = EDecisionNodeType.Action,
-                    ActionName = "collect",
+                    ActionKey = "collect",
                     Transitions =
                     [
                         new() { Condition = "success", NextNodeId = "classify" },
@@ -1126,7 +1126,7 @@ public sealed class DecisionTreeExecutorTests
                 ["collect"] = new()
                 {
                     Type = EDecisionNodeType.Action,
-                    ActionName = "collect",
+                    ActionKey = "collect",
                     Transitions =
                     [
                         new() { Condition = "success", NextNodeId = "check" },
@@ -1137,7 +1137,7 @@ public sealed class DecisionTreeExecutorTests
                 ["check"] = new()
                 {
                     Type = EDecisionNodeType.Condition,
-                    PredicateName = "dataExists",
+                    PredicateKey = "dataExists",
                     PredicateParameters = new Dictionary<string, System.Text.Json.JsonElement>
                     {
                         ["type"] = JsonDocument.Parse("\"evidence\"").RootElement.Clone()

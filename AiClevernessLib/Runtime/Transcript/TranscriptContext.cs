@@ -313,7 +313,7 @@ internal sealed class TranscriptContext
 
     public void AppendDecisionAction(
         string nodeId,
-        string actionName,
+        string actionKey,
         DecisionActionResult result,
         IReadOnlyList<DecisionData> producedData)
     {
@@ -323,7 +323,7 @@ internal sealed class TranscriptContext
         AppendDecisionSection(
             Builder.DecisionAction(
                 RedactText(nodeId),
-                RedactText(actionName),
+                RedactText(actionKey),
                 result.Status,
                 result.Error is null ? null : RedactText(result.Error),
                 FormatProducedData(producedData)));
@@ -628,7 +628,7 @@ internal sealed class TranscriptContext
 
         return string.Join(
             Environment.NewLine,
-            $"Predicate: {RedactText(node.PredicateName ?? "(predicate unavailable)")}",
+            $"Predicate: {RedactText(node.PredicateKey ?? "(predicate unavailable)")}",
             $"Parameters: {RedactText(JsonSerializer.Serialize(
                 new Dictionary<string, JsonElement>(node.PredicateParameters ?? new Dictionary<string, JsonElement>()),
                 AiClevernessJson.Context.DictionaryStringJsonElement))}");

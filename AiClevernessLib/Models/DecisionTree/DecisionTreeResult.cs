@@ -10,4 +10,5 @@ public sealed record DecisionTreeResult(
     DecisionTreeOutcome Outcome,
     IReadOnlyList<DecisionClassification> Classifications,
     ResourceUsage Usage,
-    string? Error = null);
+    string? Error = null,
+    IReadOnlyDictionary<string, object>? StateProperties = null);
