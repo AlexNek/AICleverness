@@ -17,34 +17,25 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
     private readonly IEnumerable<IAgentObserver> _observers;
     private readonly ILlmCallStrategy _strategy;
 
-    public DefaultLlmCompletionPipeline(
-        ILlmClient llm,
-        IEnumerable<IAgentObserver>? observers = null,
-        IExecutionEventPublisher? eventPublisher = null,
-        ILogger<DefaultLlmCompletionPipeline>? logger = null,
-        IModelCatalog? modelCatalog = null,
-        ILoggerFactory? loggerFactory = null)
-        : this(
-            llm,
-            new LlmFailureClassificationOptions(),
-            observers,
-            eventPublisher,
-            logger,
-            modelCatalog,
-            loggerFactory)
-    {
-    }
-
     /// <summary>
-    /// Creates a completion pipeline using application-owned failure mappings.
+    /// Creates a completion pipeline using optional application-owned failure mappings.
     /// </summary>
+    /// <param name="llm">The LLM client used for completions.</param>
+    /// <param name="observers">Optional observers notified during completion execution.</param>
+    /// <param name="eventPublisher">Optional execution-event publisher.</param>
+    /// <param name="logger">Optional pipeline logger.</param>
+    /// <param name="modelCatalog">Optional model catalog used for failover.</param>
+    /// <param name="classificationOptions">
+    /// Optional application-owned provider error and status mappings.
+    /// </param>
+    /// <param name="loggerFactory">Optional logger factory used by the call strategy.</param>
     public DefaultLlmCompletionPipeline(
         ILlmClient llm,
-        LlmFailureClassificationOptions classificationOptions,
         IEnumerable<IAgentObserver>? observers = null,
         IExecutionEventPublisher? eventPublisher = null,
         ILogger<DefaultLlmCompletionPipeline>? logger = null,
         IModelCatalog? modelCatalog = null,
+        LlmFailureClassificationOptions? classificationOptions = null,
         ILoggerFactory? loggerFactory = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
@@ -53,7 +44,6 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
         _logger = logger;
         _modelCatalog = modelCatalog;
         _loggerFactory = loggerFactory;
-        ArgumentNullException.ThrowIfNull(classificationOptions);
         _errorClassifier = new DefaultLlmErrorClassifier(classificationOptions);
         _strategy = LlmCallStrategyFactory.Create(_llm, _loggerFactory);
     }
