@@ -7,6 +7,8 @@ namespace AiCleverness.Runtime.Transcript;
 /// </summary>
 internal sealed class FileTranscriptSink : ITranscriptSink
 {
+    private const int FileBufferSizeBytes = 4096;
+
     private readonly object _gate = new();
 
     private readonly StreamWriter _writer;
@@ -28,7 +30,7 @@ internal sealed class FileTranscriptSink : ITranscriptSink
             FileMode.CreateNew,
             FileAccess.Write,
             FileShare.Read,
-            bufferSize: 4096,
+            bufferSize: FileBufferSizeBytes,
             options: FileOptions.SequentialScan);
 
         try

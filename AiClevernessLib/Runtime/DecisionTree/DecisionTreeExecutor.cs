@@ -13,6 +13,8 @@ namespace AiCleverness.Runtime.DecisionTree;
 /// <summary>Executes validated decision trees with isolated per-run state.</summary>
 public sealed class DecisionTreeExecutor
 {
+    private const int DefaultDisplayMaxLength = 120;
+
     private readonly IReadOnlyDictionary<string, IDecisionAction> _actions;
     private readonly IReadOnlyDictionary<string, IDecisionPredicate> _predicates;
     private readonly IDecisionDataPolicy _decisionDataPolicy;
@@ -376,13 +378,13 @@ public sealed class DecisionTreeExecutor
             UpdateDuration(state.ResourceUsage, stopwatch);
             if (await LimitExceededAsync(state.ResourceUsage, limits, cancellationToken))
                 return (null, attempt, true, response.Content, null);
-            conversation.AddMessage(new LlmMessage("assistant", response.Content));
+            conversation.AddMessage(new LlmMessage(LlmMessageRoles.Assistant, response.Content));
             var parsed = _answerParser.Parse(response.Content, node.Answers!);
             if (parsed is not null)
                 return (parsed, attempt, false, null, null);
             lastRawContent = response.Content;
             if (attempt == 1)
-                conversation.AddMessage(new LlmMessage("user", "Return valid JSON using exactly one allowed answer."));
+                conversation.AddMessage(new LlmMessage(LlmMessageRoles.User, "Return valid JSON using exactly one allowed answer."));
         }
         return (null, 2, false, lastRawContent, null);
     }
@@ -734,7 +736,7 @@ public sealed class DecisionTreeExecutor
         return catalog;
     }
 
-    private static string? TruncateForDisplay(string? content, int maxLength = 120)
+    private static string? TruncateForDisplay(string? content, int maxLength = DefaultDisplayMaxLength)
     {
         if (string.IsNullOrWhiteSpace(content))
             return null;

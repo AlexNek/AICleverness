@@ -35,7 +35,7 @@ public sealed partial class SimplePromptRenderer : IPromptRenderer
         IReadOnlyDictionary<string, object> variables)
     {
         var rendered = Render(template, variables);
-        return [new LlmMessage("user", rendered)];
+        return [new LlmMessage(LlmMessageRoles.User, rendered)];
     }
 
     [GeneratedRegex(@"\{\{(\w+)\}\}")]

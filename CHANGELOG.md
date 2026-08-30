@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Provider overload and capacity diagnostics now support additive `LlmProviderException` metadata, application-owned provider error/status classification mappings, hard-permanent status handling, failover advancement, nullable diagnostics on LLM call observers, bus events, and streaming failure events for each failed attempt, and an unambiguous completion-pipeline constructor with optional classification mappings.
 
 ### Changed
+- Production library types are now organized into one type per source file, preserving public APIs, record constructors, enum values, event discriminators, and JSON serialization contracts.
+- Runtime lifecycle statuses, LLM message roles, transcript persistence/redaction vocabulary, parser and formatting limits, idempotency hash format, decision-data representation overhead, and metrics percentile thresholds now have narrow named owners without changing observable behavior.
 - **Breaking:** Decision-tree contracts now use `ActionKey`/`PredicateKey` instead of `ActionName`/`PredicateName`, and action and predicate implementations expose `Key` instead of `Name`. Decision trees and nodes now support optional `Name`/`Description` metadata. Migrate C# references and implementations, and rename JSON `actionName`/`predicateName` fields to `actionKey`/`predicateKey`.
 - Decision transcripts now normalize valid language-tagged and bare Markdown fences around structured LLM responses into one readable JSON block.
 

@@ -114,20 +114,3 @@ public sealed record ExecutionMetrics
     /// <summary>Total tool retries triggered.</summary>
     public long TotalToolRetries { get; init; }
 }
-
-/// <summary>
-/// Per-tool breakdown metrics.
-/// </summary>
-public sealed record ToolMetrics(
-    string ToolName,
-    long InvocationCount,
-    long FailureCount,
-    TimeSpan? AverageDuration,
-    TimeSpan? MaxDuration)
-{
-    /// <summary>Tool failure rate (0.0 - 1.0).</summary>
-    public double? FailureRate =>
-        InvocationCount > 0
-            ? (double)FailureCount / InvocationCount
-            : null;
-}

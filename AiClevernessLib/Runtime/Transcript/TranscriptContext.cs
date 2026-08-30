@@ -21,6 +21,13 @@ internal sealed class TranscriptContext
     private const int MaxTaskSlugLength = 80;
 
     private const string TerminalOmissionMarker = "[decision result omitted due to total transcript limit]";
+    private const string FilenameTimestampFormat = "yyyyMMdd-HHmmss";
+    private const string DefaultTaskSlug = "task";
+    private const string PersistenceUnavailableStatus = "Unavailable";
+    private const string PersistenceRedactorUnavailableStatus = "RedactorUnavailable";
+    private const string PersistenceCompletedStatus = "Completed";
+    private const string PersistenceFinalizationFailedStatus = "FinalizationFailed";
+    private const string RedactedValue = "[REDACTED]";
 
     private static readonly char[] InvalidFilenameCharacters = Path.GetInvalidFileNameChars();
 
@@ -111,11 +118,11 @@ internal sealed class TranscriptContext
             || !Path.IsPathFullyQualified(directory))
         {
             var hasDirectory = parameters.ContainsKey(AgentPropertyKeys.MarkdownTranscriptDirectory);
-            return Disabled(hasDirectory ? "Unavailable" : null, debug, logger, executionId);
+            return Disabled(hasDirectory ? PersistenceUnavailableStatus : null, debug, logger, executionId);
         }
 
         if (!debug && options.TranscriptRedactor is null)
-            return Disabled("RedactorUnavailable", debug, logger, executionId);
+            return Disabled(PersistenceRedactorUnavailableStatus, debug, logger, executionId);
 
         try
         {
@@ -126,7 +133,7 @@ internal sealed class TranscriptContext
                                    ? request.Goal
                                    : RedactGoalForFilename(request.Goal, options.TranscriptRedactor!);
             var fileNamePrefix =
-                $"{localTimestamp.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}-{CreateTaskSlug(filenameGoal)}";
+                $"{localTimestamp.ToString(FilenameTimestampFormat, CultureInfo.InvariantCulture)}-{CreateTaskSlug(filenameGoal)}";
             var sink = CreateFileSink(fullDirectory, fileNamePrefix);
             var context = new TranscriptContext(
                 sink,
@@ -152,7 +159,7 @@ internal sealed class TranscriptContext
                 ex,
                 "Markdown transcript initialization failed for execution {ExecutionId}.",
                 executionId);
-            return new TranscriptContext(null, null, debug, "Unavailable", logger);
+            return new TranscriptContext(null, null, debug, PersistenceUnavailableStatus, logger);
         }
     }
 
@@ -212,7 +219,7 @@ internal sealed class TranscriptContext
             }
             catch (Exception ex)
             {
-                Disable("FinalizationFailed", ex);
+                Disable(PersistenceFinalizationFailedStatus, ex);
             }
         }
     }
@@ -410,7 +417,7 @@ internal sealed class TranscriptContext
             }
             catch (Exception ex)
             {
-                Disable("FinalizationFailed", ex);
+                Disable(PersistenceFinalizationFailedStatus, ex);
             }
         }
     }
@@ -437,7 +444,7 @@ internal sealed class TranscriptContext
             }
             catch (Exception ex)
             {
-                Disable("FinalizationFailed", ex);
+                Disable(PersistenceFinalizationFailedStatus, ex);
             }
         }
     }
@@ -467,7 +474,7 @@ internal sealed class TranscriptContext
             }
             catch (Exception ex)
             {
-                Disable("FinalizationFailed", ex);
+                Disable(PersistenceFinalizationFailedStatus, ex);
             }
         }
     }
@@ -487,11 +494,11 @@ internal sealed class TranscriptContext
             {
                 _sink.Complete();
                 if (PersistenceStatus is null)
-                    PersistenceStatus = "Completed";
+                    PersistenceStatus = PersistenceCompletedStatus;
             }
             catch (Exception ex)
             {
-                Disable("FinalizationFailed", ex);
+                Disable(PersistenceFinalizationFailedStatus, ex);
                 try
                 {
                     _sink.Dispose();
@@ -515,9 +522,9 @@ internal sealed class TranscriptContext
         var metadata = new Dictionary<string, object>(result.Metadata)
                        {
                            [AgentResultMetadataKeys.MarkdownTranscriptStatus] =
-                               PersistenceStatus ?? "FinalizationFailed"
+                               PersistenceStatus ?? PersistenceFinalizationFailedStatus
                        };
-        if (PersistenceStatus == "Completed" && FilePath is not null)
+        if (PersistenceStatus == PersistenceCompletedStatus && FilePath is not null)
             metadata[AgentResultMetadataKeys.MarkdownTranscriptPath] = FilePath;
 
         return result with { Metadata = metadata };
@@ -583,7 +590,7 @@ internal sealed class TranscriptContext
             slug.Append(character);
         }
 
-        return slug.Length == 0 ? "task" : slug.ToString().TrimEnd('-');
+        return slug.Length == 0 ? DefaultTaskSlug : slug.ToString().TrimEnd('-');
     }
 
     private static TranscriptContext Disabled(
@@ -616,7 +623,7 @@ internal sealed class TranscriptContext
             }
             catch (Exception ex)
             {
-                Disable("FinalizationFailed", ex);
+                Disable(PersistenceFinalizationFailedStatus, ex);
             }
         }
     }
@@ -714,7 +721,7 @@ internal sealed class TranscriptContext
         }
         catch (Exception ex)
         {
-            Disable("FinalizationFailed", ex);
+            Disable(PersistenceFinalizationFailedStatus, ex);
             return false;
         }
     }
@@ -853,8 +860,8 @@ internal sealed class TranscriptContext
         }
         catch (Exception ex)
         {
-            Disable("FinalizationFailed", ex);
-            return "[REDACTED]";
+            Disable(PersistenceFinalizationFailedStatus, ex);
+            return RedactedValue;
         }
     }
 
@@ -868,7 +875,7 @@ internal sealed class TranscriptContext
                 {
                     writer.WritePropertyName(property.Name);
                     if (SensitiveKeys.Contains(property.Name))
-                        writer.WriteStringValue("[REDACTED]");
+                        writer.WriteStringValue(RedactedValue);
                     else
                         WriteRedactedJson(property.Value, writer);
                 }

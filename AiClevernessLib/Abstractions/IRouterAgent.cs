@@ -19,12 +19,3 @@ public interface IRouterAgent
         IAgentContext context,
         CancellationToken cancellationToken = default);
 }
-
-/// <summary>
-/// Decision produced by a router agent.
-/// </summary>
-public sealed record RoutingDecision(
-    string TargetId,
-    string? Reason = null,
-    double Confidence = 1.0,
-    IReadOnlyDictionary<string, object>? ModifiedParameters = null);

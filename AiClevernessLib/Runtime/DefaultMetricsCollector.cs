@@ -10,6 +10,10 @@ namespace AiCleverness.Runtime;
 /// </summary>
 public sealed class DefaultMetricsCollector : IMetricsCollector
 {
+    private const double MedianPercentile = 0.50;
+    private const double P95Percentile = 0.95;
+    private const double P99Percentile = 0.99;
+
     private readonly object _lock = new();
 
     private readonly ConcurrentDictionary<string, ExecutionManifest> _manifests = new();
@@ -129,9 +133,9 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
                                : null,
                        MinDuration = durations.Count > 0 ? durations.First() : null,
                        MaxDuration = durations.Count > 0 ? durations.Last() : null,
-                       P50Duration = GetPercentile(durations, 0.50),
-                       P95Duration = GetPercentile(durations, 0.95),
-                       P99Duration = GetPercentile(durations, 0.99),
+                       P50Duration = GetPercentile(durations, MedianPercentile),
+                       P95Duration = GetPercentile(durations, P95Percentile),
+                       P99Duration = GetPercentile(durations, P99Percentile),
                        TotalLlmCalls = llmDurations.Count,
                        AverageLlmDuration =
                            llmDurations.Count > 0

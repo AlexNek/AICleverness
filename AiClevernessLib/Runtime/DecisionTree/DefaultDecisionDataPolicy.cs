@@ -12,6 +12,10 @@ public sealed class DefaultDecisionDataPolicy : IDecisionDataPolicy
     private const string MarkerId = "decision-context-policy";
     private const string MarkerSource = "AICleverness";
     private const string MarkerType = "selection";
+
+    // Brackets, labels, and separators in the canonical representation.
+    private const int CanonicalRepresentationFixedCharacterCount = 11;
+
     private readonly DecisionDataPolicyOptions _options;
 
     public DefaultDecisionDataPolicy(DecisionDataPolicyOptions? options = null)
@@ -146,7 +150,7 @@ public sealed class DefaultDecisionDataPolicy : IDecisionDataPolicy
         var source = item.DisplaySource ?? item.Source;
         var type = item.DisplayType ?? item.Type;
         var metadataLength = item.Metadata?.Sum(pair => pair.Key.Length + 1 + pair.Value.Length + 2) ?? 0;
-        return id.Length + type.Length + source.Length + content.Length + metadataLength + 11;
+        return id.Length + type.Length + source.Length + content.Length + metadataLength + CanonicalRepresentationFixedCharacterCount;
     }
 
     private static string CreateMarkerContent(
