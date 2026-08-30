@@ -70,10 +70,6 @@ AiClevernessLib.Demo   →  AiClevernessLib  ←  AiClevernessLib.Tests
 
 `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
-### Rule: packages without a first release
-
-- While the package has never been released (CHANGELOG contains no versioned sections, only `[Unreleased]`), do NOT update `CHANGELOG.md` for code changes — there are no released users to inform. Changelog content is written only when a release is prepared.
-
 ### Format rules
 
 - Top-level heading: `# Changelog`
@@ -125,3 +121,10 @@ The `[Unreleased]` section must always describe the **final user-facing state re
 - ❌ NEVER run `git commit`, `git push`, `git tag`, or any history-rewriting command — commits are made by the user only, with the user's own commit text
 - ✅ Leave finished changes in the working tree for the user to review, stage, and commit
 - ✅ You may suggest commit message text when asked, but never execute the commit yourself
+
+## Issue-document content rules (MANDATORY)
+
+- `github-issue.md` files are user-facing requirements documents only.
+- ❌ NEVER include source-code references in an issue: file paths, namespaces, class/type/method names, project paths, code snippets, implementation structure, or test/build commands.
+- ✅ Describe the problem, user impact, expected behavior, compatibility expectations, scope, and acceptance criteria at the product/behavior level.
+- ✅ Keep implementation details, source locations, and validation commands in the associated technical plan or review record, not in the issue document.

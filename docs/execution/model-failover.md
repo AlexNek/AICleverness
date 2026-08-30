@@ -1,8 +1,9 @@
 # Model Failover
 
-When an LLM call fails with a transient error (currently: completion
-timeout), the runtime can fail over to the next candidate model in the
-chain — same conversation, same turn, no repeated tool calls.
+When an LLM call fails with a classified transient error—such as a
+completion timeout, rate limit, provider overload, or capacity failure—the
+runtime can fail over to the next candidate model in the chain — same
+conversation, same turn, no repeated tool calls.
 
 ## How It Works
 
@@ -103,6 +104,7 @@ The retried attempt reuses the logical turn — there is no second
 | --- | --- | --- |
 | Observer | `OnLlmCallCompletedAsync(LlmCallInfo)` | Every attempt (success, error, timeout) |
 | Observer | `OnModelSwitchedAsync(from, to, reason)` | Every model switch |
+| Streaming | `FailureEvent` | Every failed attempt, including transient attempts that advance |
 | Streaming | `ModelSwitchedAgentEvent` | Every model switch |
 | Bus | `ModelSwitchedBusEvent` | Every model switch |
 
@@ -128,16 +130,77 @@ services.AddAiClevernessRuntime(options =>
 
 ## Error Classification
 
-The `DefaultLlmErrorClassifier` classifies failures:
+The shared `DefaultLlmErrorClassifier` classifies failures without performing
+retries itself. `TransientAdvance` allows the failover handler to advance to
+the next candidate; `Permanent` stops the current run.
 
 | Failure | Classification | Action |
 | --- | --- | --- |
 | Per-turn timeout (`OperationCanceledException`, caller token alive) | `TransientAdvance` | Advance to next candidate |
-| User cancellation | `Permanent` | Abort |
-| Any other exception | `Permanent` | Abort |
+| Caller cancellation, including a provider exception wrapping cancellation | `Permanent` | Abort |
+| Explicit provider `IsTransient = true` | `TransientAdvance` | Advance to next candidate |
+| Explicit provider `IsTransient = false` | `Permanent` | Abort |
+| Configured provider error or status mapping | Configured value | Advance or abort |
+| HTTP 408, 429, 500, 502, 503, or 504 | `TransientAdvance` | Advance to next candidate |
+| HTTP 4xx, 501, 505, or other HTTP 5xx | `Permanent` | Abort |
+| Unclassified provider error code or status | `Permanent` | Abort |
 
-Rate-limit and unavailable-model signals can be added to the classifier
-without touching the tool loop.
+The core package does not contain provider names or provider error-code
+vocabulary. Applications can provide mappings at composition time:
+
+```csharp
+using System.Net;
+using AiCleverness.Models;
+
+services.AddAiClevernessRuntime(
+    configure: options =>
+    {
+        options.EnableModelFailover = true;
+    },
+    configureFailureClassification: options =>
+    {
+        options.ProviderErrorMappings[
+            new LlmProviderErrorKey("example-provider", "capacity_exceeded")] =
+            EFailureClassification.TransientAdvance;
+
+        options.ProviderStatusMappings[
+            new LlmProviderStatusKey("example-provider", (HttpStatusCode)529)] =
+            EFailureClassification.TransientAdvance;
+    });
+```
+
+Mappings are case-insensitive and are consulted only when the adapter leaves
+`LlmProviderException.IsTransient` unset. Explicit adapter classification wins;
+caller cancellation and hard-permanent statuses always remain permanent. This
+allows each application or provider adapter package to own its vocabulary
+without adding provider policy to the core package.
+
+Provider adapters can preserve their original exception and expose structured
+metadata without depending on provider-specific runtime types:
+
+```csharp
+throw new LlmProviderException(
+    providerException,
+    provider: "example-provider",
+    errorCode: "capacity_exceeded",
+    statusCode: (HttpStatusCode)529,
+    retryAfter: TimeSpan.FromSeconds(10));
+```
+
+`RetryAfter` is diagnostic only; the runtime does not delay or retry the same
+model. Hard-permanent HTTP statuses take precedence over conflicting transient
+metadata, and legacy `HTTP nnn` and rate-limit message patterns remain
+supported for adapters that have not migrated.
+
+## Provider Failure Diagnostics
+
+When a provider exception is present, the same immutable
+`LlmProviderFailureMetadata` snapshot is available on `LlmCallInfo.ProviderFailure`,
+`LlmCallCompletedBusEvent.ProviderFailure`, and streaming
+`FailureEvent.ProviderFailure` for every failed attempt, including transient
+attempts that advance successfully and terminal failures. These properties are
+nullable and remain null for successful calls and legacy exceptions without
+provider metadata.
 
 ## Interaction with Quality Gates
 

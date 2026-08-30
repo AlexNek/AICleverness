@@ -366,6 +366,42 @@ public sealed class StreamingRuntimeTests
     }
 
     [Fact]
+    public async Task RunStreamingAsync_ProviderFailure_PropagatesMetadataToFailureAndBusEvents()
+    {
+        // Arrange
+        var providerException = new LlmProviderException(
+            new InvalidOperationException("provider capacity failure"),
+            provider: "test-provider",
+            errorCode: "capacity-code",
+            statusCode: System.Net.HttpStatusCode.ServiceUnavailable,
+            retryAfter: TimeSpan.FromSeconds(8),
+            isTransient: true);
+        var llm = new ThrowingLlmClient(providerException);
+        var tools = new ToolRegistry();
+        var publisher = new RecordingPublisher();
+        var runtime = new AgentRuntime(llm, tools, eventPublisher: publisher);
+        var request = new AgentRequest("provider failure");
+
+        // Act
+        var events = await CollectEvents(runtime, request);
+
+        // Assert
+        var expectedMetadata = new LlmProviderFailureMetadata
+        {
+            Provider = "test-provider",
+            ErrorCode = "capacity-code",
+            StatusCode = System.Net.HttpStatusCode.ServiceUnavailable,
+            RetryAfter = TimeSpan.FromSeconds(8)
+        };
+        var failure = events.OfType<FailureEvent>().Single();
+        failure.ProviderFailure.Should().BeEquivalentTo(expectedMetadata);
+        var completed = publisher.PublishedEvents
+            .OfType<LlmCallCompletedBusEvent>()
+            .Single();
+        completed.ProviderFailure.Should().BeEquivalentTo(expectedMetadata);
+    }
+
+    [Fact]
     public async Task RunStreamingAsync_QualityGateRejection_ReturnsFailedResult()
     {
         var llm = new FakeLlmClient([new LlmResponse("mediocre answer")]);

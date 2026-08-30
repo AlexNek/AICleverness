@@ -120,6 +120,9 @@ public sealed record FailureEvent : AgentEvent
     /// <summary>Whether the error is considered transient (might succeed on retry).</summary>
     public bool IsTransient { get; init; }
 
+    /// <summary>Structured provider metadata when available.</summary>
+    public LlmProviderFailureMetadata? ProviderFailure { get; init; }
+
     /// <summary>The phase during which the failure occurred.</summary>
     public string? Phase { get; init; }
 }

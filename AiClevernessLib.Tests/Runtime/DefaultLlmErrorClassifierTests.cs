@@ -1,3 +1,5 @@
+using System.Net;
+
 using AiCleverness.Models;
 using AiCleverness.Runtime;
 
@@ -153,6 +155,19 @@ public sealed class DefaultLlmErrorClassifierTests
     }
 
     [Fact]
+    public void Classify_UnrelatedRateLimitIdentifier_ReturnsPermanent()
+    {
+        // Arrange
+        var ex = new Exception("invalid request: rate_limit_parameter is not accepted");
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Fact]
     public void Classify_TooManyRequestsText_ReturnsTransientAdvance()
     {
         // Arrange
@@ -166,15 +181,220 @@ public sealed class DefaultLlmErrorClassifierTests
     }
 
     [Fact]
-    public void Classify_FreeModelsPerMin_ReturnsTransientAdvance()
+    public void Classify_ProviderCodeWithoutAdapterClassification_ReturnsPermanent()
     {
-        // Arrange — OpenRouter-specific rate limit pattern
-        var ex = new Exception("free-models-per-min limit hit");
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider capacity failure"),
+            provider: "adapter-provider",
+            errorCode: "capacity-code");
 
         // Act
         var result = _sut.Classify(ex, _callerCts.Token);
 
         // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Fact]
+    public void Classify_ConfiguredProviderErrorMapping_ReturnsConfiguredClassification()
+    {
+        // Arrange
+        var options = new LlmFailureClassificationOptions();
+        options.ProviderErrorMappings[new LlmProviderErrorKey("adapter-provider", "capacity-code")] =
+            EFailureClassification.TransientAdvance;
+        var sut = new DefaultLlmErrorClassifier(options);
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider capacity failure"),
+            provider: "ADAPTER-PROVIDER",
+            errorCode: " capacity-code ");
+
+        // Act
+        var result = sut.Classify(ex, _callerCts.Token);
+
+        // Assert
         result.Should().Be(EFailureClassification.TransientAdvance);
+    }
+
+    [Fact]
+    public void Classify_ConfiguredProviderStatusMapping_ReturnsConfiguredClassification()
+    {
+        // Arrange
+        var options = new LlmFailureClassificationOptions();
+        options.ProviderStatusMappings[new LlmProviderStatusKey(
+            "adapter-provider",
+            (HttpStatusCode)529)] = EFailureClassification.TransientAdvance;
+        var sut = new DefaultLlmErrorClassifier(options);
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider overload"),
+            provider: "adapter-provider",
+            statusCode: (HttpStatusCode)529);
+
+        // Act
+        var result = sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.TransientAdvance);
+    }
+
+    [Fact]
+    public void Classify_ExplicitAdapterClassificationTakesPrecedenceOverConfiguredMapping()
+    {
+        // Arrange
+        var options = new LlmFailureClassificationOptions();
+        options.ProviderErrorMappings[new LlmProviderErrorKey("adapter-provider", "capacity-code")] =
+            EFailureClassification.Permanent;
+        var sut = new DefaultLlmErrorClassifier(options);
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider capacity failure"),
+            provider: "adapter-provider",
+            errorCode: "capacity-code",
+            isTransient: true);
+
+        // Act
+        var result = sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.TransientAdvance);
+    }
+
+    [Fact]
+    public void Classify_HardPermanentStatusTakesPrecedenceOverConfiguredMapping()
+    {
+        // Arrange
+        var options = new LlmFailureClassificationOptions();
+        options.ProviderStatusMappings[new LlmProviderStatusKey(
+            "adapter-provider",
+            HttpStatusCode.Unauthorized)] = EFailureClassification.TransientAdvance;
+        var sut = new DefaultLlmErrorClassifier(options);
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider rejected the request"),
+            provider: "adapter-provider",
+            statusCode: HttpStatusCode.Unauthorized);
+
+        // Act
+        var result = sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Fact]
+    public void Classify_WrappedCallerCancellation_ReturnsPermanent()
+    {
+        // Arrange
+        _callerCts.Cancel();
+        var ex = new LlmProviderException(
+            new OperationCanceledException(),
+            provider: "adapter-provider",
+            errorCode: "capacity-code",
+            isTransient: true);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Theory]
+    [InlineData(true, EFailureClassification.TransientAdvance)]
+    [InlineData(false, EFailureClassification.Permanent)]
+    public void Classify_ExplicitTransientMetadata_TakesPrecedenceWithoutHardStatus(
+        bool isTransient,
+        EFailureClassification expected)
+    {
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("explicit provider classification"),
+            provider: "test-provider",
+            isTransient: isTransient);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.RequestTimeout, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.TooManyRequests, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.InternalServerError, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.BadGateway, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.GatewayTimeout, EFailureClassification.TransientAdvance)]
+    [InlineData(HttpStatusCode.BadRequest, EFailureClassification.Permanent)]
+    [InlineData(HttpStatusCode.Unauthorized, EFailureClassification.Permanent)]
+    [InlineData(HttpStatusCode.NotFound, EFailureClassification.Permanent)]
+    [InlineData(HttpStatusCode.NotImplemented, EFailureClassification.Permanent)]
+    [InlineData(HttpStatusCode.HttpVersionNotSupported, EFailureClassification.Permanent)]
+    public void Classify_StructuredStatus_ReturnsExpectedClassification(
+        HttpStatusCode statusCode,
+        EFailureClassification expected)
+    {
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("provider status"),
+            provider: "test-provider",
+            statusCode: statusCode);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Classify_UnclassifiedStatus529_ReturnsPermanent()
+    {
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("unclassified provider status"),
+            provider: "adapter-provider",
+            statusCode: (HttpStatusCode)529);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Fact]
+    public void Classify_ConflictingTransientMetadata_DoesNotOverrideHardPermanentStatus()
+    {
+        // Arrange
+        var ex = new LlmProviderException(
+            new InvalidOperationException("unauthorized"),
+            provider: "adapter-provider",
+            statusCode: HttpStatusCode.Unauthorized,
+            isTransient: true);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(EFailureClassification.Permanent);
+    }
+
+    [Theory]
+    [InlineData("HTTP 599: provider unavailable", EFailureClassification.TransientAdvance)]
+    [InlineData("HTTP 501: not implemented", EFailureClassification.Permanent)]
+    [InlineData("HTTP 505: unsupported version", EFailureClassification.Permanent)]
+    [InlineData("HTTP 5033: malformed status", EFailureClassification.Permanent)]
+    public void Classify_LegacyHttpStatus_PreservesCompatibilityAndRejectsMalformedStatus(
+        string message,
+        EFailureClassification expected)
+    {
+        // Arrange
+        var ex = new Exception(message);
+
+        // Act
+        var result = _sut.Classify(ex, _callerCts.Token);
+
+        // Assert
+        result.Should().Be(expected);
     }
 }

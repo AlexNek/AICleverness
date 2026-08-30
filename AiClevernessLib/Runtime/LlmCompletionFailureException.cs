@@ -15,6 +15,7 @@ internal sealed class LlmCompletionFailureException : Exception
         Classification = classification;
         Timeout = timeout;
         FailoverEnabled = failoverEnabled;
+        ProviderFailure = LlmProviderFailureMetadata.FromException(innerException);
     }
 
     public EFailureClassification Classification { get; }
@@ -22,4 +23,6 @@ internal sealed class LlmCompletionFailureException : Exception
     public bool FailoverEnabled { get; }
 
     public bool Timeout { get; }
+
+    public LlmProviderFailureMetadata? ProviderFailure { get; }
 }

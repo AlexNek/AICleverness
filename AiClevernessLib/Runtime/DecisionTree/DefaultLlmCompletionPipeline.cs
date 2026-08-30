@@ -17,12 +17,25 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
     private readonly IEnumerable<IAgentObserver> _observers;
     private readonly ILlmCallStrategy _strategy;
 
+    /// <summary>
+    /// Creates a completion pipeline using optional application-owned failure mappings.
+    /// </summary>
+    /// <param name="llm">The LLM client used for completions.</param>
+    /// <param name="observers">Optional observers notified during completion execution.</param>
+    /// <param name="eventPublisher">Optional execution-event publisher.</param>
+    /// <param name="logger">Optional pipeline logger.</param>
+    /// <param name="modelCatalog">Optional model catalog used for failover.</param>
+    /// <param name="classificationOptions">
+    /// Optional application-owned provider error and status mappings.
+    /// </param>
+    /// <param name="loggerFactory">Optional logger factory used by the call strategy.</param>
     public DefaultLlmCompletionPipeline(
         ILlmClient llm,
         IEnumerable<IAgentObserver>? observers = null,
         IExecutionEventPublisher? eventPublisher = null,
         ILogger<DefaultLlmCompletionPipeline>? logger = null,
         IModelCatalog? modelCatalog = null,
+        LlmFailureClassificationOptions? classificationOptions = null,
         ILoggerFactory? loggerFactory = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
@@ -31,7 +44,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
         _logger = logger;
         _modelCatalog = modelCatalog;
         _loggerFactory = loggerFactory;
-        _errorClassifier = new DefaultLlmErrorClassifier();
+        _errorClassifier = new DefaultLlmErrorClassifier(classificationOptions);
         _strategy = LlmCallStrategyFactory.Create(_llm, _loggerFactory);
     }
 
@@ -98,6 +111,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
                     response.Usage,
                     error: null,
                     classification: null,
+                    providerFailure: null,
                     startedAt,
                     cancellationToken);
                 return response;
@@ -109,7 +123,19 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
             catch (Exception exception)
             {
                 var classification = _errorClassifier.Classify(exception, cancellationToken);
+                var providerFailure = LlmProviderFailureMetadata.FromException(exception);
                 var timeout = exception is OperationCanceledException && !cancellationToken.IsCancellationRequested;
+                if (providerFailure is not null)
+                {
+                    _logger?.LogWarning(
+                        "LLM completion provider failure classified as {Classification}: provider={Provider}, code={ErrorCode}, status={StatusCode}, retryAfter={RetryAfter}",
+                        classification,
+                        providerFailure.Provider,
+                        providerFailure.ErrorCode,
+                        providerFailure.StatusCode,
+                        providerFailure.RetryAfter);
+                }
+
                 await NotifyCompletedAsync(
                     request,
                     currentOptions,
@@ -119,6 +145,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
                     usage: null,
                     exception.Message,
                     classification,
+                    providerFailure,
                     startedAt,
                     cancellationToken);
 
@@ -132,6 +159,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
                         exception.Message,
                         timeout ? "timed out" : "failed",
                         exception.Message,
+                        providerFailure,
                         steps,
                         report,
                         emit,
@@ -205,6 +233,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
         LlmTokenUsage? usage,
         string? error,
         EFailureClassification? classification,
+        LlmProviderFailureMetadata? providerFailure,
         DateTimeOffset startedAt,
         CancellationToken cancellationToken)
     {
@@ -220,6 +249,7 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
             Success = error is null,
             Error = error,
             Classification = classification,
+            ProviderFailure = providerFailure,
             StartedAt = startedAt
         };
 
@@ -250,7 +280,10 @@ public sealed class DefaultLlmCompletionPipeline : ILlmCompletionPipeline
                     usage,
                     Success: error is null,
                     Turn: request.Turn,
-                    Error: error),
+                    Error: error)
+                {
+                    ProviderFailure = providerFailure
+                },
                 cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

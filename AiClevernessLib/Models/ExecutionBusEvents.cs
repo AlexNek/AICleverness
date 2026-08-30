@@ -157,4 +157,7 @@ public sealed record LlmCallCompletedBusEvent(
 
     /// <inheritdoc />
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Structured provider metadata when the call failed through an adapter.</summary>
+    public LlmProviderFailureMetadata? ProviderFailure { get; init; }
 }

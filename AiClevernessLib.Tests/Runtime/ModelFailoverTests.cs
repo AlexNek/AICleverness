@@ -1,3 +1,5 @@
+using System.Net;
+
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
 using AiCleverness.Runtime;
@@ -278,6 +280,109 @@ public sealed class ModelFailoverTests
         observer.ModelSwitches.Should().HaveCount(1);
         observer.ModelSwitches[0].From.Should().Be("model-a");
         observer.ModelSwitches[0].To.Should().Be("model-b");
+    }
+
+    [Fact]
+    public async Task Failover_ProviderCapacityFailure_AdvancesAndPreservesMetadata()
+    {
+        // Arrange
+        var llm = new ScriptedFailoverLlmClient(
+            (_, _, _) => Task.FromException<LlmResponse>(
+                new LlmProviderException(
+                    new InvalidOperationException("provider overloaded"),
+                    provider: "test-provider",
+                    errorCode: "capacity-code",
+                    statusCode: (HttpStatusCode)529,
+                    retryAfter: TimeSpan.FromSeconds(3),
+                    isTransient: true)),
+            (_, _, _) => Task.FromResult(new LlmResponse("fallback response")));
+        var tools = new ToolRegistry();
+        var observer = new FailoverSpyObserver();
+        var runtime = new AgentRuntime(
+            llm,
+            tools,
+            observers: [observer],
+            options: new AgentRuntimeOptions { EnableModelFailover = true });
+
+        var request = new AgentRequest(
+            "test provider capacity",
+            Parameters: new Dictionary<string, object>
+            {
+                [AgentPropertyKeys.Model] = "model-a",
+                [AgentPropertyKeys.ModelFallbackChain] = new List<string> { "model-b" },
+                [AgentPropertyKeys.EnableModelFailover] = true
+            });
+
+        // Act
+        var result = await runtime.RunAsync(request);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Output.Should().Be("fallback response");
+        llm.CallLog.Select(call => call.Model).Should().Equal("model-a", "model-b");
+        observer.LlmCallCompletedInfos.Should().HaveCount(2);
+        observer.LlmCallCompletedInfos[0].Classification
+            .Should().Be(EFailureClassification.TransientAdvance);
+        observer.LlmCallCompletedInfos[0].ProviderFailure.Should().BeEquivalentTo(
+            new LlmProviderFailureMetadata
+            {
+                Provider = "test-provider",
+                ErrorCode = "capacity-code",
+                StatusCode = (HttpStatusCode)529,
+                RetryAfter = TimeSpan.FromSeconds(3)
+            });
+        observer.LlmCallCompletedInfos[1].ProviderFailure.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Failover_ProviderCapacityFailure_StreamingEventPreservesMetadata()
+    {
+        // Arrange
+        var expectedMetadata = new LlmProviderFailureMetadata
+        {
+            Provider = "test-provider",
+            ErrorCode = "capacity-code",
+            StatusCode = (HttpStatusCode)529,
+            RetryAfter = TimeSpan.FromSeconds(3)
+        };
+        var llm = new ScriptedFailoverLlmClient(
+            (_, _, _) => Task.FromException<LlmResponse>(
+                new LlmProviderException(
+                    new InvalidOperationException("provider overloaded"),
+                    provider: expectedMetadata.Provider,
+                    errorCode: expectedMetadata.ErrorCode,
+                    statusCode: expectedMetadata.StatusCode,
+                    retryAfter: expectedMetadata.RetryAfter,
+                    isTransient: true)),
+            (_, _, _) => Task.FromResult(new LlmResponse("fallback response")));
+        var runtime = new AgentRuntime(
+            llm,
+            new ToolRegistry(),
+            options: new AgentRuntimeOptions { EnableModelFailover = true });
+        var request = new AgentRequest(
+            "test streaming provider capacity",
+            Parameters: new Dictionary<string, object>
+            {
+                [AgentPropertyKeys.Model] = "model-a",
+                [AgentPropertyKeys.ModelFallbackChain] = new List<string> { "model-b" },
+                [AgentPropertyKeys.EnableModelFailover] = true
+            });
+
+        // Act
+        var events = new List<AgentEvent>();
+        await foreach (var evt in runtime.RunStreamingAsync(request))
+        {
+            events.Add(evt);
+        }
+
+        // Assert
+        var failure = events.OfType<FailureEvent>().Single();
+        failure.IsTransient.Should().BeTrue();
+        failure.Phase.Should().Be("LlmCompletion");
+        failure.ProviderFailure.Should().BeEquivalentTo(expectedMetadata);
+        var switchEvent = events.OfType<ModelSwitchedAgentEvent>().Single();
+        events.IndexOf(failure).Should().BeLessThan(events.IndexOf(switchEvent));
+        events.OfType<RunCompletedEvent>().Single().Result.Success.Should().BeTrue();
     }
 
     [Fact]
