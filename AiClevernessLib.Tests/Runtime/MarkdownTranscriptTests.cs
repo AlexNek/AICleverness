@@ -541,6 +541,17 @@ public sealed class MarkdownTranscriptTests
     }
 
     [Fact]
+    public void DecisionLlmAttempt_RendersEmptyStringResponseAsEmpty()
+    {
+        // Act
+        var transcript = BuildDecisionLlmAttempt(string.Empty);
+
+        // Assert
+        transcript.Should().Contain(
+            $"**Raw LLM output:**{Environment.NewLine}```json{Environment.NewLine}(empty){Environment.NewLine}```{Environment.NewLine}");
+    }
+
+    [Fact]
     public void DecisionLlmAttempt_LeavesIncompleteCodeFenceForSafeFallback()
     {
         // Arrange

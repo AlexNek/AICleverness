@@ -263,7 +263,7 @@ internal sealed class MarkdownTranscriptBuilder
         }
 
         builder.AppendLine("**Raw LLM output:**");
-        var displayResponse = response is null
+        var displayResponse = string.IsNullOrWhiteSpace(response)
             ? "(empty)"
             : EnumAnswerParser.StripCodeFences(response);
         builder.Append(Fenced(displayResponse, "json"));
