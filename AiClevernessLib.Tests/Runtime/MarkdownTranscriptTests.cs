@@ -513,6 +513,58 @@ public sealed class MarkdownTranscriptTests
         fenced.Should().Contain(content);
     }
 
+    [Theory]
+    [InlineData("```json\n{\"answer\":\"subscription_pricing\"}\n```")]
+    [InlineData("```\n{\"answer\":\"subscription_pricing\"}\n```")]
+    public void DecisionLlmAttempt_StripsValidCodeFencesBeforeRendering(string response)
+    {
+        // Arrange
+        const string plainResponse = "{\"answer\":\"subscription_pricing\"}";
+
+        // Act
+        var actual = BuildDecisionLlmAttempt(response);
+        var expected = BuildDecisionLlmAttempt(plainResponse);
+
+        // Assert
+        actual.Should().Be(expected);
+    }
+
+    [Fact]
+    public void DecisionLlmAttempt_PreservesEmptyResponseDisplay()
+    {
+        // Act
+        var transcript = BuildDecisionLlmAttempt(null);
+
+        // Assert
+        transcript.Should().Contain(
+            $"**Raw LLM output:**{Environment.NewLine}```json{Environment.NewLine}(empty){Environment.NewLine}```{Environment.NewLine}");
+    }
+
+    [Fact]
+    public void DecisionLlmAttempt_RendersEmptyStringResponseAsEmpty()
+    {
+        // Act
+        var transcript = BuildDecisionLlmAttempt(string.Empty);
+
+        // Assert
+        transcript.Should().Contain(
+            $"**Raw LLM output:**{Environment.NewLine}```json{Environment.NewLine}(empty){Environment.NewLine}```{Environment.NewLine}");
+    }
+
+    [Fact]
+    public void DecisionLlmAttempt_LeavesIncompleteCodeFenceForSafeFallback()
+    {
+        // Arrange
+        const string response = "```json\n{\"answer\":\"subscription_pricing\"}";
+
+        // Act
+        var transcript = BuildDecisionLlmAttempt(response);
+
+        // Assert
+        transcript.Should().Contain("````json" + Environment.NewLine);
+        transcript.Should().Contain(response);
+    }
+
     [Fact]
     public void AgentRuntime_PreservesExistingConstructorAndRuntimeInterfaces()
     {
@@ -525,6 +577,15 @@ public sealed class MarkdownTranscriptTests
         runtime.Should().BeAssignableTo<IAgentRuntime>();
         runtime.Should().BeAssignableTo<IStreamingAgentRuntime>();
     }
+
+    private static string BuildDecisionLlmAttempt(string? response) =>
+        new MarkdownTranscriptBuilder().DecisionLlmAttempt(
+            "node",
+            1,
+            [new LlmMessage("user", "input")],
+            response,
+            finishReason: null,
+            usage: null);
 
     private static AgentRuntime CreateRuntime(
         TranscriptTestLlmClient llm,

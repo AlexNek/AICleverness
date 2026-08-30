@@ -125,7 +125,7 @@ public sealed record ExecutionGraph
                     nodes.Add(
                         new ExecutionGraphNode(
                             nodeId,
-                            $"Decision action: {dace.ActionName} ({dace.Status})",
+                            $"Decision action: {dace.ActionKey} ({dace.Status})",
                             ExecutionGraphNodeType.DecisionNode,
                             evt.Timestamp));
                     break;

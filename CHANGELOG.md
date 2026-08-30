@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking:** Decision-tree contracts now use `ActionKey`/`PredicateKey` instead of `ActionName`/`PredicateName`, and action and predicate implementations expose `Key` instead of `Name`. Decision trees and nodes now support optional `Name`/`Description` metadata, while `DecisionTreeResult` exposes optional `StateProperties`. Migrate C# references and implementations, rename JSON `actionName`/`predicateName` fields to `actionKey`/`predicateKey`, and read action-produced state from `result.StateProperties`.
+- Decision transcripts now normalize valid language-tagged and bare Markdown fences around structured LLM responses into one readable JSON block.
+
 ## [1.6.0] - 2026-08-28
 
 ### Added
@@ -125,7 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Developer manual published as a documentation site via MkDocs Material and GitHub Pages
 - NuGet package ships a compact README with use cases and prominent links to the developer manual and the full repository README
 
-[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.6.0...HEAD
 [1.5.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.5.0
 [1.4.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.4.0
 [1.3.3]: https://github.com/AlexNek/AICleverness/releases/tag/v1.3.3

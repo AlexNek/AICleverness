@@ -62,7 +62,7 @@ internal static class DecisionTreeScenario
                 ["collect"] = new()
                 {
                     Type = EDecisionNodeType.Action,
-                    ActionName = "collectEvidence",
+                    ActionKey = "collectEvidence",
                     Transitions =
                     [
                         new() { Condition = "success", NextNodeId = "classify" },
@@ -85,7 +85,7 @@ internal static class DecisionTreeScenario
                 ["hasEvidence"] = new()
                 {
                     Type = EDecisionNodeType.Condition,
-                    PredicateName = "dataExists",
+                    PredicateKey = "dataExists",
                     PredicateParameters = new Dictionary<string, System.Text.Json.JsonElement>
                     {
                         ["type"] = System.Text.Json.JsonDocument.Parse("\"evidence\"").RootElement.Clone()

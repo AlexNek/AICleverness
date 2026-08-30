@@ -4,6 +4,7 @@ using System.Text;
 
 using AiCleverness.Models;
 using AiCleverness.Models.DecisionTree;
+using AiCleverness.Runtime.DecisionTree;
 
 namespace AiCleverness.Runtime.Transcript;
 
@@ -262,7 +263,10 @@ internal sealed class MarkdownTranscriptBuilder
         }
 
         builder.AppendLine("**Raw LLM output:**");
-        builder.Append(Fenced(response ?? "(empty)", "json"));
+        var displayResponse = string.IsNullOrWhiteSpace(response)
+            ? "(empty)"
+            : EnumAnswerParser.StripCodeFences(response);
+        builder.Append(Fenced(displayResponse, "json"));
         if (!string.IsNullOrWhiteSpace(finishReason))
             builder.AppendLine($"**Finish reason:** `{finishReason}`");
         if (usage is not null)

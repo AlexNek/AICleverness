@@ -7,7 +7,7 @@ namespace AiCleverness.Runtime.DecisionTree;
 /// <summary>Built-in predicate that checks whether data of a type exists.</summary>
 public sealed class DataExistsPredicate : IDecisionPredicate
 {
-    public string Name => "dataExists";
+    public string Key => "dataExists";
 
     public bool Evaluate(DecisionPredicateContext context)
     {

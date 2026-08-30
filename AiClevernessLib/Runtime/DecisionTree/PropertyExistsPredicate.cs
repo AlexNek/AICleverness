@@ -7,7 +7,7 @@ namespace AiCleverness.Runtime.DecisionTree;
 /// <summary>Built-in predicate that checks whether a state property is non-null.</summary>
 public sealed class PropertyExistsPredicate : IDecisionPredicate
 {
-    public string Name => "propertyExists";
+    public string Key => "propertyExists";
 
     public bool Evaluate(DecisionPredicateContext context)
     {

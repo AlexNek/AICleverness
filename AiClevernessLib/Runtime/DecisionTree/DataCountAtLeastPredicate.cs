@@ -7,7 +7,7 @@ namespace AiCleverness.Runtime.DecisionTree;
 /// <summary>Built-in predicate that checks a minimum number of data records.</summary>
 public sealed class DataCountAtLeastPredicate : IDecisionPredicate
 {
-    public string Name => "dataCountAtLeast";
+    public string Key => "dataCountAtLeast";
 
     public bool Evaluate(DecisionPredicateContext context)
     {

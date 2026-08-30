@@ -7,7 +7,7 @@ namespace AiCleverness.Runtime.DecisionTree;
 /// <summary>Built-in predicate that compares a state property to a string value.</summary>
 public sealed class PropertyEqualsPredicate : IDecisionPredicate
 {
-    public string Name => "propertyEquals";
+    public string Key => "propertyEquals";
 
     public bool Evaluate(DecisionPredicateContext context)
     {

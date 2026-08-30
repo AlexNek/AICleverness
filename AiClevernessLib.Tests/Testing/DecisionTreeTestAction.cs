@@ -5,7 +5,7 @@ namespace AiClevernessLib.Tests.Testing;
 
 internal sealed class DecisionTreeTestAction : IDecisionAction
 {
-    public string Name => "collect";
+    public string Key => "collect";
 
     public Task<DecisionActionResult> ExecuteAsync(
         DecisionActionContext context,
@@ -22,7 +22,7 @@ internal sealed class DecisionTreeTestAction : IDecisionAction
                 Type = "evidence",
                 Content = content,
                 CreatedAt = DateTimeOffset.UtcNow,
-                ActionId = Name
+                ActionId = Key
             });
         return Task.FromResult(new DecisionActionResult(null, null, DecisionActionStatus.Success));
     }
