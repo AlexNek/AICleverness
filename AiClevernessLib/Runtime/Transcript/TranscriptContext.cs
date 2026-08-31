@@ -447,7 +447,7 @@ internal sealed class TranscriptContext
                     "[state property key truncated]",
                     policy?.MaxStatePropertyKeyLength),
                 LimitDecisionContent(
-                    RedactText(MarkdownTranscriptBuilder.FormatDebugValue(pair.Value)),
+                    RedactText(MarkdownTranscriptBuilder.FormatBoundedDebugValue(pair.Value)),
                     "[state property value truncated]",
                     policy?.MaxStatePropertyValueLength)))
             .ToList();
