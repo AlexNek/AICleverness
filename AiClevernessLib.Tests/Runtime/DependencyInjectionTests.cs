@@ -96,6 +96,7 @@ public sealed class DependencyInjectionTests
         provider.GetRequiredService<IConversationManagerFactory>().Should().NotBeNull();
         provider.GetRequiredService<IDecisionDataPolicy>().Should().BeOfType<DefaultDecisionDataPolicy>();
         provider.GetRequiredService<DecisionTreeExecutionOptions>().DecisionDataPolicy.MaxItems.Should().Be(3);
+        provider.GetServices<IDecisionAction>().Should().BeEmpty();
         provider.GetRequiredService<DecisionTreeExecutor>().Should().NotBeNull();
     }
     [Fact]

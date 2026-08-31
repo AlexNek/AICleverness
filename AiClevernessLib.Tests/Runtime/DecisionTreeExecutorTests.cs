@@ -21,7 +21,7 @@ public sealed class DecisionTreeExecutorTests
         var executor = CreateExecutor();
         var tree = CreateActionConditionTree();
 
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         result.Succeeded.Should().BeTrue();
         result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
@@ -35,7 +35,7 @@ public sealed class DecisionTreeExecutorTests
         var executor = CreateExecutor();
         var tree = CreateActionConditionTree();
 
-        var result = await executor.ExecuteAsync(
+        var result = await executor.ExecuteAsync(CreateActions(), 
             tree,
             new Dictionary<string, string>
             {
@@ -107,7 +107,7 @@ public sealed class DecisionTreeExecutorTests
             }
         };
 
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
         result.Classifications.Should().ContainSingle().Which.Answer.Should().Be("yes");
@@ -122,7 +122,7 @@ public sealed class DecisionTreeExecutorTests
             .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
         var executor = CreateExecutor(pipeline);
 
-        await executor.ExecuteAsync(CreateTree());
+        await executor.ExecuteAsync(CreateActions(), CreateTree());
 
         pipeline.NoContextCallCount.Should().Be(1);
         pipeline.ContextCallCount.Should().Be(0);
@@ -142,7 +142,7 @@ public sealed class DecisionTreeExecutorTests
         };
         var executor = CreateExecutor(pipeline, defaultOptions: options);
 
-        await executor.ExecuteAsync(CreateTree());
+        await executor.ExecuteAsync(CreateActions(), CreateTree());
 
         pipeline.NoContextCallCount.Should().Be(0);
         pipeline.ContextCallCount.Should().Be(1);
@@ -174,7 +174,7 @@ public sealed class DecisionTreeExecutorTests
                 ModelFallbackChain = []
             });
 
-        await executor.ExecuteAsync(CreateTree());
+        await executor.ExecuteAsync(CreateActions(), CreateTree());
 
         pipeline.NoContextCallCount.Should().Be(1);
         pipeline.ContextCallCount.Should().Be(0);
@@ -194,7 +194,7 @@ public sealed class DecisionTreeExecutorTests
                 ModelFallbackChain = ["fallback"]
             });
 
-        await executor.ExecuteAsync(CreateTree());
+        await executor.ExecuteAsync(CreateActions(), CreateTree());
 
         pipeline.NoContextCallCount.Should().Be(1);
         pipeline.ContextCallCount.Should().Be(0);
@@ -217,7 +217,7 @@ public sealed class DecisionTreeExecutorTests
                 ModelFallbackChain = ["fallback"]
             });
 
-        await executor.ExecuteAsync(CreateClassificationCycleTree(new DecisionBudget
+        await executor.ExecuteAsync(CreateActions(), CreateClassificationCycleTree(new DecisionBudget
         {
             MaxNodeVisits = 3,
             MaxLlmCalls = 3,
@@ -246,7 +246,7 @@ public sealed class DecisionTreeExecutorTests
                 ModelFallbackChain = ["fallback"]
             });
 
-        var result = await executor.ExecuteAsync(CreateTree());
+        var result = await executor.ExecuteAsync(CreateActions(), CreateTree());
 
         result.Succeeded.Should().BeTrue();
         client.RequestedModels.Should().Equal("primary", "fallback");
@@ -275,7 +275,7 @@ public sealed class DecisionTreeExecutorTests
                 ModelFallbackChain = ["fallback-1", "fallback-2"]
             });
 
-        var result = await executor.ExecuteAsync(CreateClassificationChainTree(new DecisionBudget
+        var result = await executor.ExecuteAsync(CreateActions(), CreateClassificationChainTree(new DecisionBudget
         {
             MaxNodeVisits = 4,
             MaxLlmCalls = 5,
@@ -308,7 +308,7 @@ public sealed class DecisionTreeExecutorTests
                 ModelFallbackChain = ["fallback"]
             });
 
-        var result = await executor.ExecuteAsync(CreateTree());
+        var result = await executor.ExecuteAsync(CreateActions(), CreateTree());
 
         result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
         client.RequestedModels.Should().ContainSingle().Which.Should().Be("primary");
@@ -323,7 +323,7 @@ public sealed class DecisionTreeExecutorTests
         var publisher = new RecordingExecutionEventPublisher();
         var executor = CreateExecutor(pipeline, journal: journal, publisher: publisher);
 
-        var result = await executor.ExecuteAsync(CreateTree());
+        var result = await executor.ExecuteAsync(CreateActions(), CreateTree());
 
         var entries = await journal.ReadAllAsync(result.ExecutionId);
         var journalEntry = entries.Should()
@@ -376,7 +376,7 @@ public sealed class DecisionTreeExecutorTests
             }
         };
 
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         result.Outcome.Should().Be(DecisionTreeOutcome.Unknown);
         result.Classifications.Should().ContainSingle().Which.Answer.Should().Be("unknown");
@@ -404,7 +404,7 @@ public sealed class DecisionTreeExecutorTests
             ["evidence-content"] = new string('x', 2_000)
         };
 
-        var result = await executor.ExecuteAsync(tree, parameters);
+        var result = await executor.ExecuteAsync(CreateActions(), tree, parameters);
 
         result.Outcome.Should().Be(DecisionTreeOutcome.Unknown);
         result.Succeeded.Should().BeFalse();
@@ -420,7 +420,7 @@ public sealed class DecisionTreeExecutorTests
             .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
         var executor = CreateExecutor(pipeline);
 
-        var result = await executor.ExecuteAsync(
+        var result = await executor.ExecuteAsync(CreateActions(), 
             CreateTree(),
             new Dictionary<string, string> { ["evidence-content"] = "normal fake evidence" });
 
@@ -457,7 +457,7 @@ public sealed class DecisionTreeExecutorTests
             }
         };
 
-        var result = await executor.ExecuteAsync(
+        var result = await executor.ExecuteAsync(CreateActions(), 
             tree,
             new Dictionary<string, string>
             {
@@ -493,7 +493,7 @@ public sealed class DecisionTreeExecutorTests
             }
         };
 
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         result.Outcome.Should().Be(DecisionTreeOutcome.Unknown);
         result.Error.Should().Contain("required user input was omitted");
@@ -510,7 +510,7 @@ public sealed class DecisionTreeExecutorTests
             Budget = new() { MaxNodeVisits = 2, MaxLlmCalls = 0, MaxElapsedTime = TimeSpan.FromSeconds(10), MaxContextTokens = 100 }
         };
 
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         result.Outcome.Should().Be(DecisionTreeOutcome.BudgetExhausted);
         result.Usage.NodeVisits.Should().Be(2);
@@ -522,7 +522,7 @@ public sealed class DecisionTreeExecutorTests
         var loader = new SpyDecisionTreeLoader();
         var executor = CreateExecutor(loader: loader);
 
-        await executor.ExecuteAsync(CreateActionConditionTree());
+        await executor.ExecuteAsync(CreateActions(), CreateActionConditionTree());
 
         loader.ValidateCalled.Should().BeTrue();
     }
@@ -557,7 +557,7 @@ public sealed class DecisionTreeExecutorTests
             }
         };
 
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
         result.Verdict.Should().Be("yes");
@@ -573,7 +573,7 @@ public sealed class DecisionTreeExecutorTests
         var publisher = new RecordingExecutionEventPublisher();
         var executor = CreateExecutor(
             predicates: [predicate],
-            loader: new DecisionTreeLoader([], [predicate]),
+            loader: new DecisionTreeLoader([predicate]),
             journal: journal,
             publisher: publisher);
         var tree = new DecisionTreeModel
@@ -598,7 +598,7 @@ public sealed class DecisionTreeExecutorTests
             }
         };
 
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
         var entries = await journal.ReadAfterAsync(result.ExecutionId, 0);
 
         result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
@@ -630,7 +630,7 @@ public sealed class DecisionTreeExecutorTests
             }
         };
 
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
         result.Usage.NodeVisits.Should().Be(3);
@@ -643,8 +643,8 @@ public sealed class DecisionTreeExecutorTests
         var executor = CreateExecutor(factory: factory);
         var tree = CreateActionConditionTree();
 
-        await executor.ExecuteAsync(tree);
-        await executor.ExecuteAsync(tree);
+        await executor.ExecuteAsync(CreateActions(), tree);
+        await executor.ExecuteAsync(CreateActions(), tree);
 
         factory.Created.Should().HaveCount(2);
         factory.Created[0].Should().NotBeSameAs(factory.Created[1]);
@@ -655,7 +655,7 @@ public sealed class DecisionTreeExecutorTests
         var tree = CreateActionConditionTree();
 
         var results = await Task.WhenAll(
-            Enumerable.Range(0, 8).Select(_ => executor.ExecuteAsync(tree)));
+            Enumerable.Range(0, 8).Select(_ => executor.ExecuteAsync(CreateActions(), tree)));
 
         results.Should().OnlyContain(result => result.Succeeded);
         results.Select(result => result.ExecutionId).Distinct().Should().HaveCount(8);
@@ -684,7 +684,7 @@ public sealed class DecisionTreeExecutorTests
         });
 
         // Act
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         // Assert
         result.Outcome.Should().Be(DecisionTreeOutcome.BudgetExhausted);
@@ -714,7 +714,7 @@ public sealed class DecisionTreeExecutorTests
         });
 
         // Act
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         // Assert
         result.Outcome.Should().Be(DecisionTreeOutcome.BudgetExhausted);
@@ -742,7 +742,7 @@ public sealed class DecisionTreeExecutorTests
         });
 
         // Act
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         // Assert
         result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
@@ -767,7 +767,7 @@ public sealed class DecisionTreeExecutorTests
         });
 
         // Act
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         // Assert
         result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
@@ -787,7 +787,7 @@ public sealed class DecisionTreeExecutorTests
         });
 
         // Act
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         // Assert
         result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
@@ -812,7 +812,7 @@ public sealed class DecisionTreeExecutorTests
         });
 
         // Act
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         // Assert
         result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
@@ -838,7 +838,7 @@ public sealed class DecisionTreeExecutorTests
         });
 
         // Act
-        var result = await executor.ExecuteAsync(tree);
+        var result = await executor.ExecuteAsync(CreateActions(), tree);
 
         // Assert
         result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
@@ -865,7 +865,7 @@ public sealed class DecisionTreeExecutorTests
             var executor = CreateExecutor(pipeline, defaultOptions: options);
 
             // Act
-            var result = await executor.ExecuteAsync(CreateTree());
+            var result = await executor.ExecuteAsync(CreateActions(), CreateTree());
 
             // Assert
             result.Succeeded.Should().BeTrue();
@@ -923,7 +923,7 @@ public sealed class DecisionTreeExecutorTests
             };
 
             // Act
-            var result = await executor.ExecuteAsync(
+            var result = await executor.ExecuteAsync(CreateActions(), 
                 tree,
                 new Dictionary<string, string>
                 {
@@ -962,7 +962,7 @@ public sealed class DecisionTreeExecutorTests
             var executor = CreateExecutor(pipeline, defaultOptions: options);
 
             // Act
-            var result = await executor.ExecuteAsync(CreateTree());
+            var result = await executor.ExecuteAsync(CreateActions(), CreateTree());
 
             // Assert
             result.Succeeded.Should().BeTrue();
@@ -1054,9 +1054,9 @@ public sealed class DecisionTreeExecutorTests
             "primary",
             ActionResult(DecisionActionStatus.PermanentFailure, "primary action failed"));
         var fallback = new ConfigurableTestAction("fallback", SuccessfulActionResult());
-        var executor = CreateExecutor(actions: [primary, fallback]);
+        var executor = CreateExecutor();
 
-        var result = await executor.ExecuteAsync(CreateActionFallbackTree());
+        var result = await executor.ExecuteAsync([primary, fallback], CreateActionFallbackTree());
 
         result.Succeeded.Should().BeTrue();
         result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
@@ -1072,9 +1072,9 @@ public sealed class DecisionTreeExecutorTests
             ActionResult(DecisionActionStatus.TransientFailure, "temporary action failure"),
             ActionResult(DecisionActionStatus.PermanentFailure, "permanent action failure"));
         var fallback = new ConfigurableTestAction("fallback", SuccessfulActionResult());
-        var executor = CreateExecutor(actions: [primary, fallback]);
+        var executor = CreateExecutor();
 
-        var result = await executor.ExecuteAsync(CreateActionFallbackTree(retryTransientFailure: true));
+        var result = await executor.ExecuteAsync([primary, fallback], CreateActionFallbackTree(retryTransientFailure: true));
 
         result.Succeeded.Should().BeTrue();
         result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
@@ -1086,9 +1086,9 @@ public sealed class DecisionTreeExecutorTests
     public async Task ExecuteAsync_AllActionsSucceed_ReportsTerminalOutcome()
     {
         var action = new ConfigurableTestAction("action", SuccessfulActionResult());
-        var executor = CreateExecutor(actions: [action]);
+        var executor = CreateExecutor();
 
-        var result = await executor.ExecuteAsync(CreateActionSuccessTree());
+        var result = await executor.ExecuteAsync([action], CreateActionSuccessTree());
 
         result.Succeeded.Should().BeTrue();
         result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
@@ -1102,9 +1102,9 @@ public sealed class DecisionTreeExecutorTests
         var action = new ConfigurableTestAction(
             "action",
             ActionResult(DecisionActionStatus.PermanentFailure, "action failed"));
-        var executor = CreateExecutor(actions: [action]);
+        var executor = CreateExecutor();
 
-        var result = await executor.ExecuteAsync(CreateDirectTerminalFallbackTree());
+        var result = await executor.ExecuteAsync([action], CreateDirectTerminalFallbackTree());
 
         result.Succeeded.Should().BeTrue();
         result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
@@ -1121,9 +1121,9 @@ public sealed class DecisionTreeExecutorTests
         var action = new ConfigurableTestAction(
             "primary",
             ActionResult(DecisionActionStatus.PermanentFailure, "primary action failed"));
-        var executor = CreateExecutor(actions: [action], pipeline: pipeline);
+        var executor = CreateExecutor(pipeline: pipeline);
 
-        var result = await executor.ExecuteAsync(CreateActionUnknownTree());
+        var result = await executor.ExecuteAsync([action], CreateActionUnknownTree());
 
         result.Succeeded.Should().BeFalse();
         result.Outcome.Should().Be(DecisionTreeOutcome.Unknown);
@@ -1226,22 +1226,8 @@ public sealed class DecisionTreeExecutorTests
             ]
         };
 
-    private static DecisionTreeExecutor CreateExecutor(
-        IEnumerable<IDecisionAction> actions,
-        ILlmCompletionPipeline? pipeline = null)
-    {
-        var registeredActions = actions.ToArray();
-        var predicates = new IDecisionPredicate[] { new DataExistsPredicate() };
-        return new(
-            pipeline ?? new DecisionTreeCompletionPipeline(),
-            new DefaultConversationManager(),
-            new InMemoryExecutionJournal(),
-            null,
-            registeredActions,
-            predicates,
-            new DefaultDecisionLlmContextBuilder(),
-            new DecisionTreeLoader(registeredActions, predicates));
-    }
+    private static IReadOnlyList<IDecisionAction> CreateActions()
+        => [new DecisionTreeTestAction()];
 
     private static string NewDirectory()
         => Path.Combine(
@@ -1267,17 +1253,15 @@ public sealed class DecisionTreeExecutorTests
         IDecisionLlmContextBuilder? contextBuilder = null,
         IDecisionDataPolicy? decisionDataPolicy = null)
     {
-        var action = new DecisionTreeTestAction();
         var registeredPredicates = predicates?.ToArray() ?? [new DataExistsPredicate()];
         return new(
             pipeline ?? new DecisionTreeCompletionPipeline(),
             conversationManager ?? new DefaultConversationManager(),
             journal ?? new InMemoryExecutionJournal(),
             publisher,
-            [action],
             registeredPredicates,
             contextBuilder ?? new DefaultDecisionLlmContextBuilder(),
-            loader ?? new DecisionTreeLoader([action], registeredPredicates),
+            loader ?? new DecisionTreeLoader(registeredPredicates),
             defaultOptions,
             factory,
             decisionDataPolicy);

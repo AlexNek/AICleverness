@@ -7,17 +7,13 @@ using DecisionTreeModel = AiCleverness.Models.DecisionTree.DecisionTree;
 
 namespace AiCleverness.Runtime.DecisionTree;
 
-/// <summary>Source-generated JSON loader and validator for decision trees.</summary>
+/// <summary>Source-generated JSON loader and validator for decision trees. Action references are validated by the executor for each execution.</summary>
 public sealed class DecisionTreeLoader : IDecisionTreeLoader
 {
-    private readonly IReadOnlyDictionary<string, IDecisionAction> _actions;
     private readonly IReadOnlyDictionary<string, IDecisionPredicate> _predicates;
 
-    public DecisionTreeLoader(
-        IEnumerable<IDecisionAction>? actions = null,
-        IEnumerable<IDecisionPredicate>? predicates = null)
+    public DecisionTreeLoader(IEnumerable<IDecisionPredicate>? predicates = null)
     {
-        _actions = BuildCatalog(actions);
         _predicates = BuildCatalog(predicates);
     }
 
@@ -106,8 +102,6 @@ public sealed class DecisionTreeLoader : IDecisionTreeLoader
                 RequireText(node.ActionKey, $"Action node '{nodeId}' must specify actionKey.");
                 ValidateDisplayMetadata(nodeId, node);
                 RequireConditions(nodeId, transitions, ["success", "transientFailure", "permanentFailure"]);
-                if (!_actions.ContainsKey(node.ActionKey!))
-                    throw new InvalidOperationException($"Action '{node.ActionKey}' is not registered.");
                 break;
             case EDecisionNodeType.Classify:
                 RequireOnly(nodeId, node.ActionKey, null, node.PredicateKey, node.PredicateParameters, node.Verdict, "classify");
@@ -215,20 +209,14 @@ public sealed class DecisionTreeLoader : IDecisionTreeLoader
         return reaches;
     }
 
-    private static IReadOnlyDictionary<string, T> BuildCatalog<T>(IEnumerable<T>? items)
-        where T : class
+    private static IReadOnlyDictionary<string, IDecisionPredicate> BuildCatalog(
+        IEnumerable<IDecisionPredicate>? items)
     {
-        var catalog = new Dictionary<string, T>(StringComparer.Ordinal);
-        foreach (var item in items ?? Array.Empty<T>())
+        var catalog = new Dictionary<string, IDecisionPredicate>(StringComparer.Ordinal);
+        foreach (var item in items ?? Array.Empty<IDecisionPredicate>())
         {
-            var name = item switch
-            {
-                IDecisionAction action => action.Key,
-                IDecisionPredicate predicate => predicate.Key,
-                _ => throw new InvalidOperationException("Unsupported decision catalog item.")
-            };
-            if (string.IsNullOrWhiteSpace(name) || !catalog.TryAdd(name, item))
-                throw new InvalidOperationException($"Decision catalog contains duplicate or empty key '{name}'.");
+            if (string.IsNullOrWhiteSpace(item.Key) || !catalog.TryAdd(item.Key, item))
+                throw new InvalidOperationException($"Decision catalog contains duplicate or empty key '{item.Key}'.");
         }
         return catalog;
     }

@@ -45,7 +45,6 @@ runs for [one agent only](../execution/agent-scoping.md).
 | Method | Registers |
 | --- | --- |
 | `AddDecisionTreeExecution()` | Decision-tree executor, loader, parser, context builder, completion pipeline, default conversation manager, in-memory journal/event publisher, and built-in predicates |
-| `AddDecisionAction<T>()` | An application `IDecisionAction` catalog entry |
 | `AddDecisionPredicate<T>()` | An application `IDecisionPredicate` catalog entry |
 
 See [Decision Trees](../execution/decision-trees.md) for JSON format, actions, predicates, budgets, execution, and event handling.

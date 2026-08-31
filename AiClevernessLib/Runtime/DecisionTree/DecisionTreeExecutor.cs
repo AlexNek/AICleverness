@@ -16,7 +16,6 @@ public sealed class DecisionTreeExecutor
     private const int DefaultDisplayMaxLength = 120;
     private const int MaxClassificationAttempts = 2;
 
-    private readonly IReadOnlyDictionary<string, IDecisionAction> _actions;
     private readonly IReadOnlyDictionary<string, IDecisionPredicate> _predicates;
     private readonly IDecisionDataPolicy _decisionDataPolicy;
     private readonly IDecisionLlmContextBuilder _contextBuilder;
@@ -35,7 +34,6 @@ public sealed class DecisionTreeExecutor
         IConversationManager conversationManager,
         IExecutionJournal journal,
         IExecutionEventPublisher? eventPublisher,
-        IEnumerable<IDecisionAction> actions,
         IEnumerable<IDecisionPredicate> predicates,
         IDecisionLlmContextBuilder contextBuilder,
         IDecisionTreeLoader treeLoader,
@@ -56,16 +54,18 @@ public sealed class DecisionTreeExecutor
         _decisionDataPolicy = decisionDataPolicy
             ?? new DefaultDecisionDataPolicy(_defaultOptions?.DecisionDataPolicy);
         _answerParser = new EnumAnswerParser();
-        _actions = BuildCatalog(actions);
         _predicates = BuildCatalog(predicates);
     }
 
     public async Task<DecisionTreeResult> ExecuteAsync(
+        IReadOnlyList<IDecisionAction> actions,
         DecisionTreeModel tree,
         IReadOnlyDictionary<string, string>? templateParameters = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(actions);
         ArgumentNullException.ThrowIfNull(tree);
+        var actionCatalog = BuildCatalog(actions);
         var executionId = Guid.NewGuid().ToString("N");
         var state = new DecisionState();
         var data = new DataStore();
@@ -77,6 +77,7 @@ public sealed class DecisionTreeExecutor
         try
         {
             tree = _treeLoader.Validate(tree);
+            ValidateActionReferences(tree, actionCatalog);
             _transcript.Value?.AppendDecisionOverview(tree);
 
             var budget = ApplyDefaults(tree.Budget ?? new DecisionBudget());
@@ -119,7 +120,7 @@ public sealed class DecisionTreeExecutor
                 {
                     case EDecisionNodeType.Action:
                     {
-                        var action = GetAction(node.ActionKey, currentNodeId);
+                        var action = GetAction(node.ActionKey, currentNodeId, actionCatalog);
                         var dataCountBeforeAction = data.GetAll().Count;
                         DecisionActionResult actionResult;
                         try
@@ -592,10 +593,24 @@ public sealed class DecisionTreeExecutor
         return node;
     }
 
-    private IDecisionAction GetAction(string? actionKey, string nodeId)
+    private static void ValidateActionReferences(
+        DecisionTreeModel tree,
+        IReadOnlyDictionary<string, IDecisionAction> actionCatalog)
+    {
+        foreach (var pair in tree.Nodes ?? new Dictionary<string, DecisionNode>(StringComparer.Ordinal))
+        {
+            if (pair.Value?.Type == EDecisionNodeType.Action)
+                _ = GetAction(pair.Value.ActionKey, pair.Key, actionCatalog);
+        }
+    }
+
+    private static IDecisionAction GetAction(
+        string? actionKey,
+        string nodeId,
+        IReadOnlyDictionary<string, IDecisionAction> actionCatalog)
     {
         if (string.IsNullOrWhiteSpace(actionKey)
-            || !_actions.TryGetValue(actionKey, out var action))
+            || !actionCatalog.TryGetValue(actionKey, out var action))
             throw new InvalidOperationException(
                 $"Action '{actionKey ?? "<missing>"}' for node '{nodeId}' is not registered.");
         return action;

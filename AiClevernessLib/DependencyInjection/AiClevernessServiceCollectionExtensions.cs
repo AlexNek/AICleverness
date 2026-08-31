@@ -394,15 +394,6 @@ public static class AiClevernessServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>Registers an application decision action.</summary>
-    public static IServiceCollection AddDecisionAction<TAction>(this IServiceCollection services)
-        where TAction : class, IDecisionAction
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        services.AddSingleton<IDecisionAction, TAction>();
-        return services;
-    }
-
     /// <summary>Registers an application decision predicate.</summary>
     public static IServiceCollection AddDecisionPredicate<TPredicate>(this IServiceCollection services)
         where TPredicate : class, IDecisionPredicate

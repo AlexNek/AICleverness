@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking:** Decision-tree actions are now supplied as explicit `IDecisionAction` instances to each `DecisionTreeExecutor.ExecuteAsync` call instead of being registered as shared DI services; action registration is no longer required.
+- Clarified that `ActionFailed` remains in the public decision-tree outcome enum for compatibility but is not emitted by the current executor after a handled action failure follows a valid fallback path.
+
 ### Fixed
 - Decision-tree execution now reports a successful terminal outcome when handled action failures follow planned fallback paths, while preserving classification errors for unknown outcomes.
 
