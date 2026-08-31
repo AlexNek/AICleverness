@@ -345,6 +345,7 @@ internal sealed class MarkdownTranscriptBuilder
     private static string EscapeStatePropertyLabel(string value)
         => value
             .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("`", "\\`", StringComparison.Ordinal)
             .Replace("*", "\\*", StringComparison.Ordinal)
             .Replace("_", "\\_", StringComparison.Ordinal)
             .Replace("\r", "\\r", StringComparison.Ordinal)
@@ -445,8 +446,24 @@ internal sealed class MarkdownTranscriptBuilder
         if (value is IDictionary<string, object> dictionary)
             return FormatDebugEntries(dictionary);
 
+        if (value is System.Collections.IDictionary nonGenericDictionary
+            && nonGenericDictionary.Keys.Cast<object?>().All(key => key is string))
+        {
+            return FormatDebugEntries(nonGenericDictionary.Keys
+                .Cast<string>()
+                .Select(key => new KeyValuePair<string, object>(
+                    key,
+                    nonGenericDictionary[key]!)));
+        }
+
         if (value is IEnumerable enumerable)
-            return $"[{string.Join(", ", enumerable.Cast<object?>().Select(FormatDebugValue))}]";
+        {
+            var items = enumerable
+                .Cast<object?>()
+                .Select(FormatDebugValue)
+                .OrderBy(item => item, StringComparer.Ordinal);
+            return $"[{string.Join(", ", items)}]";
+        }
 
         if (value is IFormattable formattable)
             return formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty;

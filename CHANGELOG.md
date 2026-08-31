@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Decision transcripts now include a bounded `State properties` subsection for non-null decision-tree action state values, with deterministic formatting and normal-mode redaction/omission diagnostics.
+- Decision transcripts now include a bounded `State properties` subsection for non-null decision-tree action state values, with deterministic formatting for nested dictionaries and enumerable values, safe Markdown escaping, and normal-mode redaction/omission diagnostics.
 
 ### Changed
 - **Breaking:** `IAgentMemory` is no longer available as a shared core DI singleton; applications requiring memory must integrate it explicitly per execution.
