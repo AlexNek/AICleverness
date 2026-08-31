@@ -23,7 +23,7 @@ public sealed class DependencyInjectionTests
 
         provider.GetService<IToolRegistry>().Should().NotBeNull();
         provider.GetService<IToolExecutor>().Should().NotBeNull();
-        provider.GetService<IAgentMemory>().Should().NotBeNull();
+        provider.GetService<IAgentMemory>().Should().BeNull();
         provider.GetService<IAgentRuntime>().Should().NotBeNull();
         provider.GetService<ILlmCompletionPipeline>().Should().NotBeNull();
         provider.GetService<IPlannerRegistry>().Should().NotBeNull();

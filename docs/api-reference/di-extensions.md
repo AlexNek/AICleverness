@@ -7,7 +7,7 @@ They all live in `AiCleverness.DependencyInjection`.
 
 | Method | Registers |
 | --- | --- |
-| `AddAiClevernessRuntime()` | The runtime, the default tool executor, the registries, and the in-memory memory. Optionally takes `AgentRuntimeOptions` |
+| `AddAiClevernessRuntime()` | The runtime, the default tool executor, the registries, and shared infrastructure defaults. Runtime memory is created per execution. Optionally takes `AgentRuntimeOptions` |
 | `AddAiClevernessLlmClient<T>()` | Your `ILlmClient` implementation |
 
 The defaults you can set in `AgentRuntimeOptions`:
