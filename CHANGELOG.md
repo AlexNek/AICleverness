@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Decision transcripts now include a bounded `State properties` subsection for non-null decision-tree action state values, with deterministic formatting for nested dictionaries and enumerable values, bounded collection traversal with item/depth limits and reference-cycle detection, safe Markdown escaping, and normal-mode redaction/omission diagnostics.
+
 ### Changed
 - **Breaking:** `IAgentMemory` is no longer available as a shared core DI singleton; applications requiring memory must integrate it explicitly per execution.
 - **Breaking:** Decision-tree actions are now supplied as explicit `IDecisionAction` instances to each `DecisionTreeExecutor.ExecuteAsync` call instead of being registered as shared DI services; action registration is no longer required.
 - Clarified that `ActionFailed` remains in the public decision-tree outcome enum for compatibility but is not emitted by the current executor after a handled action failure follows a valid fallback path.
 
 ### Fixed
-- Decision-tree execution now reports a successful terminal outcome when handled action failures follow planned fallback paths, while preserving classification errors for unknown outcomes.
+- Decision-tree execution now reports `Terminal` and success when a handled action failure follows a planned fallback path to a terminal node, without carrying the recovered action error into the result; classification errors remain preserved for unknown outcomes.
 
 ## [1.7.0] - 2026-08-31
 

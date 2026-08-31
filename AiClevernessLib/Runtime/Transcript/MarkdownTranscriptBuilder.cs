@@ -14,7 +14,12 @@ namespace AiCleverness.Runtime.Transcript;
 internal sealed class MarkdownTranscriptBuilder
 {
     private const int MinimumFenceLength = 3;
+    private const int MaxBoundedCollectionItems = 100;
+    private const int MaxBoundedCollectionDepth = 10;
     private const string JsonLanguageTag = "json";
+    private const string BoundedCollectionItemsMarker = "[items omitted]";
+    private const string BoundedCollectionDepthMarker = "[maximum nesting depth reached]";
+    private const string BoundedCollectionCycleMarker = "[reference cycle detected]";
 
     public string Header(
         string goal,
@@ -290,7 +295,8 @@ internal sealed class MarkdownTranscriptBuilder
         string? error,
         ResourceUsage usage,
         IReadOnlyList<string> path,
-        int omittedSectionCount = 0)
+        int omittedSectionCount = 0,
+        IReadOnlyList<KeyValuePair<string, string>>? stateProperties = null)
     {
         var builder = new StringBuilder();
         builder.AppendLine("## Decision result");
@@ -301,6 +307,22 @@ internal sealed class MarkdownTranscriptBuilder
             AppendFencedValue(builder, "Verdict", verdict);
         if (!string.IsNullOrWhiteSpace(error))
             AppendFencedValue(builder, "Error", error);
+
+        if (stateProperties is { Count: > 0 })
+        {
+            builder.AppendLine("### State properties");
+            builder.AppendLine();
+            foreach (var property in stateProperties)
+            {
+                var label = EscapeStatePropertyLabel(property.Key);
+                if (IsInlineStateProperty(property.Value))
+                    builder.AppendLine($"**{label}:** `{property.Value}`");
+                else
+                    AppendFencedValue(builder, label, property.Value);
+            }
+
+            builder.AppendLine();
+        }
 
         builder.AppendLine("### Selected path");
         builder.AppendLine();
@@ -324,6 +346,18 @@ internal sealed class MarkdownTranscriptBuilder
         builder.AppendLine();
         return builder.ToString();
     }
+
+    private static string EscapeStatePropertyLabel(string value)
+        => value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("`", "\\`", StringComparison.Ordinal)
+            .Replace("*", "\\*", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+
+    private static bool IsInlineStateProperty(string value)
+        => !value.Contains('`') && !value.Contains('\r') && !value.Contains('\n');
 
     public string Retry(string reason, int retryNumber)
     {
@@ -403,7 +437,7 @@ internal sealed class MarkdownTranscriptBuilder
         builder.Append(Fenced(value));
     }
 
-    private static string FormatDebugValue(object? value)
+    internal static string FormatDebugValue(object? value)
     {
         if (value is null)
             return "(null)";
@@ -417,13 +451,197 @@ internal sealed class MarkdownTranscriptBuilder
         if (value is IDictionary<string, object> dictionary)
             return FormatDebugEntries(dictionary);
 
+        if (value is System.Collections.IDictionary nonGenericDictionary
+            && nonGenericDictionary.Keys.Cast<object?>().All(key => key is string))
+        {
+            return FormatDebugEntries(nonGenericDictionary.Keys
+                .Cast<string>()
+                .Select(key => new KeyValuePair<string, object>(
+                    key,
+                    nonGenericDictionary[key]!)));
+        }
+
         if (value is IEnumerable enumerable)
-            return $"[{string.Join(", ", enumerable.Cast<object?>().Select(FormatDebugValue))}]";
+        {
+            var items = enumerable
+                .Cast<object?>()
+                .Select(FormatDebugValue)
+                .OrderBy(item => item, StringComparer.Ordinal);
+            return $"[{string.Join(", ", items)}]";
+        }
 
         if (value is IFormattable formattable)
             return formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty;
 
         return value.ToString() ?? string.Empty;
+    }
+
+    internal static string FormatBoundedDebugValue(object? value)
+    {
+        return FormatBoundedDebugValue(
+            value,
+            depth: 0,
+            activeReferences: new HashSet<object>(ReferenceEqualityComparer.Instance));
+    }
+
+    private static string FormatBoundedDebugValue(
+        object? value,
+        int depth,
+        HashSet<object> activeReferences)
+    {
+        if (value is null)
+            return "(null)";
+
+        if (value is string text)
+            return text;
+
+        if (value is IReadOnlyDictionary<string, object> readOnlyDictionary)
+        {
+            return FormatBoundedDebugEntries(
+                readOnlyDictionary,
+                readOnlyDictionary,
+                depth,
+                activeReferences);
+        }
+
+        if (value is IDictionary<string, object> dictionary)
+        {
+            return FormatBoundedDebugEntries(
+                dictionary,
+                dictionary,
+                depth,
+                activeReferences);
+        }
+
+        if (value is System.Collections.IDictionary nonGenericDictionary)
+            return FormatBoundedNonGenericDictionary(
+                nonGenericDictionary,
+                depth,
+                activeReferences);
+
+        if (value is IEnumerable enumerable)
+        {
+            return FormatBoundedEnumerable(
+                enumerable,
+                enumerable,
+                depth,
+                activeReferences);
+        }
+
+        if (value is IFormattable formattable)
+            return formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty;
+
+        return value.ToString() ?? string.Empty;
+    }
+
+    private static string FormatBoundedDebugEntries(
+        object collection,
+        IEnumerable<KeyValuePair<string, object>> entries,
+        int depth,
+        HashSet<object> activeReferences)
+    {
+        if (depth >= MaxBoundedCollectionDepth)
+            return BoundedCollectionDepthMarker;
+        if (!activeReferences.Add(collection))
+            return BoundedCollectionCycleMarker;
+
+        try
+        {
+            var boundedEntries = entries
+                .Take(MaxBoundedCollectionItems + 1)
+                .ToArray();
+            var renderedEntries = boundedEntries
+                .Take(MaxBoundedCollectionItems)
+                .Select(pair => $"{pair.Key}: {FormatBoundedDebugValue(pair.Value, depth + 1, activeReferences)}")
+                .OrderBy(entry => entry, StringComparer.Ordinal)
+                .ToList();
+            if (boundedEntries.Length > MaxBoundedCollectionItems)
+                renderedEntries.Add(BoundedCollectionItemsMarker);
+
+            return $"{{{string.Join(", ", renderedEntries)}}}";
+        }
+        finally
+        {
+            activeReferences.Remove(collection);
+        }
+    }
+
+    private static string FormatBoundedNonGenericDictionary(
+        System.Collections.IDictionary dictionary,
+        int depth,
+        HashSet<object> activeReferences)
+    {
+        if (depth >= MaxBoundedCollectionDepth)
+            return BoundedCollectionDepthMarker;
+        if (!activeReferences.Add(dictionary))
+            return BoundedCollectionCycleMarker;
+
+        try
+        {
+            var boundedKeys = dictionary.Keys
+                .Cast<object?>()
+                .Take(MaxBoundedCollectionItems + 1)
+                .ToArray();
+            if (boundedKeys.Any(key => key is not string))
+            {
+                activeReferences.Remove(dictionary);
+                return FormatBoundedEnumerable(
+                    dictionary,
+                    dictionary,
+                    depth,
+                    activeReferences);
+            }
+
+            var entries = boundedKeys
+                .Cast<string>()
+                .Select(key => new KeyValuePair<string, object>(key, dictionary[key]!));
+            var renderedEntries = entries
+                .Take(MaxBoundedCollectionItems)
+                .Select(pair => $"{pair.Key}: {FormatBoundedDebugValue(pair.Value, depth + 1, activeReferences)}")
+                .OrderBy(entry => entry, StringComparer.Ordinal)
+                .ToList();
+            if (boundedKeys.Length > MaxBoundedCollectionItems)
+                renderedEntries.Add(BoundedCollectionItemsMarker);
+
+            return $"{{{string.Join(", ", renderedEntries)}}}";
+        }
+        finally
+        {
+            activeReferences.Remove(dictionary);
+        }
+    }
+
+    private static string FormatBoundedEnumerable(
+        object collection,
+        IEnumerable enumerable,
+        int depth,
+        HashSet<object> activeReferences)
+    {
+        if (depth >= MaxBoundedCollectionDepth)
+            return BoundedCollectionDepthMarker;
+        if (!activeReferences.Add(collection))
+            return BoundedCollectionCycleMarker;
+
+        try
+        {
+            var boundedItems = enumerable
+                .Cast<object?>()
+                .Take(MaxBoundedCollectionItems + 1)
+                .ToArray();
+            var renderedItems = boundedItems
+                .Take(MaxBoundedCollectionItems)
+                .Select(item => FormatBoundedDebugValue(item, depth + 1, activeReferences))
+                .OrderBy(item => item, StringComparer.Ordinal)
+                .ToList();
+            if (boundedItems.Length > MaxBoundedCollectionItems)
+                renderedItems.Add(BoundedCollectionItemsMarker);
+
+            return $"[{string.Join(", ", renderedItems)}]";
+        }
+        finally
+        {
+            activeReferences.Remove(collection);
+        }
     }
 
     private static string FormatDebugEntries(

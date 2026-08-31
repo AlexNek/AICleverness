@@ -21,6 +21,15 @@ public sealed class DecisionTranscriptPolicyOptions
     /// <summary>Maximum content length recorded for one prepared LLM message.</summary>
     public int MaxMessageContentLength { get; set; } = 8_000;
 
+    /// <summary>Maximum state properties recorded in one decision result.</summary>
+    public int MaxStateProperties { get; set; } = 100;
+
+    /// <summary>Maximum state-property key length recorded in one decision result.</summary>
+    public int MaxStatePropertyKeyLength { get; set; } = 256;
+
+    /// <summary>Maximum state-property value length recorded in one decision result.</summary>
+    public int MaxStatePropertyValueLength { get; set; } = 4_000;
+
     /// <summary>Maximum model response content length recorded for one LLM attempt.</summary>
     public int MaxResponseContentLength { get; set; } = 8_000;
 
@@ -43,6 +52,12 @@ public sealed class DecisionTranscriptPolicyOptions
             throw new ArgumentOutOfRangeException(nameof(MaxMessageContentLength), "Message content length must be positive.");
         if (MaxResponseContentLength <= 0)
             throw new ArgumentOutOfRangeException(nameof(MaxResponseContentLength), "Response content length must be positive.");
+        if (MaxStateProperties <= 0)
+            throw new ArgumentOutOfRangeException(nameof(MaxStateProperties), "Maximum state properties must be positive.");
+        if (MaxStatePropertyKeyLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(MaxStatePropertyKeyLength), "State-property key length must be positive.");
+        if (MaxStatePropertyValueLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(MaxStatePropertyValueLength), "State-property value length must be positive.");
         if (MaxTotalCharacters is <= 0)
             throw new ArgumentOutOfRangeException(nameof(MaxTotalCharacters), "Total transcript character limit must be positive when specified.");
     }

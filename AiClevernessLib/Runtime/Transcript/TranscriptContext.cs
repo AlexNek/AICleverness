@@ -400,6 +400,7 @@ internal sealed class TranscriptContext
             {
                 var verdict = result.Verdict is null ? null : RedactText(result.Verdict);
                 var error = result.Error is null ? null : RedactText(result.Error);
+                var stateProperties = FormatStateProperties(result.StateProperties);
                 if (PersistenceStatus is not null)
                     return;
 
@@ -411,7 +412,8 @@ internal sealed class TranscriptContext
                             error,
                             result.Usage,
                             _decisionPath,
-                            _omittedDecisionSectionCount),
+                            _omittedDecisionSectionCount,
+                            stateProperties: stateProperties),
                         terminal: true))
                     _terminalWritten = true;
             }
@@ -420,6 +422,45 @@ internal sealed class TranscriptContext
                 Disable(PersistenceFinalizationFailedStatus, ex);
             }
         }
+    }
+
+    private IReadOnlyList<KeyValuePair<string, string>>? FormatStateProperties(
+        IReadOnlyDictionary<string, object>? stateProperties)
+    {
+        if (stateProperties is null || stateProperties.Count == 0)
+            return null;
+
+        var candidates = stateProperties
+            .Where(pair => pair.Value is not null)
+            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            .ToArray();
+        if (candidates.Length == 0)
+            return null;
+
+        var policy = _decisionTranscriptPolicy;
+        var maximumProperties = policy?.MaxStateProperties ?? candidates.Length;
+        var included = candidates
+            .Take(maximumProperties)
+            .Select(pair => new KeyValuePair<string, string>(
+                LimitDecisionField(
+                    RedactText(pair.Key),
+                    "[state property key truncated]",
+                    policy?.MaxStatePropertyKeyLength),
+                LimitDecisionContent(
+                    RedactText(MarkdownTranscriptBuilder.FormatBoundedDebugValue(pair.Value)),
+                    "[state property value truncated]",
+                    policy?.MaxStatePropertyValueLength)))
+            .ToList();
+        var omitted = candidates.Length - included.Count;
+        if (omitted > 0)
+        {
+            included.Add(
+                new KeyValuePair<string, string>(
+                    "[state properties omitted]",
+                    omitted.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        return included;
     }
 
     public void Complete(AgentResult result, string status)

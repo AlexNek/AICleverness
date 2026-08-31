@@ -1,5 +1,6 @@
 using AiCleverness.Abstractions;
 using AiCleverness.Models;
+using AiCleverness.Models.DecisionTree;
 using AiCleverness.Runtime;
 using AiCleverness.Runtime.Transcript;
 
@@ -11,6 +12,65 @@ namespace AiClevernessLib.Tests.Runtime;
 
 public sealed class MarkdownTranscriptTests
 {
+    [Fact]
+    public void DecisionResult_RendersStatePropertiesBeforeSelectedPath()
+    {
+        // Arrange
+        var builder = new MarkdownTranscriptBuilder();
+        var properties = new[]
+        {
+            new KeyValuePair<string, string>("alpha", "one"),
+            new KeyValuePair<string, string>("unsafe*key", "line one\nline two")
+        };
+
+        // Act
+        var content = builder.DecisionResult(
+            DecisionTreeOutcome.Terminal,
+            succeeded: true,
+            verdict: "approved",
+            error: null,
+            new ResourceUsage(),
+            ["terminal"],
+            stateProperties: properties);
+
+        // Assert
+        content.Should().Contain("### State properties");
+        content.Should().Contain("**alpha:** `one`");
+        content.Should().Contain("**unsafe\\*key:**");
+        content.Should().Contain("line one");
+        content.IndexOf("### State properties", StringComparison.Ordinal)
+            .Should().BeLessThan(content.IndexOf("### Selected path", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DecisionResult_OmitsStatePropertiesWhenEntriesAreMissing()
+    {
+        // Arrange
+        var builder = new MarkdownTranscriptBuilder();
+
+        // Act
+        var withoutProperties = builder.DecisionResult(
+            DecisionTreeOutcome.Terminal,
+            succeeded: true,
+            verdict: null,
+            error: null,
+            new ResourceUsage(),
+            [],
+            stateProperties: null);
+        var withEmptyProperties = builder.DecisionResult(
+            DecisionTreeOutcome.Terminal,
+            succeeded: true,
+            verdict: null,
+            error: null,
+            new ResourceUsage(),
+            [],
+            stateProperties: Array.Empty<KeyValuePair<string, string>>());
+
+        // Assert
+        withoutProperties.Should().NotContain("### State properties");
+        withEmptyProperties.Should().NotContain("### State properties");
+    }
+
     [Fact]
     public async Task RunAsync_WhenTranscriptIsDisabled_CreatesNoArtifact()
     {
