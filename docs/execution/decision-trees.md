@@ -57,9 +57,7 @@ services.AddDecisionTreeExecution(options =>
     options.ModelFallbackChain = ["fallback-model"];
 });
 
-// Add application extensions before building the provider.
-services.AddDecisionAction<CollectEvidenceAction>();
-
+// Application actions are explicit per-execution instances.
 using var provider = services.BuildServiceProvider();
 ```
 
@@ -69,7 +67,7 @@ Custom `ILlmCompletionPipeline` implementations remain source-compatible through
 
 `AddDecisionTreeExecution()` registers the default `ILlmCompletionPipeline`, a transient default conversation manager, the loader, parser, default classify context builder, in-memory journal, in-memory event publisher, and built-in predicates. `AddAiClevernessLlmClient<T>()` remains the provider-neutral LLM adapter used by the default decision completion pipeline.
 
-Application actions and predicates are registered as singleton catalog entries. Keep their own mutable state out of fields; execution-specific state is passed through their context.
+Application actions are supplied as explicit `IDecisionAction` instances to each `DecisionTreeExecutor.ExecuteAsync` call. They are not registered in the DI container, so each execution can use its own action instances and mutable action state cannot leak between executions. Predicates remain registered as catalog entries; keep predicate state out of fields as well.
 
 ## Define a tree as JSON
 
@@ -154,7 +152,7 @@ The loader rejects missing targets, duplicate conditions or answers, invalid nod
 
 ## Load and execute a tree
 
-Resolve the loader and executor from the provider. Loading validates the JSON against the registered action and predicate catalogs before execution:
+Resolve the loader and executor from the provider. Loading validates the JSON tree structure and predicate catalog; action keys are validated when the explicit action instances are supplied for execution:
 
 ```csharp
 using AiCleverness.Abstractions;
@@ -167,8 +165,10 @@ var cancellationToken = CancellationToken.None;
 
 var json = await File.ReadAllTextAsync("evidence-classification.json");
 var tree = loader.Load(json);
+var actions = new IDecisionAction[] { new CollectEvidenceAction() };
 
 var result = await executor.ExecuteAsync(
+    actions,
     tree,
     templateParameters: new Dictionary<string, string>
     {
@@ -191,7 +191,7 @@ Console.WriteLine($"LLM calls: {result.Usage.LlmCalls}");
 Console.WriteLine($"Tokens: {result.Usage.TotalTokens}");
 ```
 
-`DecisionTreeResult` contains the execution ID, success flag, terminal verdict, outcome, parsed classifications, final `ResourceUsage`, an optional error, and `StateProperties`, which contains the non-null values produced by decision actions. Possible outcomes are `Terminal`, `Unknown`, `ActionFailed`, `BudgetExhausted`, `Cancelled`, and `ValidationFailed`.
+`DecisionTreeResult` contains the execution ID, success flag, terminal verdict, outcome, parsed classifications, final `ResourceUsage`, an optional error, and `StateProperties`, which contains the non-null values produced by decision actions. The current executor emits `Terminal`, `Unknown`, `BudgetExhausted`, `Cancelled`, and `ValidationFailed`. `ActionFailed` remains in the public enum for compatibility with existing consumers, but is not emitted by the current executor when a handled action failure follows a valid fallback path.
 
 Read action-produced values from the result with a null-safe lookup and type check:
 
@@ -206,7 +206,7 @@ if (result.StateProperties?.TryGetValue("evidenceCollected", out var value) == t
 
 ## Implement an action
 
-An action receives the node ID, execution ID, template parameters, mutable execution state, and execution-scoped `DataStore`. It returns a status and may add generic data or string properties:
+Create action instances in the application composition code and pass the collection to `ExecuteAsync`; actions are not registered in the DI container. An action receives the node ID, execution ID, template parameters, mutable execution state, and execution-scoped `DataStore`. It returns a status and may add generic data or string properties:
 
 ```csharp
 using AiCleverness.Abstractions;

@@ -39,7 +39,6 @@ internal static class DemoHost
         services.AddSingleton(llm);
         services.AddSingleton<ILlmClient>(llm);
         services.AddAgentTool<WeatherTool>();
-        services.AddDecisionAction<DecisionCollectEvidenceAction>();
         configure?.Invoke(services);
 
         var provider = services.BuildServiceProvider();

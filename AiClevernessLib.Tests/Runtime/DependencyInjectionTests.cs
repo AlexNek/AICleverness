@@ -23,7 +23,7 @@ public sealed class DependencyInjectionTests
 
         provider.GetService<IToolRegistry>().Should().NotBeNull();
         provider.GetService<IToolExecutor>().Should().NotBeNull();
-        provider.GetService<IAgentMemory>().Should().NotBeNull();
+        provider.GetService<IAgentMemory>().Should().BeNull();
         provider.GetService<IAgentRuntime>().Should().NotBeNull();
         provider.GetService<ILlmCompletionPipeline>().Should().NotBeNull();
         provider.GetService<IPlannerRegistry>().Should().NotBeNull();
@@ -96,6 +96,7 @@ public sealed class DependencyInjectionTests
         provider.GetRequiredService<IConversationManagerFactory>().Should().NotBeNull();
         provider.GetRequiredService<IDecisionDataPolicy>().Should().BeOfType<DefaultDecisionDataPolicy>();
         provider.GetRequiredService<DecisionTreeExecutionOptions>().DecisionDataPolicy.MaxItems.Should().Be(3);
+        provider.GetServices<IDecisionAction>().Should().BeEmpty();
         provider.GetRequiredService<DecisionTreeExecutor>().Should().NotBeNull();
     }
     [Fact]

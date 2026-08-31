@@ -323,7 +323,7 @@ services.AddDefaultPlanner();  // uses the LLM to plan
 
 ### IAgentMemory — Persistence
 
-Key-value storage available to agents during execution. Default is in-memory; swap for Redis, SQLite, etc.
+Key-value storage available to agents during execution. The runtime creates a fresh in-memory instance for each execution. This is intentionally not registered as a singleton: a shared instance could leak state between runs and would still not be the memory used by `AgentRuntime`. Registering an `IAgentMemory` implementation does not replace the built-in per-execution instance.
 
 ```csharp
 public class RedisAgentMemory : IAgentMemory
@@ -533,13 +533,14 @@ AiCleverness supports three memory tiers behind `IAggregateMemory`:
 | Long-term | `ILongTermMemory` | Persistent cross-execution storage |
 | Vector | `IVectorMemory` | Semantic search with embeddings |
 
-```csharp
-services.AddAiClevernessRuntime();  // includes InMemoryAgentMemory
-// Or register individual tiers:
-services.AddWorkingMemory<RedisWorkingMemory>();
-services.AddLongTermMemory<SqlLongTermMemory>();
-services.AddVectorMemory<PgVectorMemory>();
-```
+`AddAiClevernessRuntime()` does not register a shared `IAgentMemory` service.
+The runtime creates fresh memory for each execution. This avoids sharing
+per-run state across executions and avoids exposing a DI memory instance that
+would not be consumed by `AgentRuntime`.
+
+For persistent or custom memory, an application-owned execution integration
+must explicitly provide the memory to the context it creates; registering an
+implementation alone does not replace the built-in runtime memory.
 
 ---
 

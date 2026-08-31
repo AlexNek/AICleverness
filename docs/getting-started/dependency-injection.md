@@ -2,8 +2,9 @@
 
 AiCleverness is built for DI (dependency injection). One call —
 `AddAiClevernessRuntime()` — registers the runtime, the default tool
-executor, the registries, and the in-memory defaults. Everything else is
-added only if you call its `Add...` method yourself.
+executor, the registries, and other shared infrastructure defaults. Runtime
+memory is created per execution rather than registered as a shared service.
+Everything else is added only if you call its `Add...` method yourself.
 
 ## Full Setup
 

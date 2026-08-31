@@ -431,12 +431,6 @@ public sealed class DefaultStartupAnalyzer : IStartupAnalyzer
             RuntimeValidationCategory.DiGraph,
             "AddAiClevernessRuntime() registers a DefaultToolExecutor.");
 
-        CheckRequired<IAgentMemory>(
-            sp,
-            findings,
-            RuntimeValidationCategory.DiGraph,
-            "AddAiClevernessRuntime() registers InMemoryAgentMemory.");
-
         CheckRequired<AgentRuntimeOptions>(
             sp,
             findings,

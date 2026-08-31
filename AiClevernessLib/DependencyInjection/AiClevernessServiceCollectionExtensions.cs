@@ -304,8 +304,8 @@ public static class AiClevernessServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Adds the core AiCleverness runtime services: context factory, in-memory memory,
-    /// tool registry, and policy/strategy/planner discovery via DI.
+    /// Adds the core AiCleverness runtime services: tool registry and
+    /// policy/strategy/planner discovery via DI.
     /// </summary>
     public static IServiceCollection AddAiClevernessRuntime(this IServiceCollection services)
     {
@@ -339,7 +339,6 @@ public static class AiClevernessServiceCollectionExtensions
 
         services.TryAddSingleton<IToolRegistry, ToolRegistry>();
         services.TryAddSingleton<IToolExecutor, DefaultToolExecutor>();
-        services.TryAddSingleton<IAgentMemory, InMemoryAgentMemory>();
         services.TryAddSingleton(sp =>
         {
             var options = new LlmFailureClassificationOptions();
@@ -391,15 +390,6 @@ public static class AiClevernessServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IDecisionPredicate, DataExistsPredicate>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IDecisionPredicate, DataCountAtLeastPredicate>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IDecisionPredicate, PropertyEqualsPredicate>());
-        return services;
-    }
-
-    /// <summary>Registers an application decision action.</summary>
-    public static IServiceCollection AddDecisionAction<TAction>(this IServiceCollection services)
-        where TAction : class, IDecisionAction
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        services.AddSingleton<IDecisionAction, TAction>();
         return services;
     }
 

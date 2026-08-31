@@ -1,3 +1,4 @@
+using AiCleverness.Abstractions;
 using AiCleverness.Models.DecisionTree;
 using AiCleverness.Runtime.DecisionTree;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,7 +35,8 @@ internal static class DecisionTreeScenario
         var llm = provider.GetRequiredService<ScriptedLlmClient>();
         llm.EnqueueText("{\"answer\":\"supported\",\"observation\":\"The release note describes the user-visible change, meets all four publication criteria, and has no unresolved blockers.\",\"confidence\":\"high\"}");
         var executor = provider.GetRequiredService<DecisionTreeExecutor>();
-        var result = await executor.ExecuteAsync(CreateTree());
+        var actions = new IDecisionAction[] { new DecisionCollectEvidenceAction() };
+        var result = await executor.ExecuteAsync(actions, CreateTree());
 
         Console.WriteLine($"Decision task: {DemoTask}");
         Console.WriteLine($"Decision outcome: {result.Outcome}; verdict: {result.Verdict}; error: {result.Error}; node visits: {result.Usage.NodeVisits}; LLM calls: {result.Usage.LlmCalls}");

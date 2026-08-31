@@ -11,21 +11,19 @@ types of memory. `IAggregateMemory` gives you one entry point to all three:
 
 ## Registration
 
-`AddAiClevernessRuntime()` already registers an in-memory default
-(`InMemoryAgentMemory`). If you want a real database or cache behind one
-type, register your own implementation for that type:
-
-```csharp
-services.AddWorkingMemory<RedisWorkingMemory>();
-services.AddLongTermMemory<SqlLongTermMemory>();
-services.AddVectorMemory<PgVectorMemory>();
-```
+`AddAiClevernessRuntime()` does not register `IAgentMemory` as a shared DI
+service. The runtime creates a fresh memory instance for each execution.
+This is intentional: a singleton could leak state between runs, and the old
+singleton was not consumed by `AgentRuntime` or capable of replacing its
+per-execution memory. Applications needing persistent or custom memory must
+wire it through an explicit execution integration.
 
 ## Simple Key-Value Memory
 
 `IAgentMemory` is the simplest form: a key-value store that an agent can
-use during a run. The default lives in memory, but you can replace it with
-Redis, SQLite, or anything else:
+use during a run. The built-in runtime memory is isolated to that execution;
+application-owned integrations can provide Redis, SQLite, or another
+implementation when persistence is required:
 
 ```csharp
 public class RedisAgentMemory : IAgentMemory
