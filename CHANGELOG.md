@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Decision-tree execution now reports a successful terminal outcome when handled action failures follow planned fallback paths, while preserving classification errors for unknown outcomes.
+
 ## [1.7.0] - 2026-08-31
 
 ### Added
@@ -140,8 +143,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Developer manual published as a documentation site via MkDocs Material and GitHub Pages
 - NuGet package ships a compact README with use cases and prominent links to the developer manual and the full repository README
 
-[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.7.0
+[1.6.0]: https://github.com/AlexNek/AICleverness/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.5.0
+[1.4.1]: https://github.com/AlexNek/AICleverness/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.4.0
 [1.3.3]: https://github.com/AlexNek/AICleverness/releases/tag/v1.3.3
 [1.3.2]: https://github.com/AlexNek/AICleverness/releases/tag/v1.3.2

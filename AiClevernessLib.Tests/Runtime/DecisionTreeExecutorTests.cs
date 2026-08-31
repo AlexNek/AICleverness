@@ -1047,6 +1047,202 @@ public sealed class DecisionTreeExecutorTests
             }
         };
 
+    [Fact]
+    public async Task ExecuteAsync_ActionFailsButFallbackReachesTerminal_ReportsTerminalOutcome()
+    {
+        var primary = new ConfigurableTestAction(
+            "primary",
+            ActionResult(DecisionActionStatus.PermanentFailure, "primary action failed"));
+        var fallback = new ConfigurableTestAction("fallback", SuccessfulActionResult());
+        var executor = CreateExecutor(actions: [primary, fallback]);
+
+        var result = await executor.ExecuteAsync(CreateActionFallbackTree());
+
+        result.Succeeded.Should().BeTrue();
+        result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
+        result.Verdict.Should().Be("recovered");
+        result.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ActionFailsWithTransientThenPermanent_FallbackReachesTerminal()
+    {
+        var primary = new ConfigurableTestAction(
+            "primary",
+            ActionResult(DecisionActionStatus.TransientFailure, "temporary action failure"),
+            ActionResult(DecisionActionStatus.PermanentFailure, "permanent action failure"));
+        var fallback = new ConfigurableTestAction("fallback", SuccessfulActionResult());
+        var executor = CreateExecutor(actions: [primary, fallback]);
+
+        var result = await executor.ExecuteAsync(CreateActionFallbackTree(retryTransientFailure: true));
+
+        result.Succeeded.Should().BeTrue();
+        result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
+        result.Verdict.Should().Be("recovered");
+        result.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AllActionsSucceed_ReportsTerminalOutcome()
+    {
+        var action = new ConfigurableTestAction("action", SuccessfulActionResult());
+        var executor = CreateExecutor(actions: [action]);
+
+        var result = await executor.ExecuteAsync(CreateActionSuccessTree());
+
+        result.Succeeded.Should().BeTrue();
+        result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
+        result.Verdict.Should().Be("completed");
+        result.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ActionFailsWithDirectTerminalFallback_ReportsTerminalOutcome()
+    {
+        var action = new ConfigurableTestAction(
+            "action",
+            ActionResult(DecisionActionStatus.PermanentFailure, "action failed"));
+        var executor = CreateExecutor(actions: [action]);
+
+        var result = await executor.ExecuteAsync(CreateDirectTerminalFallbackTree());
+
+        result.Succeeded.Should().BeTrue();
+        result.Outcome.Should().Be(DecisionTreeOutcome.Terminal);
+        result.Verdict.Should().Be("skip");
+        result.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ActionFailureThenUnknownClassification_PreservesClassificationError()
+    {
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("not-json")
+            .Enqueue("{\"answer\":\"not-allowed\"}");
+        var action = new ConfigurableTestAction(
+            "primary",
+            ActionResult(DecisionActionStatus.PermanentFailure, "primary action failed"));
+        var executor = CreateExecutor(actions: [action], pipeline: pipeline);
+
+        var result = await executor.ExecuteAsync(CreateActionUnknownTree());
+
+        result.Succeeded.Should().BeFalse();
+        result.Outcome.Should().Be(DecisionTreeOutcome.Unknown);
+        result.Error.Should().Contain("Classification response could not be classified.");
+        result.Error.Should().NotContain("primary action failed");
+    }
+
+    private static DecisionActionResult SuccessfulActionResult()
+        => ActionResult(DecisionActionStatus.Success);
+
+    private static DecisionActionResult ActionResult(DecisionActionStatus status, string? error = null)
+        => new(null, null, status, error);
+
+    private static DecisionTreeModel CreateActionFallbackTree(bool retryTransientFailure = false)
+    {
+        var transientTarget = retryTransientFailure ? "primary" : "fallback";
+        return new()
+        {
+            TreeId = "action-fallback",
+            Version = 1,
+            StartNodeId = "primary",
+            Budget = new() { MaxNodeVisits = 10, MaxLlmCalls = 0, MaxElapsedTime = TimeSpan.FromSeconds(10), MaxContextTokens = 100 },
+            Nodes = new Dictionary<string, DecisionNode>
+            {
+                ["primary"] = ActionNode("primary", "fallback", transientTarget, "fallback"),
+                ["fallback"] = ActionNode("fallback", "recovered", "recovered", "recovered"),
+                ["recovered"] = Terminal("recovered")
+            }
+        };
+    }
+
+    private static DecisionTreeModel CreateActionSuccessTree()
+        => new()
+        {
+            TreeId = "action-success",
+            Version = 1,
+            StartNodeId = "action",
+            Budget = new() { MaxNodeVisits = 3, MaxLlmCalls = 0, MaxElapsedTime = TimeSpan.FromSeconds(10), MaxContextTokens = 100 },
+            Nodes = new Dictionary<string, DecisionNode>
+            {
+                ["action"] = ActionNode("action", "completed", "completed", "completed"),
+                ["completed"] = Terminal("completed")
+            }
+        };
+
+    private static DecisionTreeModel CreateDirectTerminalFallbackTree()
+        => new()
+        {
+            TreeId = "direct-terminal-fallback",
+            Version = 1,
+            StartNodeId = "action",
+            Budget = new() { MaxNodeVisits = 3, MaxLlmCalls = 0, MaxElapsedTime = TimeSpan.FromSeconds(10), MaxContextTokens = 100 },
+            Nodes = new Dictionary<string, DecisionNode>
+            {
+                ["action"] = ActionNode("action", "skip", "skip", "skip"),
+                ["skip"] = Terminal("skip")
+            }
+        };
+
+    private static DecisionTreeModel CreateActionUnknownTree()
+        => new()
+        {
+            TreeId = "action-unknown",
+            Version = 1,
+            StartNodeId = "primary",
+            Budget = new() { MaxNodeVisits = 6, MaxLlmCalls = 2, MaxElapsedTime = TimeSpan.FromSeconds(10), MaxContextTokens = 100 },
+            Nodes = new Dictionary<string, DecisionNode>
+            {
+                ["primary"] = ActionNode("primary", "classify", "classify", "classify"),
+                ["classify"] = new()
+                {
+                    Type = EDecisionNodeType.Classify,
+                    Task = "Is the answer yes?",
+                    Answers = ["yes"],
+                    Transitions =
+                    [
+                        new() { Condition = "yes", NextNodeId = "completed" },
+                        new() { Condition = "unknown", NextNodeId = "unknown" }
+                    ]
+                },
+                ["completed"] = Terminal("yes"),
+                ["unknown"] = Terminal("unknown")
+            }
+        };
+
+    private static DecisionNode ActionNode(
+        string actionKey,
+        string successTarget,
+        string transientFailureTarget,
+        string permanentFailureTarget)
+        => new()
+        {
+            Type = EDecisionNodeType.Action,
+            ActionKey = actionKey,
+            Transitions =
+            [
+                new() { Condition = "success", NextNodeId = successTarget },
+                new() { Condition = "transientFailure", NextNodeId = transientFailureTarget },
+                new() { Condition = "permanentFailure", NextNodeId = permanentFailureTarget }
+            ]
+        };
+
+    private static DecisionTreeExecutor CreateExecutor(
+        IEnumerable<IDecisionAction> actions,
+        ILlmCompletionPipeline? pipeline = null)
+    {
+        var registeredActions = actions.ToArray();
+        var predicates = new IDecisionPredicate[] { new DataExistsPredicate() };
+        return new(
+            pipeline ?? new DecisionTreeCompletionPipeline(),
+            new DefaultConversationManager(),
+            new InMemoryExecutionJournal(),
+            null,
+            registeredActions,
+            predicates,
+            new DefaultDecisionLlmContextBuilder(),
+            new DecisionTreeLoader(registeredActions, predicates));
+    }
+
     private static string NewDirectory()
         => Path.Combine(
             Path.GetTempPath(),

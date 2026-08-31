@@ -90,7 +90,6 @@ public sealed class DecisionTreeExecutor
             var conversation = CreateConversationManager();
             var completionContext = DecisionTreeCompletionContextFactory.Create(_defaultOptions);
             var currentNodeId = tree.StartNodeId;
-            var actionFailed = false;
             var unknown = false;
             string? executionError = null;
 
@@ -142,11 +141,6 @@ public sealed class DecisionTreeExecutor
                             data.Add(produced);
                         foreach (var property in actionResult.Properties ?? new Dictionary<string, string>())
                             state.Properties[property.Key] = property.Value;
-                        if (actionResult.Status != DecisionActionStatus.Success)
-                        {
-                            actionFailed = true;
-                            executionError ??= actionResult.Error;
-                        }
                         outcome = actionResult.Status switch
                         {
                             DecisionActionStatus.Success => "success",
@@ -277,10 +271,15 @@ public sealed class DecisionTreeExecutor
                             node.Verdict,
                             null,
                             cancellationToken);
-                        var finalOutcome = actionFailed
-                            ? DecisionTreeOutcome.ActionFailed
-                            : unknown ? DecisionTreeOutcome.Unknown : DecisionTreeOutcome.Terminal;
-                        return CreateResult(executionId, state, finalOutcome, node.Verdict, executionError);
+                        var finalOutcome = unknown
+                            ? DecisionTreeOutcome.Unknown
+                            : DecisionTreeOutcome.Terminal;
+                        return CreateResult(
+                            executionId,
+                            state,
+                            finalOutcome,
+                            node.Verdict,
+                            unknown ? executionError : null);
                     default:
                         return CreateResult(executionId, state, DecisionTreeOutcome.ValidationFailed, null, "Unsupported decision node type.");
                 }
