@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-31
+
 ### Added
 - `DecisionTreeResult.StateProperties` exposes a snapshot of non-null action-produced execution state values through a read-only dictionary while preserving the existing result constructor for binary compatibility.
 - Provider overload and capacity diagnostics now support additive `LlmProviderException` metadata, application-owned provider error/status classification mappings, hard-permanent status handling, failover advancement, nullable diagnostics on LLM call observers, bus events, and streaming failure events for each failed attempt, and an unambiguous completion-pipeline constructor with optional classification mappings.
