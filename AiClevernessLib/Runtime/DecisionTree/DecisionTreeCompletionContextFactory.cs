@@ -18,7 +18,7 @@ internal static class DecisionTreeCompletionContextFactory
         {
             AgentName = "decision-tree",
             Goal = "Decision tree LLM",
-            State = new AgentState { Status = "Running" },
+            State = new AgentState { Status = LegacyExecutionStatuses.Running },
             Memory = new InMemoryAgentMemory()
         };
         agentContext.SetProperty(AgentPropertyKeys.EnableModelFailover, true);

@@ -129,12 +129,12 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         }
         catch (OperationCanceledException cancellationException)
         {
-            transcript?.CompleteException(cancellationException, "Cancelled");
+            transcript?.CompleteException(cancellationException, LegacyExecutionStatuses.Cancelled);
             throw;
         }
         catch (Exception exception)
         {
-            transcript?.CompleteException(exception, "Failed");
+            transcript?.CompleteException(exception, LegacyExecutionStatuses.Failed);
             throw;
         }
         finally
@@ -201,7 +201,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
             {
                 transcript?.CompleteException(
                     pipelineFailure,
-                    pipelineFailure is OperationCanceledException ? "Cancelled" : "Failed");
+                    pipelineFailure is OperationCanceledException ? LegacyExecutionStatuses.Cancelled : LegacyExecutionStatuses.Failed);
                 ExceptionDispatchInfo.Capture(pipelineFailure).Throw();
             }
 
@@ -220,7 +220,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
             }
             catch (Exception ex)
             {
-                transcript?.CompleteException(ex, "Failed");
+                transcript?.CompleteException(ex, LegacyExecutionStatuses.Failed);
                 throw;
             }
 
@@ -289,10 +289,10 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         // Update legacy state for backward compatibility.
         var finalSteps = executionContext.Items.Get<List<string>>(ExecutionItemKeys.Steps)
                          ?? new List<string>();
-        agentContext.State.Status = result.Success ? "Completed" :
+        agentContext.State.Status = result.Success ? LegacyExecutionStatuses.Completed :
                                     executionContext.State.Status == ExecutionStatus.Blocked
-                                        ? "Blocked" :
-                                        "Failed";
+                                        ? LegacyExecutionStatuses.Blocked :
+                                        LegacyExecutionStatuses.Failed;
         agentContext.State.Set("usage", result.Usage);
 
         // Ensure steps are included in result if missing.
@@ -303,14 +303,14 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
 
         var transcript = executionContext.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript);
         var transcriptExecutionStatus = result.Success
-                                            ? "Completed"
+                                            ? LegacyExecutionStatuses.Completed
                                             : executionContext.State.Status == ExecutionStatus.Blocked
-                                                ? "Blocked"
+                                                ? LegacyExecutionStatuses.Blocked
                                                 : result.FailureKind == EFailureKind.Cancelled
-                                                    ? "Cancelled"
+                                                    ? LegacyExecutionStatuses.Cancelled
                                                     : result.FailureKind == EFailureKind.TurnLimitExceeded
-                                                        ? "TurnLimitExceeded"
-                                                        : "Failed";
+                                                        ? LegacyExecutionStatuses.TurnLimitExceeded
+                                                        : LegacyExecutionStatuses.Failed;
         transcript?.Complete(result, transcriptExecutionStatus);
         transcript?.FinalizeTranscript();
         result = transcript?.ApplyMetadata(result) ?? result;
@@ -350,7 +350,7 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
             IProgress<string>? progress,
             CancellationToken cancellationToken)
     {
-        var state = new AgentState { Status = "Running" };
+        var state = new AgentState { Status = LegacyExecutionStatuses.Running };
         var agentContext = new DefaultAgentContext
                                {
                                    Goal = request.Goal,
@@ -412,13 +412,13 @@ public sealed class AgentRuntime : IAgentRuntime, IStreamingAgentRuntime
         }
         catch (OperationCanceledException cancellationException)
         {
-            transcript.CompleteException(cancellationException, "Cancelled");
+            transcript.CompleteException(cancellationException, LegacyExecutionStatuses.Cancelled);
             transcript.FinalizeTranscript();
             throw;
         }
         catch (Exception exception)
         {
-            transcript.CompleteException(exception, "Failed");
+            transcript.CompleteException(exception, LegacyExecutionStatuses.Failed);
             transcript.FinalizeTranscript();
             throw;
         }

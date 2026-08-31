@@ -13,6 +13,9 @@ namespace AiCleverness.Runtime.Transcript;
 /// </summary>
 internal sealed class MarkdownTranscriptBuilder
 {
+    private const int MinimumFenceLength = 3;
+    private const string JsonLanguageTag = "json";
+
     public string Header(
         string goal,
         string executionId,
@@ -157,7 +160,7 @@ internal sealed class MarkdownTranscriptBuilder
 
         builder.AppendLine("**Arguments:**");
         builder.AppendLine();
-        builder.Append(Fenced(arguments, "json"));
+        builder.Append(Fenced(arguments, JsonLanguageTag));
         builder.AppendLine();
         return builder.ToString();
     }
@@ -266,7 +269,7 @@ internal sealed class MarkdownTranscriptBuilder
         var displayResponse = string.IsNullOrWhiteSpace(response)
             ? "(empty)"
             : EnumAnswerParser.StripCodeFences(response);
-        builder.Append(Fenced(displayResponse, "json"));
+        builder.Append(Fenced(displayResponse, JsonLanguageTag));
         if (!string.IsNullOrWhiteSpace(finishReason))
             builder.AppendLine($"**Finish reason:** `{finishReason}`");
         if (usage is not null)
@@ -374,7 +377,7 @@ internal sealed class MarkdownTranscriptBuilder
     public static string Fenced(string content, string? language = null)
     {
         content ??= string.Empty;
-        var fenceLength = 3;
+        var fenceLength = MinimumFenceLength;
         var currentRun = 0;
         foreach (var character in content)
         {

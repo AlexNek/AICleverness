@@ -66,7 +66,7 @@ public sealed class OpenTelemetryObserverSample : IAgentObserver
         _logger.LogInformation(
             "AI LLM called: message_count={MessageCount}, system_message={HasSystem}",
             messages.Count,
-            messages.Any(m => m.Role == "system"));
+            messages.Any(m => m.Role == LlmMessageRoles.System));
         return Task.CompletedTask;
     }
 

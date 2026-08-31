@@ -26,6 +26,10 @@ namespace AiCleverness.Runtime;
 /// </remarks>
 public sealed class IdempotentToolExecutor : IToolExecutor, ICacheAwareToolExecutor
 {
+    private const string EmptyArgumentsHash = "empty";
+    private const string ArgumentHashSeparator = "&";
+    private const int ArgumentHashHexCharacterCount = 16;
+
     private readonly IIdempotencyCache _cache;
 
     private readonly string _executionScope;
@@ -116,15 +120,15 @@ public sealed class IdempotentToolExecutor : IToolExecutor, ICacheAwareToolExecu
     private static string HashArguments(IReadOnlyDictionary<string, object> arguments)
     {
         if (arguments.Count == 0)
-            return "empty";
+            return EmptyArgumentsHash;
 
         var sorted = arguments
             .OrderBy(kv => kv.Key, StringComparer.Ordinal)
             .Select(kv => $"{kv.Key}={JsonSerializer.Serialize(kv.Value)}")
             .ToArray();
 
-        var combined = string.Join("&", sorted);
+        var combined = string.Join(ArgumentHashSeparator, sorted);
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(combined));
-        return Convert.ToHexString(bytes)[..16]; // First 8 bytes = 16 hex chars
+        return Convert.ToHexString(bytes)[..ArgumentHashHexCharacterCount];
     }
 }

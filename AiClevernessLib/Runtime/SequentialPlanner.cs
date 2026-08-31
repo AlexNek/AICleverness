@@ -16,6 +16,11 @@ namespace AiCleverness.Runtime;
 /// </remarks>
 public sealed class SequentialPlanner : INamedAgentPlanner
 {
+    private const string JsonNameProperty = "name";
+    private const string JsonTypeProperty = "type";
+    private const string JsonDescriptionProperty = "description";
+    private const string JsonToolProperty = "tool";
+
     private readonly ILlmClient _llm;
 
     private readonly ILogger<SequentialPlanner>? _logger;
@@ -77,7 +82,8 @@ public sealed class SequentialPlanner : INamedAgentPlanner
 
         var messages = new List<LlmMessage>
                            {
-                               new("system", systemPrompt), new("user", userPrompt)
+                               new(LlmMessageRoles.System, systemPrompt),
+                               new(LlmMessageRoles.User, userPrompt)
                            };
 
         try
@@ -108,19 +114,19 @@ public sealed class SequentialPlanner : INamedAgentPlanner
 
             foreach (var element in doc.RootElement.EnumerateArray())
             {
-                var name = element.GetProperty("name").GetString() ?? $"step-{steps.Count + 1}";
-                var type = element.TryGetProperty("type", out var typeProp)
-                               ? typeProp.GetString() ?? "action"
-                               : "action";
-                var description = element.TryGetProperty("description", out var descProp)
+                var name = element.GetProperty(JsonNameProperty).GetString() ?? $"{PlannerVocabulary.StepNamePrefix}{steps.Count + 1}";
+                var type = element.TryGetProperty(JsonTypeProperty, out var typeProp)
+                               ? typeProp.GetString() ?? PlannerVocabulary.ActionStepType
+                               : PlannerVocabulary.ActionStepType;
+                var description = element.TryGetProperty(JsonDescriptionProperty, out var descProp)
                                       ? descProp.GetString()
                                       : null;
 
                 var parameters = new Dictionary<string, object>();
-                if (element.TryGetProperty("tool", out var toolProp)
+                if (element.TryGetProperty(JsonToolProperty, out var toolProp)
                     && toolProp.GetString() is string toolName)
                 {
-                    parameters["tool"] = toolName;
+                    parameters[JsonToolProperty] = toolName;
                 }
 
                 steps.Add(new PlannedStep(name, type, description, parameters));

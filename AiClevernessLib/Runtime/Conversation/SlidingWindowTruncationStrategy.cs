@@ -30,7 +30,7 @@ public sealed class SlidingWindowTruncationStrategy : ITruncationStrategy
 
         // Always keep the system message (first message if role == "system").
         var startIndex = 0;
-        if (messages[0].Role == "system")
+        if (messages[0].Role == LlmMessageRoles.System)
         {
             result.Add(messages[0]);
             usedChars += EstimateChars(messages[0]);

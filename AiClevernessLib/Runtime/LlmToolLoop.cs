@@ -18,6 +18,21 @@ namespace AiCleverness.Runtime;
 /// </summary>
 internal sealed class LlmToolLoop
 {
+    private const string ReasoningPropertyName = "reasoning";
+    private const int InitialMessageCapacity = 16;
+    private const int MaxReasoningDisplayLength = 500;
+    private const int MaxDecisionArgumentLength = 200;
+    private const int MaxToolResultPreviewLength = 100;
+    private const int FirstLineSplitCount = 2;
+    private const int EllipsisCharacterCount = 3;
+    private const string Ellipsis = "...";
+    private const string ToolFailedStatus = "Failed";
+    private const string ToolCachedStatus = "Cached";
+    private const string ToolCachedFailureStatus = "CachedFailure";
+    private const string ToolSucceededStatus = "Succeeded";
+
+    private static readonly string[] PreferredArgumentKeys = ["url", "uri", "query", "path"];
+
     private readonly ILlmCompletionPipeline _completionPipeline;
 
     private readonly IExecutionEventPublisher? _eventPublisher;
@@ -66,7 +81,7 @@ internal sealed class LlmToolLoop
         var executionId = executionContext.Metadata.ExecutionId;
         var transcript = executionContext.Items.Get<TranscriptContext>(ExecutionItemKeys.Transcript);
 
-        var messages = new List<LlmMessage>(16);
+        var messages = new List<LlmMessage>(InitialMessageCapacity);
 
         var systemPrompt = context.GetProperty<string>(AgentPropertyKeys.SystemPrompt)
                            ?? _options.DefaultSystemPrompt;
@@ -77,8 +92,8 @@ internal sealed class LlmToolLoop
                 $"{systemPrompt}{Environment.NewLine}{Environment.NewLine}Quality feedback from previous attempt:{Environment.NewLine}{qualityFeedback}";
         }
 
-        messages.Add(new LlmMessage("system", systemPrompt));
-        messages.Add(new LlmMessage("user", request.Goal));
+        messages.Add(new LlmMessage(LlmMessageRoles.System, systemPrompt));
+        messages.Add(new LlmMessage(LlmMessageRoles.User, request.Goal));
 
         var totalPromptTokens = 0;
         var totalCompletionTokens = 0;
@@ -283,16 +298,15 @@ internal sealed class LlmToolLoop
                 var reasoningText = ExtractJsonReasoning(response.Content) ?? response.Content;
                 if (!string.IsNullOrWhiteSpace(reasoningText))
                 {
-                    const int MaxReasoningLength = 500;
                     var displayText = TruncateReasoning(
                         reasoningText.Trim(),
-                        MaxReasoningLength);
+                        MaxReasoningDisplayLength);
                     var reasoningMsg = $"  {displayText}";
                     steps.Add(reasoningMsg);
                     report(reasoningMsg);
                 }
 
-                messages.Add(new LlmMessage("assistant") { ToolCalls = response.ToolCalls });
+                messages.Add(new LlmMessage(LlmMessageRoles.Assistant) { ToolCalls = response.ToolCalls });
 
                 foreach (var toolCall in response.ToolCalls)
                 {
@@ -316,10 +330,10 @@ internal sealed class LlmToolLoop
                         transcript?.AppendToolResult(
                             toolCall.Name,
                             toolCall.Id,
-                            "Failed",
+                            ToolFailedStatus,
                             null,
                             err);
-                        messages.Add(new LlmMessage("tool", err) { ToolCallId = toolCall.Id });
+                        messages.Add(new LlmMessage(LlmMessageRoles.Tool, err) { ToolCallId = toolCall.Id });
                         continue;
                     }
 
@@ -460,11 +474,11 @@ internal sealed class LlmToolLoop
                     transcript?.AppendToolResult(
                         tool.Name,
                         toolCall.Id,
-                        cacheHit ? result.Success ? "Cached" : "CachedFailure" : result.Success ? "Succeeded" : "Failed",
+                        cacheHit ? result.Success ? ToolCachedStatus : ToolCachedFailureStatus : result.Success ? ToolSucceededStatus : ToolFailedStatus,
                         result.Success ? result.Output : null,
                         result.Success ? null : result.Error);
 
-                    messages.Add(new LlmMessage("tool", output) { ToolCallId = toolCall.Id });
+                    messages.Add(new LlmMessage(LlmMessageRoles.Tool, output) { ToolCallId = toolCall.Id });
                 }
 
                 continue;
@@ -494,21 +508,16 @@ internal sealed class LlmToolLoop
         }
 
         var exhausted = $"Exhausted {maxTurns} turns without a final response.";
-        transcript?.AppendStatus("TurnLimitExceeded", exhausted);
+        transcript?.AppendStatus(LegacyExecutionStatuses.TurnLimitExceeded, exhausted);
         steps.Add(exhausted);
         report(exhausted);
         var finalUsage = new LlmTokenUsage(totalPromptTokens, totalCompletionTokens);
         return new AgentResult(false, null, exhausted, steps, finalUsage, FailureKind: EFailureKind.TurnLimitExceeded);
     }
 
-    private const int MaxDecisionArgumentLength = 200;
-
-    private const int MaxToolResultPreviewLength = 100;
-
     private static string ExtractKeyArgument(IReadOnlyDictionary<string, object> arguments)
     {
-        var preferredKeys = new[] { "url", "uri", "query", "path" };
-        foreach (var key in preferredKeys)
+        foreach (var key in PreferredArgumentKeys)
         {
             if (arguments.TryGetValue(key, out var preferredValue)
                 && IsScalar(preferredValue))
@@ -540,7 +549,7 @@ internal sealed class LlmToolLoop
             using var document = JsonDocument.Parse(content);
             var root = document.RootElement;
             if (root.ValueKind == JsonValueKind.Object
-                && root.TryGetProperty("reasoning", out var reasoning)
+                && root.TryGetProperty(ReasoningPropertyName, out var reasoning)
                 && reasoning.ValueKind == JsonValueKind.String)
             {
                 return reasoning.GetString();
@@ -575,7 +584,7 @@ internal sealed class LlmToolLoop
 
         var firstLine = output.Split(
                 new[] { '\r', '\n' },
-                2,
+                FirstLineSplitCount,
                 StringSplitOptions.None)[0]
             .Trim();
         if (firstLine.Length == 0)
@@ -611,7 +620,7 @@ internal sealed class LlmToolLoop
     private static string TruncateReasoning(string text, int maxLength)
     {
         return text.Length > maxLength
-            ? string.Concat(text.AsSpan(0, maxLength), "...")
+            ? string.Concat(text.AsSpan(0, maxLength), Ellipsis)
             : text;
     }
 
@@ -622,12 +631,12 @@ internal sealed class LlmToolLoop
             return text;
         }
 
-        if (maxLength <= 3)
+        if (maxLength <= EllipsisCharacterCount)
         {
             return new string('.', maxLength);
         }
 
-        return string.Concat(text.AsSpan(0, maxLength - 3), "...");
+        return string.Concat(text.AsSpan(0, maxLength - EllipsisCharacterCount), Ellipsis);
     }
 
 }

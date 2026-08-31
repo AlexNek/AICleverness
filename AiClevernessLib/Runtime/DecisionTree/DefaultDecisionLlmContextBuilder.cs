@@ -43,6 +43,6 @@ public sealed class DefaultDecisionLlmContextBuilder : IDecisionLlmContextBuilde
             : string.Join(", ", dataItems.Select(item =>
                 $"{item.DisplayId ?? item.Id} [{item.DisplayType ?? item.Type}] from {item.DisplaySource ?? item.Source}: {item.Content}"));
         var user = $"Task: {(string.IsNullOrWhiteSpace(task) ? "(not supplied)" : task)}\nClassification task: {classificationTask}\nAllowed answers: {answers}\nState: {stateText}\nData: {dataText}";
-        return [new LlmMessage("system", system), new LlmMessage("user", user)];
+        return [new LlmMessage(LlmMessageRoles.System, system), new LlmMessage(LlmMessageRoles.User, user)];
     }
 }
