@@ -35,6 +35,18 @@ internal sealed class DecisionTreeTestAction : IDecisionAction
             };
         }
 
+        if (context.TemplateParameters.ContainsKey("state-collision"))
+        {
+            context.State.Properties["collision-first-secret"] = "first-value";
+            context.State.Properties["collision-second-secret"] = "second-value";
+        }
+
+        if (context.TemplateParameters.ContainsKey("state-non-string"))
+            context.State.Properties["numericProperty"] = 1234.5m;
+
+        if (context.TemplateParameters.TryGetValue("state-long-key", out var longKeyValue))
+            context.State.Properties["a-state-property-key-that-is-longer-than-the-configured-limit"] = longKeyValue;
+
         return Task.FromResult(new DecisionActionResult(
             null,
             actionProperties,

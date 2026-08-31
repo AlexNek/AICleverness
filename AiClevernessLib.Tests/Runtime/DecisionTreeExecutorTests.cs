@@ -891,9 +891,189 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_BoundsDecisionTranscriptContentAfterRedaction()
+    public async Task ExecuteAsync_NormalTranscriptRendersRedactedStateProperties()
     {
         // Arrange
+        var directory = NewDirectory();
+        try
+        {
+            var pipeline = new DecisionTreeCompletionPipeline()
+                .Enqueue("{\"answer\":\"supported\",\"observation\":\"found\",\"confidence\":\"high\"}");
+            var options = new DecisionTreeExecutionOptions
+            {
+                TranscriptDirectory = directory,
+                TranscriptRedactor = text => text
+                    .Replace("directProperty", "[STATE-KEY]", StringComparison.Ordinal)
+                    .Replace("state-secret", "[STATE-VALUE]", StringComparison.Ordinal)
+            };
+            var executor = CreateExecutor(pipeline, defaultOptions: options);
+
+            // Act
+            var result = await executor.ExecuteAsync(
+                CreateActions(),
+                CreateTree(),
+                new Dictionary<string, string>
+                {
+                    ["state-property"] = "state-secret"
+                });
+
+            // Assert
+            result.Succeeded.Should().BeTrue();
+            var path = Directory.GetFiles(directory, "*.md").Should().ContainSingle().Which;
+            var content = await File.ReadAllTextAsync(path);
+            content.Should().Contain("### State properties");
+            content.Should().Contain("**[STATE-KEY]:** `[STATE-VALUE]`");
+            content.Should().Contain("**returnedProperty:** `[STATE-VALUE]`");
+            content.Should().NotContain("state-secret");
+            content.IndexOf("### State properties", StringComparison.Ordinal)
+                .Should().BeLessThan(content.IndexOf("### Selected path", StringComparison.Ordinal));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_StatePropertiesPreserveRedactedKeyCollisionsAndInvariantValues()
+    {
+        // Arrange
+        var directory = NewDirectory();
+        try
+        {
+            var pipeline = new DecisionTreeCompletionPipeline()
+                .Enqueue("{\"answer\":\"supported\",\"observation\":\"found\",\"confidence\":\"high\"}");
+            var options = new DecisionTreeExecutionOptions
+            {
+                TranscriptDirectory = directory,
+                TranscriptRedactor = text => text
+                    .Replace("collision-first-secret", "[COLLISION-KEY]", StringComparison.Ordinal)
+                    .Replace("collision-second-secret", "[COLLISION-KEY]", StringComparison.Ordinal)
+            };
+            var executor = CreateExecutor(pipeline, defaultOptions: options);
+
+            // Act
+            var result = await executor.ExecuteAsync(
+                CreateActions(),
+                CreateTree(),
+                new Dictionary<string, string>
+                {
+                    ["state-collision"] = "true",
+                    ["state-non-string"] = "true"
+                });
+
+            // Assert
+            result.Succeeded.Should().BeTrue();
+            var path = Directory.GetFiles(directory, "*.md").Should().ContainSingle().Which;
+            var content = await File.ReadAllTextAsync(path);
+            content.Split("**[COLLISION-KEY]:**", StringSplitOptions.None)
+                .Should().HaveCount(3);
+            content.Should().Contain("**numericProperty:** `1234.5`");
+            content.Should().Contain("first-value");
+            content.Should().Contain("second-value");
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_StatePropertyLimitsTruncateEntriesAndReportOmissions()
+    {
+        // Arrange
+        var directory = NewDirectory();
+        try
+        {
+            var pipeline = new DecisionTreeCompletionPipeline()
+                .Enqueue("{\"answer\":\"supported\",\"observation\":\"found\",\"confidence\":\"high\"}");
+            var options = new DecisionTreeExecutionOptions
+            {
+                TranscriptDirectory = directory,
+                TranscriptRedactor = static text => text
+            };
+            options.DecisionTranscriptPolicy.MaxStateProperties = 2;
+            options.DecisionTranscriptPolicy.MaxStatePropertyKeyLength = 40;
+            options.DecisionTranscriptPolicy.MaxStatePropertyValueLength = 40;
+            var executor = CreateExecutor(pipeline, defaultOptions: options);
+            var tree = CreateTree() with
+            {
+                Budget = new()
+                {
+                    MaxNodeVisits = 5,
+                    MaxLlmCalls = 1,
+                    MaxElapsedTime = TimeSpan.FromSeconds(10),
+                    MaxContextTokens = 1_000
+                }
+            };
+
+            // Act
+            var result = await executor.ExecuteAsync(
+                CreateActions(),
+                tree,
+                new Dictionary<string, string>
+                {
+                    ["state-property"] = new string('x', 80),
+                    ["state-long-key"] = "short"
+                });
+
+            // Assert
+            result.Succeeded.Should().BeTrue();
+            var path = Directory.GetFiles(directory, "*.md").Should().ContainSingle().Which;
+            var content = await File.ReadAllTextAsync(path);
+            content.Should().Contain("[state property value truncated]");
+            content.Should().Contain("[state property key truncated]");
+            content.Should().Contain("**[state properties omitted]:** `1`");
+            var decisionResult = content[content.IndexOf("## Decision result", StringComparison.Ordinal)..];
+            decisionResult.Should().NotContain(new string('x', 80));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DebugTranscriptPreservesStatePropertyContent()
+    {
+        // Arrange
+        var directory = NewDirectory();
+        try
+        {
+            var pipeline = new DecisionTreeCompletionPipeline()
+                .Enqueue("{\"answer\":\"supported\",\"observation\":\"found\",\"confidence\":\"high\"}");
+            var options = new DecisionTreeExecutionOptions
+            {
+                TranscriptDirectory = directory,
+                TranscriptDebug = true
+            };
+            var executor = CreateExecutor(pipeline, defaultOptions: options);
+
+            // Act
+            var result = await executor.ExecuteAsync(
+                CreateActions(),
+                CreateTree(),
+                new Dictionary<string, string>
+                {
+                    ["state-property"] = "debug-state-secret"
+                });
+
+            // Assert
+            result.Succeeded.Should().BeTrue();
+            var path = Directory.GetFiles(directory, "*.md").Should().ContainSingle().Which;
+            var content = await File.ReadAllTextAsync(path);
+            content.Should().Contain("### State properties");
+            content.Should().Contain("debug-state-secret");
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_BoundsDecisionTranscriptContentAfterRedaction()
+    {
         var directory = NewDirectory();
         try
         {

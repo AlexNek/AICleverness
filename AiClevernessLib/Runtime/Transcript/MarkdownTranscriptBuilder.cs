@@ -290,7 +290,8 @@ internal sealed class MarkdownTranscriptBuilder
         string? error,
         ResourceUsage usage,
         IReadOnlyList<string> path,
-        int omittedSectionCount = 0)
+        int omittedSectionCount = 0,
+        IReadOnlyList<KeyValuePair<string, string>>? stateProperties = null)
     {
         var builder = new StringBuilder();
         builder.AppendLine("## Decision result");
@@ -301,6 +302,22 @@ internal sealed class MarkdownTranscriptBuilder
             AppendFencedValue(builder, "Verdict", verdict);
         if (!string.IsNullOrWhiteSpace(error))
             AppendFencedValue(builder, "Error", error);
+
+        if (stateProperties is { Count: > 0 })
+        {
+            builder.AppendLine("### State properties");
+            builder.AppendLine();
+            foreach (var property in stateProperties)
+            {
+                var label = EscapeStatePropertyLabel(property.Key);
+                if (IsInlineStateProperty(property.Value))
+                    builder.AppendLine($"**{label}:** `{property.Value}`");
+                else
+                    AppendFencedValue(builder, label, property.Value);
+            }
+
+            builder.AppendLine();
+        }
 
         builder.AppendLine("### Selected path");
         builder.AppendLine();
@@ -324,6 +341,17 @@ internal sealed class MarkdownTranscriptBuilder
         builder.AppendLine();
         return builder.ToString();
     }
+
+    private static string EscapeStatePropertyLabel(string value)
+        => value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("*", "\\*", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+
+    private static bool IsInlineStateProperty(string value)
+        => !value.Contains('`') && !value.Contains('\r') && !value.Contains('\n');
 
     public string Retry(string reason, int retryNumber)
     {
@@ -403,7 +431,7 @@ internal sealed class MarkdownTranscriptBuilder
         builder.Append(Fenced(value));
     }
 
-    private static string FormatDebugValue(object? value)
+    internal static string FormatDebugValue(object? value)
     {
         if (value is null)
             return "(null)";
