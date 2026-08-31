@@ -23,7 +23,15 @@ public sealed class DefaultScopeValidator : IScopeValidator
         {
             foreach (var (key, value) in invocation.Arguments)
             {
-                var size = EstimateSize(value);
+                if (!TryEstimateSize(value, out var size))
+                {
+                    return Task.FromResult(
+                        new ScopeValidationResult(
+                            false,
+                            $"Argument '{key}' could not be safely size-validated.",
+                            key));
+                }
+
                 if (size > scope.MaxInputSizeBytes.Value)
                 {
                     return Task.FromResult(
@@ -42,9 +50,7 @@ public sealed class DefaultScopeValidator : IScopeValidator
             {
                 if (value is string str && LooksLikePath(str))
                 {
-                    if (!scope.AllowedPaths.Any(p => str.StartsWith(
-                            p,
-                            StringComparison.OrdinalIgnoreCase)))
+                    if (!scope.AllowedPaths.Any(p => IsWithinAllowedPath(str, p)))
                     {
                         return Task.FromResult(
                             new ScopeValidationResult(
@@ -78,20 +84,72 @@ public sealed class DefaultScopeValidator : IScopeValidator
         return Task.FromResult(new ScopeValidationResult(true));
     }
 
-    private static long EstimateSize(object? value)
+    private static bool TryEstimateSize(object? value, out long size)
     {
-        if (value is null) return 0;
-        if (value is string str) return str.Length * 2L;
-        if (value is byte[] bytes) return bytes.Length;
-        // Fallback: serialize and measure
+        if (value is null)
+        {
+            size = 0;
+            return true;
+        }
+
+        if (value is string str)
+        {
+            size = str.Length * 2L;
+            return true;
+        }
+
+        if (value is byte[] bytes)
+        {
+            size = bytes.Length;
+            return true;
+        }
+
+        // Fallback: serialize and measure. Serialization failure is rejected by the caller.
         try
         {
             var json = JsonSerializer.Serialize(value, AiClevernessJsonContext.Default.Object);
-            return json.Length * 2L;
+            size = json.Length * 2L;
+            return true;
         }
         catch
         {
-            return 0;
+            size = 0;
+            return false;
+        }
+    }
+
+    private static bool IsWithinAllowedPath(string candidatePath, string allowedPath)
+    {
+        try
+        {
+            var candidateFullPath = Path.GetFullPath(candidatePath);
+            var allowedFullPath = Path.GetFullPath(allowedPath);
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            if (string.Equals(candidateFullPath, allowedFullPath, comparison))
+                return true;
+
+            var root = Path.GetPathRoot(allowedFullPath);
+            var boundary = allowedFullPath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+            if (boundary.Length == 0)
+                boundary = root ?? allowedFullPath;
+
+            if (!boundary.EndsWith(Path.DirectorySeparatorChar)
+                && !boundary.EndsWith(Path.AltDirectorySeparatorChar))
+            {
+                boundary += Path.DirectorySeparatorChar;
+            }
+
+            return candidateFullPath.StartsWith(boundary, comparison);
+        }
+        catch
+        {
+            // Invalid or unsupported paths must not pass a security boundary.
+            return false;
         }
     }
 

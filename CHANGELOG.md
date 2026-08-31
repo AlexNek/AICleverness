@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** Decision-tree contracts now use `ActionKey`/`PredicateKey` instead of `ActionName`/`PredicateName`, and action and predicate implementations expose `Key` instead of `Name`. Decision trees and nodes now support optional `Name`/`Description` metadata. Migrate C# references and implementations, and rename JSON `actionName`/`predicateName` fields to `actionKey`/`predicateKey`.
 - Decision transcripts now normalize valid language-tagged and bare Markdown fences around structured LLM responses into one readable JSON block.
 
+### Fixed
+- Restored legacy completion-pipeline constructor overloads and made tool input path and size validation fail closed for invalid or unmeasurable arguments.
+
 ## [1.6.0] - 2026-08-28
 
 ### Added

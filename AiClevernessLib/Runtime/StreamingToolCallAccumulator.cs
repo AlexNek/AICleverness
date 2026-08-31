@@ -1,5 +1,3 @@
-using System.Text;
-
 using AiCleverness.Models;
 
 namespace AiCleverness.Runtime;
@@ -69,12 +67,4 @@ internal sealed class StreamingToolCallAccumulator
         return result;
     }
 
-    private sealed class ToolCallEntry
-    {
-        public StringBuilder Arguments { get; } = new();
-
-        public string? Id { get; set; }
-
-        public string? Name { get; set; }
-    }
 }
