@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **Breaking:** The core runtime no longer registers `IAgentMemory` as a shared DI singleton. The previous registration was not consumed by `AgentRuntime`, which creates fresh memory for each execution; keeping it would preserve a misleading contract where consumers could resolve memory unrelated to the active execution, while custom registrations could not replace the runtime memory. Applications that depend on DI resolution must adopt an explicit per-execution integration.
+- **Breaking:** `IAgentMemory` is no longer available as a shared core DI singleton; applications requiring memory must integrate it explicitly per execution.
 - **Breaking:** Decision-tree actions are now supplied as explicit `IDecisionAction` instances to each `DecisionTreeExecutor.ExecuteAsync` call instead of being registered as shared DI services; action registration is no longer required.
 - Clarified that `ActionFailed` remains in the public decision-tree outcome enum for compatibility but is not emitted by the current executor after a handled action failure follows a valid fallback path.
 
