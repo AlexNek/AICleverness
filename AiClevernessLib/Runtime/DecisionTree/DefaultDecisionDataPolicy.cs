@@ -127,18 +127,24 @@ public sealed class DefaultDecisionDataPolicy : IDecisionDataPolicy
             ? Math.Max(0, _options.MaxMetadataEntries - 1)
             : _options.MaxMetadataEntries;
         var bounded = new Dictionary<string, string>(StringComparer.Ordinal);
+        var collisionCount = 0;
         foreach (var pair in entries.Take(dataEntryLimit))
         {
             var key = Limit(pair.Key, _options.MaxMetadataKeyLength, "[metadata key truncated]");
             var value = Limit(pair.Value, _options.MaxMetadataValueLength, "[metadata value truncated]");
             if (!bounded.ContainsKey(key))
                 bounded.Add(key, value);
+            else
+                collisionCount++;
         }
 
-        if (omitted > 0)
+        if (omitted > 0 || collisionCount > 0)
         {
             var markerKey = Limit("[metadata entries omitted]", _options.MaxMetadataKeyLength, "[metadata omitted]");
-            bounded[markerKey] = omitted.ToString(CultureInfo.InvariantCulture);
+            var message = collisionCount > 0
+                ? $"{omitted}; collisions {collisionCount}"
+                : omitted.ToString(CultureInfo.InvariantCulture);
+            bounded[markerKey] = message;
         }
 
         return new ReadOnlyDictionary<string, string>(bounded);
