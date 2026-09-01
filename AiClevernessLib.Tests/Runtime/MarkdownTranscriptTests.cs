@@ -13,6 +13,29 @@ namespace AiClevernessLib.Tests.Runtime;
 public sealed class MarkdownTranscriptTests
 {
     [Fact]
+    public void TranscriptBuilderDecorator_PreservesDefaultSectionsAndAllowsSingleSectionOverride()
+    {
+        // Arrange
+        var builder = new OverridingTranscriptBuilder();
+
+        // Act
+        var header = builder.Header("goal", "execution-id", DateTimeOffset.UtcNow, debug: false);
+        var action = builder.DecisionAction(
+            "node-id",
+            "collect",
+            "Collect evidence",
+            DecisionActionStatus.Success,
+            "Found matching evidence.",
+            null,
+            null);
+
+        // Assert
+        header.Should().Contain("# Agent task");
+        action.Should().Contain("### Custom action: `Collect evidence`");
+        action.Should().Contain("**Outcome:**");
+    }
+
+    [Fact]
     public void DecisionAction_UsesNodeNameAndRendersOutcomeSeparatelyFromError()
     {
         // Arrange

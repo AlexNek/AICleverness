@@ -470,23 +470,12 @@ When the total character budget omits a decision section, the terminal result re
 
 `ITranscriptBuilder` controls the representation of individual sections. It has methods for headers, decision overviews, debug information, turns, model content, tool decisions/results, decision actions/classifications/LLM attempts, terminal results, retries, status, final results, and final failures. Each method returns the content for one section. The built-in Markdown builder remains the default, but applications can return JSON fragments, HTML, plain text, or organization-specific Markdown.
 
-Configure a factory rather than supplying a builder instance:
+For a small formatting change, derive from `TranscriptBuilderDecorator` instead of implementing the complete interface. Its parameterless constructor wraps a new `MarkdownTranscriptBuilder`, and every section delegates to that builder unless you override it:
 
 ```csharp
-services.AddDecisionTreeExecution(options =>
+public sealed class ApplicationTranscriptBuilder : TranscriptBuilderDecorator
 {
-    options.TranscriptDirectory = Path.GetFullPath("transcripts");
-    options.TranscriptRedactor = text => text;
-    options.TranscriptBuilderFactory = static () => new ApplicationTranscriptBuilder();
-});
-```
-
-`ApplicationTranscriptBuilder` must implement every member of `ITranscriptBuilder`. The runtime calls the relevant member for each section and appends the returned string to the configured sink. Returning an empty string is a valid way for a custom format to omit a section; returning `null` is not supported. A practical implementation usually has a small shared serializer and maps each method's typed arguments into one structured record, for example:
-
-```csharp
-public sealed class ApplicationTranscriptBuilder : ITranscriptBuilder
-{
-    public string DecisionAction(
+    public override string DecisionAction(
         string nodeId,
         string actionKey,
         string? nodeName,
@@ -495,23 +484,33 @@ public sealed class ApplicationTranscriptBuilder : ITranscriptBuilder
         string? error,
         string? producedData)
     {
-        return JsonSerializer.Serialize(new
-        {
-            kind = "decision-action",
+        var markdown = base.DecisionAction(
             nodeId,
-            action = nodeName ?? actionKey,
+            actionKey,
+            nodeName,
             status,
             outcomeSummary,
             error,
-            producedData
-        });
-    }
+            producedData);
 
-    // Implement the remaining ITranscriptBuilder members using the same format.
+        return markdown.Replace(
+            "### Decision action:",
+            "### Application action:",
+            StringComparison.Ordinal);
+    }
 }
+
+services.AddDecisionTreeExecution(options =>
+{
+    options.TranscriptDirectory = Path.GetFullPath("transcripts");
+    options.TranscriptRedactor = text => text;
+    options.TranscriptBuilderFactory = static () => new ApplicationTranscriptBuilder();
+});
 ```
 
-The example is intentionally focused on the action record; the interface is the complete contract and must be implemented in full. Builders should not retain state in static fields or be reused for another run.
+This preserves the built-in Markdown behavior for headers, model/tool sections, classifications, terminal results, failures, and every other section. Override only the methods you need. The decorator can also wrap another `ITranscriptBuilder` through its constructor when the application wants to layer multiple customizations. If the application needs a completely different representation, it can still implement `ITranscriptBuilder` directly.
+
+Returning an empty string is a valid way for a custom format to omit a section; returning `null` is not supported. Builders should not retain state in static fields or be reused for another run.
 
 Action sections use `DecisionNode.Name` when it is present and non-empty, and fall back to `ActionKey` when it is absent. An action can separately provide a human-readable `DecisionActionResult.OutcomeSummary`; that summary describes what the action found, changed, or decided and is not treated as an error. `Error` remains reserved for an actual action failure. For example:
 

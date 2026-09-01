@@ -80,10 +80,12 @@ absolute `TranscriptDirectory`, optional `DecisionTranscriptPolicy` limits,
 and the same redaction/debug choices. Both agent and decision-tree options
 support per-execution `TranscriptBuilderFactory` and `TranscriptSinkFactory`
 delegates for JSON/HTML/structured formatting or non-file destinations such as
-databases and queues. Factories must create fresh builder and sink instances;
-never return cached mutable transcript objects or register them as singletons.
-Transcript failures are best effort and do not replace the primary execution
-result. See the [full decision-transcript guide](https://alexnek.github.io/AICleverness/execution/decision-trees/#decision-transcripts) for action outcome summaries, readable node names, policy limits, logical sink paths, and failure semantics.
+databases and queues. For small Markdown changes, derive from
+`TranscriptBuilderDecorator` and override only the section you need; implement
+`ITranscriptBuilder` directly only for a completely different representation.
+Factories must create fresh builder and sink instances; never return cached
+mutable transcript objects or register them as singletons. Transcript failures
+are best effort and do not replace the primary execution result. See the [full decision-transcript guide](https://alexnek.github.io/AICleverness/execution/decision-trees/#decision-transcripts) for action outcome summaries, readable node names, policy limits, logical sink paths, and failure semantics.
 
 ## Full Reference
 

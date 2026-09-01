@@ -173,10 +173,13 @@ transcripts require a redactor; debug mode can be explicitly enabled with the
 `markdown_transcript_debug` parameter, but it bypasses redaction and should be
 limited to controlled development or diagnostic environments. Transcript
 formatting and persistence are extensible through per-execution
-`TranscriptBuilderFactory` and `TranscriptSinkFactory` delegates. The default
-Markdown builder and file sink remain in place when those delegates are not
-configured. Factories must return a new builder and sink for every execution;
-do not cache them or register mutable transcript components as singletons.
+`TranscriptBuilderFactory` and `TranscriptSinkFactory` delegates. For small
+Markdown changes, derive from `TranscriptBuilderDecorator` and override only
+the section you need; implement `ITranscriptBuilder` directly only for a
+completely different representation. The default Markdown builder and file
+sink remain in place when those delegates are not configured. Factories must
+return a new builder and sink for every execution; do not cache them or
+register mutable transcript components as singletons.
 
 For decision-tree executions, configure the corresponding factories,
 redactor, directory, and size limits on `DecisionTreeExecutionOptions`. The

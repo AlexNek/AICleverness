@@ -108,6 +108,7 @@ configured through `AgentRuntimeOptions` or `DecisionTreeExecutionOptions`.
 | --- | --- |
 | `ITranscriptBuilder` | Renders each transcript section; supports headers, decision overviews, debug data, turns, model/tool sections, decision actions/classifications/LLM attempts, results, retries, status, final results, and final failures |
 | `ITranscriptSink` | Persists rendered sections through `FilePath`, `Append`, `Complete`, and `Dispose`; it can target a file or any other destination |
+| `TranscriptBuilderDecorator` | Delegates all builder methods to an inner builder and exposes virtual methods so applications can customize selected sections without reimplementing `ITranscriptBuilder` |
 
 A builder is selected with `TranscriptBuilderFactory` and a sink with
 `TranscriptSinkFactory`. Both delegates are invoked for every enabled
@@ -115,6 +116,13 @@ execution. The sink factory receives the intended logical transcript path;
 custom sinks may use it as an identity while writing to a database, queue,
 object store, or memory. When no factory is configured, the default
 `MarkdownTranscriptBuilder` and `FileTranscriptSink` are used.
+
+For a small Markdown customization, derive from `TranscriptBuilderDecorator`.
+Its default constructor wraps a new `MarkdownTranscriptBuilder`, and its
+virtual methods delegate all unmodified sections automatically. Override only
+the section that needs different formatting, then return a fresh decorator from
+`TranscriptBuilderFactory`. Implement `ITranscriptBuilder` directly only when
+the application needs a completely different representation.
 
 Transcript components are execution-scoped. Factories must return fresh
 instances and must not return cached mutable objects. Applications must not
