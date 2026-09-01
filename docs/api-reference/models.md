@@ -87,3 +87,42 @@ every public type and its properties.
 | `WorkflowDefinition` | `Name`, `Nodes` |
 | `WorkflowNode` | Name, type, parameters |
 | `WorkflowResult` | Per-node outputs and overall status |
+
+## Decision Trees
+
+Decision-tree models live in `AiCleverness.Models.DecisionTree`. They describe a
+bounded, declarative workflow independently of the executor and LLM provider.
+
+| Type | Properties and purpose |
+| --- | --- |
+| `DecisionTree` | `TreeId`, `Version`, `Name`, `Description`, `StartNodeId`, `Nodes`, `Budget`, `SystemPrompt`, `Task` |
+| `DecisionNode` | `Type`, `Name`, `Description`, `ActionKey`, `Task`, `Answers`, `PredicateKey`, `PredicateParameters`, `Verdict`, `Transitions` |
+| `DecisionTransition` | `Condition`, `NextNodeId`; the labeled edge followed after a node result |
+| `DecisionBudget` | Limits for node visits, LLM calls, elapsed time, and context/resource use |
+| `DecisionData` | A bounded piece of source data supplied to an action or classification |
+| `DecisionClassification` | `NodeId`, `Answer`, `Observation`, `Confidence`, `At` |
+| `DecisionActionResult` | `ProducedData`, `Properties`, `Status`, `Error`, and optional `OutcomeSummary` |
+| `DecisionTreeResult` | `ExecutionId`, `Succeeded`, `Verdict`, `Outcome`, `Classifications`, `Usage`, `Error`, and execution-scoped `StateProperties` |
+| `DecisionTreeOutcome` | Terminal, budget, cancellation, or failure category for the execution |
+| `DecisionActionStatus` | Status reported by an application action, including success and failure states |
+| `EDecisionNodeType` | Identifies whether a node performs an action, classification, predicate, or terminal operation |
+
+`DecisionActionResult.OutcomeSummary` is deliberately separate from `Error`.
+Use it to explain a successful or otherwise completed action in a transcript
+without making the action look failed. `DecisionNode.Name` is the readable
+label used for action headings when available; transcript rendering falls back
+to `ActionKey` when the name is missing. `DecisionTreeResult.StateProperties`
+contains execution-scoped properties collected from action results and is
+separate from the list of classifications.
+
+`DecisionDataPolicyOptions` limits which source data can enter a
+classification prompt: item count, per-item and aggregate content, field
+length, metadata, and optional type/source allow-lists. It protects prompt
+construction and is not the same as transcript persistence policy.
+
+`DecisionTranscriptPolicyOptions` limits decision-specific transcript output
+after normal-mode redaction. It bounds produced data, metadata, prepared
+messages, model responses, state properties, and optionally the total decision
+section. These options affect what is persisted, not the primary
+`DecisionTreeResult` or action execution. See [Decision Trees](../execution/decision-trees.md#decision-transcripts)
+for configuration and examples.

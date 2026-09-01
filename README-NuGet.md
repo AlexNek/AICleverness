@@ -49,6 +49,42 @@ Console.WriteLine(result.Output);
 
 Three pieces — `ILlmClient`, `ITool`, DI wiring — and you have a working execution runtime.
 
+## Transcripts and decision-tree diagnostics
+
+Transcript persistence is opt-in. For ordinary agent runs, configure an
+absolute directory in the request and provide a redactor in
+`AgentRuntimeOptions`:
+
+```csharp
+services.AddAiClevernessRuntime(options =>
+{
+    options.TranscriptRedactor = text => text;
+});
+
+var request = new AgentRequest(
+    Goal: "Summarize the evidence",
+    Parameters: new Dictionary<string, object>
+    {
+        [AgentPropertyKeys.MarkdownTranscriptDirectory] =
+            Path.GetFullPath("transcripts")
+    });
+```
+
+Normal transcripts pass persisted content through the host redactor. Debug
+transcripts are explicitly unredacted and should be used only with controlled
+data and access. The built-in Markdown builder and file sink work without
+additional setup once the directory and redactor are configured.
+
+Decision-tree applications configure `DecisionTreeExecutionOptions` with an
+absolute `TranscriptDirectory`, optional `DecisionTranscriptPolicy` limits,
+and the same redaction/debug choices. Both agent and decision-tree options
+support per-execution `TranscriptBuilderFactory` and `TranscriptSinkFactory`
+delegates for JSON/HTML/structured formatting or non-file destinations such as
+databases and queues. Factories must create fresh builder and sink instances;
+never return cached mutable transcript objects or register them as singletons.
+Transcript failures are best effort and do not replace the primary execution
+result. See the [full decision-transcript guide](https://alexnek.github.io/AICleverness/execution/decision-trees/#decision-transcripts) for action outcome summaries, readable node names, policy limits, logical sink paths, and failure semantics.
+
 ## Full Reference
 
 The repository README contains the complete reference: core concepts,

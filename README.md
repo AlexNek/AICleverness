@@ -146,6 +146,44 @@ is enabled. Library transcript filenames use a local timestamp plus a sanitized
 human-readable task goal; execution IDs remain in transcript content, not in
 filenames.
 
+## Application transcript configuration
+
+The demo switches are only a convenient example. Applications can opt into
+ordinary agent transcripts with an absolute directory request parameter and
+configure the runtime redactor through `AgentRuntimeOptions`:
+
+```csharp
+services.AddAiClevernessRuntime(options =>
+{
+    options.TranscriptRedactor = text =>
+        text.Replace("customer@example.invalid", "[REDACTED]", StringComparison.OrdinalIgnoreCase);
+});
+
+var request = new AgentRequest(
+    Goal: "Classify the submitted evidence",
+    Parameters: new Dictionary<string, object>
+    {
+        [AgentPropertyKeys.MarkdownTranscriptDirectory] =
+            Path.GetFullPath("transcripts")
+    });
+```
+
+`markdown_transcript_directory` is opt-in and must be absolute. Normal
+transcripts require a redactor; debug mode can be explicitly enabled with the
+`markdown_transcript_debug` parameter, but it bypasses redaction and should be
+limited to controlled development or diagnostic environments. Transcript
+formatting and persistence are extensible through per-execution
+`TranscriptBuilderFactory` and `TranscriptSinkFactory` delegates. The default
+Markdown builder and file sink remain in place when those delegates are not
+configured. Factories must return a new builder and sink for every execution;
+do not cache them or register mutable transcript components as singletons.
+
+For decision-tree executions, configure the corresponding factories,
+redactor, directory, and size limits on `DecisionTreeExecutionOptions`. The
+complete decision-transcript guide, including custom JSON/HTML builders,
+non-file sinks, action outcome summaries, node-name fallback behavior, and
+best-effort failure semantics, is in the [Decision Trees guide](https://alexnek.github.io/AICleverness/execution/decision-trees/#decision-transcripts).
+
 ---
 
 ## Core Concepts
