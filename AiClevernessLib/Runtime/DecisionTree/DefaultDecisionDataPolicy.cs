@@ -140,11 +140,22 @@ public sealed class DefaultDecisionDataPolicy : IDecisionDataPolicy
 
         if (omitted > 0 || collisionCount > 0)
         {
-            var markerKey = Limit("[metadata entries omitted]", _options.MaxMetadataKeyLength, "[metadata omitted]");
+            var baseMarkerKey = "[metadata entries omitted]";
+            var markerKey = Limit(baseMarkerKey, _options.MaxMetadataKeyLength, "[metadata omitted]");
+            
+            // Generate a unique marker key if the base key already exists in bounded
+            var uniqueKey = markerKey;
+            var counter = 1;
+            while (bounded.ContainsKey(uniqueKey))
+            {
+                uniqueKey = Limit($"{baseMarkerKey} {counter}", _options.MaxMetadataKeyLength, $"[metadata omitted {counter}]");
+                counter++;
+            }
+            
             var message = collisionCount > 0
                 ? $"{omitted}; collisions {collisionCount}"
                 : omitted.ToString(CultureInfo.InvariantCulture);
-            bounded[markerKey] = message;
+            bounded[uniqueKey] = message;
         }
 
         return new ReadOnlyDictionary<string, string>(bounded);

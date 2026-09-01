@@ -58,7 +58,8 @@ absolute directory in the request and provide a redactor in
 ```csharp
 services.AddAiClevernessRuntime(options =>
 {
-    options.TranscriptRedactor = text => text;
+    options.TranscriptRedactor = text =>
+        text.Replace("customer@example.invalid", "[REDACTED]", StringComparison.OrdinalIgnoreCase);
 });
 
 var request = new AgentRequest(

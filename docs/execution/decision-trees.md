@@ -438,7 +438,8 @@ For ordinary agent runs, use the equivalent runtime options:
 ```csharp
 services.AddAiClevernessRuntime(options =>
 {
-    options.TranscriptRedactor = text => text;
+    options.TranscriptRedactor = text =>
+        text.Replace("customer@example.invalid", "[REDACTED]", StringComparison.OrdinalIgnoreCase);
 });
 ```
 
@@ -503,7 +504,8 @@ public sealed class ApplicationTranscriptBuilder : TranscriptBuilderDecorator
 services.AddDecisionTreeExecution(options =>
 {
     options.TranscriptDirectory = Path.GetFullPath("transcripts");
-    options.TranscriptRedactor = text => text;
+    options.TranscriptRedactor = text =>
+        text.Replace("customer@example.invalid", "[REDACTED]", StringComparison.OrdinalIgnoreCase);
     options.TranscriptBuilderFactory = static () => new ApplicationTranscriptBuilder();
 });
 ```
