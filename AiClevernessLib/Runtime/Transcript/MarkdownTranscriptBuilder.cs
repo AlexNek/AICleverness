@@ -11,7 +11,7 @@ namespace AiCleverness.Runtime.Transcript;
 /// <summary>
 /// Builds individual transcript sections without retaining the whole document.
 /// </summary>
-internal sealed class MarkdownTranscriptBuilder
+public sealed class MarkdownTranscriptBuilder : ITranscriptBuilder
 {
     private const int MinimumFenceLength = 3;
     private const int MaxBoundedCollectionItems = 100;
@@ -206,16 +206,21 @@ internal sealed class MarkdownTranscriptBuilder
 
     public string DecisionAction(
         string nodeId,
-        string actionName,
+        string actionKey,
+        string? nodeName,
         DecisionActionStatus status,
+        string? outcomeSummary,
         string? error,
         string? producedData)
     {
         var builder = new StringBuilder();
-        builder.AppendLine($"### Decision action: `{actionName}`");
+        var displayName = string.IsNullOrWhiteSpace(nodeName) ? actionKey : nodeName;
+        builder.AppendLine($"### Decision action: `{displayName}`");
         builder.AppendLine();
         builder.AppendLine($"**Node:** `{nodeId}`  ");
         builder.AppendLine($"**Status:** `{status}`");
+        if (!string.IsNullOrWhiteSpace(outcomeSummary))
+            AppendFencedValue(builder, "Outcome", outcomeSummary);
         if (!string.IsNullOrWhiteSpace(error))
             AppendFencedValue(builder, "Error", error);
         if (!string.IsNullOrWhiteSpace(producedData))

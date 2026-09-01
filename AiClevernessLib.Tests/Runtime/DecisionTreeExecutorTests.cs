@@ -7,6 +7,7 @@ using AiCleverness.Models.DecisionTree;
 using AiCleverness.Runtime;
 using AiCleverness.Runtime.Conversation;
 using AiCleverness.Runtime.DecisionTree;
+using AiCleverness.Runtime.Transcript;
 using AiClevernessLib.Tests.Testing;
 using FluentAssertions;
 using DecisionTreeModel = AiCleverness.Models.DecisionTree.DecisionTree;
@@ -843,6 +844,78 @@ public sealed class DecisionTreeExecutorTests
         // Assert
         result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
         result.Error.Should().Contain("node 'missing-node' does not exist");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CustomTranscriptUsesReadableActionNameAndOutcomeSummary()
+    {
+        // Arrange
+        var directory = NewDirectory();
+        RecordingTranscriptSink? sink = null;
+        var options = new DecisionTreeExecutionOptions
+        {
+            TranscriptDirectory = directory,
+            TranscriptRedactor = static text => text.Replace(
+                "fake-secret",
+                "[REDACTED]",
+                StringComparison.Ordinal),
+            TranscriptBuilderFactory = static () => new MarkdownTranscriptBuilder(),
+            TranscriptSinkFactory = path => sink = new RecordingTranscriptSink(path)
+        };
+        var executor = CreateExecutor(defaultOptions: options);
+        var tree = new DecisionTreeModel
+        {
+            TreeId = "readable-action",
+            Version = 1,
+            StartNodeId = "collect",
+            Budget = new()
+            {
+                MaxNodeVisits = 2,
+                MaxLlmCalls = 0,
+                MaxElapsedTime = TimeSpan.FromSeconds(10),
+                MaxContextTokens = 100
+            },
+            Nodes = new Dictionary<string, DecisionNode>
+            {
+                ["collect"] = new()
+                {
+                    Type = EDecisionNodeType.Action,
+                    ActionKey = "collect",
+                    Name = "Collect fake-secret evidence",
+                    Transitions =
+                    [
+                        new() { Condition = "success", NextNodeId = "completed" },
+                        new() { Condition = "transientFailure", NextNodeId = "completed" },
+                        new() { Condition = "permanentFailure", NextNodeId = "completed" }
+                    ]
+                },
+                ["completed"] = new()
+                {
+                    Type = EDecisionNodeType.Terminal,
+                    Verdict = "completed"
+                }
+            }
+        };
+        var action = new ConfigurableTestAction(
+            "collect",
+            new DecisionActionResult(null, null, DecisionActionStatus.Success)
+            {
+                OutcomeSummary = "Found fake-secret evidence."
+            });
+
+        // Act
+        var result = await executor.ExecuteAsync([action], tree);
+
+        // Assert
+        result.Succeeded.Should().BeTrue();
+        sink.Should().NotBeNull();
+        sink!.IsCompleted.Should().BeTrue();
+        sink.Content.Should().Contain("### Decision action: `Collect [REDACTED] evidence`");
+        sink.Content.Should().Contain("**Outcome:**");
+        sink.Content.Should().Contain("Found [REDACTED] evidence.");
+        sink.Content.Should().NotContain("fake-secret");
+        sink.Content.Should().NotContain("### Decision action: `collect`");
+        Directory.Exists(directory).Should().BeFalse();
     }
 
     [Fact]

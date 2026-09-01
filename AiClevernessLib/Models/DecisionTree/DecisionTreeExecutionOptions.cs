@@ -1,3 +1,5 @@
+using AiCleverness.Runtime.Transcript;
+
 namespace AiCleverness.Models.DecisionTree;
 
 /// <summary>Default decision-tree settings used by dependency injection configuration.</summary>
@@ -36,4 +38,14 @@ public sealed class DecisionTreeExecutionOptions
 
     /// <summary>Host-provided redactor for normal decision-tree transcripts.</summary>
     public Func<string, string>? TranscriptRedactor { get; set; }
+
+    /// <summary>
+    /// Creates a new transcript builder for each enabled decision-tree execution. The returned builder must not be shared between executions.
+    /// </summary>
+    public Func<ITranscriptBuilder>? TranscriptBuilderFactory { get; set; }
+
+    /// <summary>
+    /// Creates a new transcript sink for each enabled decision-tree execution. The argument is the intended logical transcript path.
+    /// </summary>
+    public Func<string, ITranscriptSink>? TranscriptSinkFactory { get; set; }
 }

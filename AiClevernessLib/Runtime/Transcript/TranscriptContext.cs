@@ -58,7 +58,7 @@ internal sealed class TranscriptContext
 
     private readonly List<string> _decisionPath = [];
 
-    private MarkdownTranscriptBuilder? _builder;
+    private readonly ITranscriptBuilder? _builder;
 
     private bool _completed;
 
@@ -72,6 +72,7 @@ internal sealed class TranscriptContext
 
     private TranscriptContext(
         ITranscriptSink? sink,
+        ITranscriptBuilder? builder,
         Func<string, string>? redactor,
         bool debug,
         string? status,
@@ -79,6 +80,7 @@ internal sealed class TranscriptContext
         DecisionTranscriptPolicyOptions? decisionTranscriptPolicy = null)
     {
         _sink = sink;
+        _builder = builder;
         _redactor = redactor;
         Debug = debug;
         PersistenceStatus = status;
@@ -95,7 +97,8 @@ internal sealed class TranscriptContext
 
     public string? PersistenceStatus { get; private set; }
 
-    private MarkdownTranscriptBuilder Builder => _builder ??= new();
+    private ITranscriptBuilder Builder => _builder ?? throw new InvalidOperationException(
+        "A transcript builder is unavailable for this context.");
 
     public static TranscriptContext Create(
         AgentRequest request,
@@ -124,6 +127,7 @@ internal sealed class TranscriptContext
         if (!debug && options.TranscriptRedactor is null)
             return Disabled(PersistenceRedactorUnavailableStatus, debug, logger, executionId);
 
+        ITranscriptSink? sink = null;
         try
         {
             var fullDirectory = Path.GetFullPath(directory);
@@ -134,20 +138,28 @@ internal sealed class TranscriptContext
                                    : RedactGoalForFilename(request.Goal, options.TranscriptRedactor!);
             var fileNamePrefix =
                 $"{localTimestamp.ToString(FilenameTimestampFormat, CultureInfo.InvariantCulture)}-{CreateTaskSlug(filenameGoal)}";
-            var sink = CreateFileSink(fullDirectory, fileNamePrefix);
+            var logicalFilePath = Path.Combine(fullDirectory, $"{fileNamePrefix}.md");
+            var builder = options.TranscriptBuilderFactory is { } builderFactory
+                ? builderFactory()
+                    ?? throw new InvalidOperationException("The transcript builder factory returned null.")
+                : new MarkdownTranscriptBuilder();
+            sink = options.TranscriptSinkFactory is { } sinkFactory
+                ? sinkFactory(logicalFilePath)
+                    ?? throw new InvalidOperationException("The transcript sink factory returned null.")
+                : CreateFileSink(fullDirectory, fileNamePrefix);
             var context = new TranscriptContext(
                 sink,
+                builder,
                 options.TranscriptRedactor,
                 debug,
                 status: null,
                 logger,
                 decisionTranscriptPolicy);
-            context.Append(
-                context.Builder.Header(
-                    context.RedactText(request.Goal),
-                    executionId,
-                    startedAt,
-                    debug));
+            context.Append(transcriptBuilder => transcriptBuilder.Header(
+                context.RedactText(request.Goal),
+                executionId,
+                startedAt,
+                debug));
             if (debug)
                 context.AppendDebugRequest(parameters);
 
@@ -155,11 +167,26 @@ internal sealed class TranscriptContext
         }
         catch (Exception ex)
         {
+            if (sink is not null)
+            {
+                try
+                {
+                    sink.Dispose();
+                }
+                catch (Exception disposeException)
+                {
+                    logger?.LogDebug(
+                        disposeException,
+                        "Markdown transcript disposal failed during initialization for execution {ExecutionId}.",
+                        executionId);
+                }
+            }
+
             logger?.LogWarning(
                 ex,
                 "Markdown transcript initialization failed for execution {ExecutionId}.",
                 executionId);
-            return new TranscriptContext(null, null, debug, PersistenceUnavailableStatus, logger);
+            return new TranscriptContext(null, null, null, debug, PersistenceUnavailableStatus, logger);
         }
     }
 
@@ -168,7 +195,11 @@ internal sealed class TranscriptContext
         if (_sink is null)
             return;
 
-        Append(Builder.Turn(turn, qualityAttempt, failoverAttempt, model));
+        Append(transcriptBuilder => transcriptBuilder.Turn(
+            turn,
+            qualityAttempt,
+            failoverAttempt,
+            model));
     }
 
     public void AppendDebugRequest(IReadOnlyDictionary<string, object> parameters)
@@ -176,7 +207,7 @@ internal sealed class TranscriptContext
         if (!Debug || _sink is null)
             return;
 
-        Append(Builder.DebugRequest(parameters));
+        Append(transcriptBuilder => transcriptBuilder.DebugRequest(parameters));
     }
 
     public void AppendDebugRuntime(
@@ -229,7 +260,7 @@ internal sealed class TranscriptContext
         if (_sink is null || string.IsNullOrWhiteSpace(content))
             return;
 
-        Append(Builder.ModelContent(RedactText(content)));
+        Append(transcriptBuilder => transcriptBuilder.ModelContent(RedactText(content)));
     }
 
     public void AppendToolDecision(
@@ -241,12 +272,11 @@ internal sealed class TranscriptContext
         if (_sink is null)
             return;
 
-        Append(
-            Builder.ToolDecision(
-                model ?? "unknown",
-                toolName,
-                callId,
-                RedactArguments(rawArguments)));
+        Append(transcriptBuilder => transcriptBuilder.ToolDecision(
+            model ?? "unknown",
+            toolName,
+            callId,
+            RedactArguments(rawArguments)));
     }
 
     public void AppendToolResult(
@@ -259,13 +289,12 @@ internal sealed class TranscriptContext
         if (_sink is null)
             return;
 
-        Append(
-            Builder.ToolResult(
-                toolName,
-                callId,
-                status,
-                output is null ? null : RedactText(output),
-                error is null ? null : RedactText(error)));
+        Append(transcriptBuilder => transcriptBuilder.ToolResult(
+            toolName,
+            callId,
+            status,
+            output is null ? null : RedactText(output),
+            error is null ? null : RedactText(error)));
     }
 
     public void AppendRetry(string reason, int retryNumber)
@@ -273,7 +302,7 @@ internal sealed class TranscriptContext
         if (_sink is null)
             return;
 
-        Append(Builder.Retry(RedactText(reason), retryNumber));
+        Append(transcriptBuilder => transcriptBuilder.Retry(RedactText(reason), retryNumber));
     }
 
     public void AppendStatus(string status, string? detail = null)
@@ -281,7 +310,9 @@ internal sealed class TranscriptContext
         if (_sink is null)
             return;
 
-        Append(Builder.Status(status, detail is null ? null : RedactText(detail)));
+        Append(transcriptBuilder => transcriptBuilder.Status(
+            status,
+            detail is null ? null : RedactText(detail)));
     }
 
     public void AppendDecisionOverview(DecisionTreeModel tree)
@@ -289,12 +320,11 @@ internal sealed class TranscriptContext
         if (_sink is null)
             return;
 
-        AppendDecisionSection(
-            Builder.DecisionOverview(
-                RedactText(tree.TreeId),
-                tree.Version,
-                RedactText(tree.StartNodeId),
-                RedactText(tree.Task ?? "(task not supplied)")));
+        AppendDecisionSection(transcriptBuilder => transcriptBuilder.DecisionOverview(
+            RedactText(tree.TreeId),
+            tree.Version,
+            RedactText(tree.StartNodeId),
+            RedactText(tree.Task ?? "(task not supplied)")));
     }
 
     public void AppendDecisionNode(
@@ -321,19 +351,29 @@ internal sealed class TranscriptContext
     public void AppendDecisionAction(
         string nodeId,
         string actionKey,
+        string? nodeName,
         DecisionActionResult result,
         IReadOnlyList<DecisionData> producedData)
     {
         if (_sink is null)
             return;
 
-        AppendDecisionSection(
-            Builder.DecisionAction(
-                RedactText(nodeId),
-                RedactText(actionKey),
-                result.Status,
-                result.Error is null ? null : RedactText(result.Error),
-                FormatProducedData(producedData)));
+        AppendDecisionSection(transcriptBuilder => transcriptBuilder.DecisionAction(
+            RedactText(nodeId),
+            RedactText(actionKey),
+            nodeName is null
+                ? null
+                : LimitDecisionField(
+                    RedactText(nodeName),
+                    "[node name truncated]"),
+            result.Status,
+            result.OutcomeSummary is null
+                ? null
+                : LimitDecisionContent(
+                    RedactText(result.OutcomeSummary),
+                    "[outcome summary truncated]"),
+            result.Error is null ? null : RedactText(result.Error),
+            FormatProducedData(producedData)));
     }
 
     public void AppendDecisionClassification(
@@ -346,13 +386,12 @@ internal sealed class TranscriptContext
         if (_sink is null)
             return;
 
-        AppendDecisionSection(
-            Builder.DecisionClassification(
-                RedactText(nodeId),
-                RedactText(answer),
-                observation is null ? null : RedactText(observation),
-                confidence is null ? null : RedactText(confidence),
-                attempt));
+        AppendDecisionSection(transcriptBuilder => transcriptBuilder.DecisionClassification(
+            RedactText(nodeId),
+            RedactText(answer),
+            observation is null ? null : RedactText(observation),
+            confidence is null ? null : RedactText(confidence),
+            attempt));
     }
 
     public void AppendDecisionLlmAttempt(
@@ -374,19 +413,18 @@ internal sealed class TranscriptContext
                         "[message content truncated]",
                         _decisionTranscriptPolicy?.MaxMessageContentLength)))
             .ToArray();
-        AppendDecisionSection(
-            Builder.DecisionLlmAttempt(
-                RedactText(nodeId),
-                attempt,
-                redactedMessages,
-                response.Content is null
-                    ? null
-                    : LimitDecisionContent(
-                        RedactText(response.Content),
-                        "[response content truncated]",
-                        _decisionTranscriptPolicy?.MaxResponseContentLength),
-                response.FinishReason is null ? null : RedactText(response.FinishReason),
-                response.Usage));
+        AppendDecisionSection(transcriptBuilder => transcriptBuilder.DecisionLlmAttempt(
+            RedactText(nodeId),
+            attempt,
+            redactedMessages,
+            response.Content is null
+                ? null
+                : LimitDecisionContent(
+                    RedactText(response.Content),
+                    "[response content truncated]",
+                    _decisionTranscriptPolicy?.MaxResponseContentLength),
+            response.FinishReason is null ? null : RedactText(response.FinishReason),
+            response.Usage));
     }
 
     public void CompleteDecision(DecisionTreeResult result)
@@ -405,7 +443,7 @@ internal sealed class TranscriptContext
                     return;
 
                 if (TryAppendDecisionSectionLocked(
-                        Builder.DecisionResult(
+                        transcriptBuilder => transcriptBuilder.DecisionResult(
                             result.Outcome,
                             result.Succeeded,
                             verdict,
@@ -648,10 +686,10 @@ internal sealed class TranscriptContext
                 status);
         }
 
-        return new TranscriptContext(null, null, debug, status, logger);
+        return new TranscriptContext(null, null, null, debug, status, logger);
     }
 
-    private void Append(string content)
+    private void Append(Func<ITranscriptBuilder, string> render)
     {
         lock (_gate)
         {
@@ -660,7 +698,7 @@ internal sealed class TranscriptContext
 
             try
             {
-                _sink.Append(content);
+                _sink.Append(render(Builder));
             }
             catch (Exception ex)
             {
@@ -724,22 +762,24 @@ internal sealed class TranscriptContext
                 : string.Empty);
     }
 
-    private void AppendDecisionSection(string content)
+    private void AppendDecisionSection(Func<ITranscriptBuilder, string> render)
     {
         lock (_gate)
         {
-            TryAppendDecisionSectionLocked(content);
+            TryAppendDecisionSectionLocked(render);
         }
     }
 
-    private bool TryAppendDecisionSectionLocked(string content, bool terminal = false)
+    private bool TryAppendDecisionSectionLocked(
+        Func<ITranscriptBuilder, string> render,
+        bool terminal = false)
     {
         if (_completed || _sink is null || PersistenceStatus is not null)
             return false;
 
         try
         {
-            var bounded = LimitDecisionSection(content, terminal);
+            var bounded = LimitDecisionSection(render(Builder), terminal);
             if (bounded.Length == 0)
             {
                 if (terminal)

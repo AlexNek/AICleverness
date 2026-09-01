@@ -153,6 +153,7 @@ public sealed class DecisionTreeExecutor
                             executionId,
                             currentNodeId,
                             node.ActionKey!,
+                            node.Name,
                             actionResult,
                             data.GetAll().Skip(dataCountBeforeAction).ToArray(),
                             cancellationToken);
@@ -428,6 +429,7 @@ public sealed class DecisionTreeExecutor
         string executionId,
         string nodeId,
         string actionKey,
+        string? nodeName,
         DecisionActionResult result,
         IReadOnlyList<DecisionData> producedData,
         CancellationToken cancellationToken)
@@ -454,7 +456,12 @@ public sealed class DecisionTreeExecutor
                 _defaultOptions?.TraceId,
                 _defaultOptions?.CorrelationId),
             cancellationToken);
-        _transcript.Value?.AppendDecisionAction(nodeId, actionKey, result, producedData);
+        _transcript.Value?.AppendDecisionAction(
+            nodeId,
+            actionKey,
+            nodeName,
+            result,
+            producedData);
     }
 
     private async Task EmitClassificationCompletedAsync(
@@ -562,7 +569,9 @@ public sealed class DecisionTreeExecutor
             Parameters: parameters);
         var runtimeOptions = new AgentRuntimeOptions
         {
-            TranscriptRedactor = _defaultOptions.TranscriptRedactor
+            TranscriptRedactor = _defaultOptions.TranscriptRedactor,
+            TranscriptBuilderFactory = _defaultOptions.TranscriptBuilderFactory,
+            TranscriptSinkFactory = _defaultOptions.TranscriptSinkFactory
         };
         return TranscriptContext.Create(
             request,

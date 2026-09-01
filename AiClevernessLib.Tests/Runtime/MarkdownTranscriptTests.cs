@@ -13,6 +13,194 @@ namespace AiClevernessLib.Tests.Runtime;
 public sealed class MarkdownTranscriptTests
 {
     [Fact]
+    public void DecisionAction_UsesNodeNameAndRendersOutcomeSeparatelyFromError()
+    {
+        // Arrange
+        var builder = new MarkdownTranscriptBuilder();
+
+        // Act
+        var content = builder.DecisionAction(
+            "node-id",
+            "collect",
+            "Collect evidence",
+            DecisionActionStatus.Success,
+            "Found matching evidence.",
+            "informational error-like text",
+            null);
+
+        // Assert
+        content.Should().Contain("### Decision action: `Collect evidence`");
+        content.Should().Contain("**Outcome:**");
+        content.Should().Contain("Found matching evidence.");
+        content.Should().Contain("**Error:**");
+        content.Should().Contain("informational error-like text");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void DecisionAction_FallsBackToActionKeyWhenNodeNameIsUnavailable(string? nodeName)
+    {
+        // Arrange
+        var builder = new MarkdownTranscriptBuilder();
+
+        // Act
+        var content = builder.DecisionAction(
+            "node-id",
+            "collect",
+            nodeName,
+            DecisionActionStatus.Success,
+            null,
+            null,
+            null);
+
+        // Assert
+        content.Should().Contain("### Decision action: `collect`");
+    }
+
+    [Fact]
+    public async Task RunAsync_UsesCustomBuilderAndSinkPerExecution()
+    {
+        // Arrange
+        var directory = NewDirectory();
+        var builders = new List<RecordingTranscriptBuilder>();
+        var sinks = new List<RecordingTranscriptSink>();
+        var gate = new object();
+        var runtime = new AgentRuntime(
+            new TranscriptTestLlmClient(new LlmResponse("custom answer")),
+            new ToolRegistry(),
+            options: new AgentRuntimeOptions
+            {
+                TranscriptRedactor = static text => text,
+                TranscriptBuilderFactory = () =>
+                {
+                    var builder = new RecordingTranscriptBuilder();
+                    lock (gate)
+                        builders.Add(builder);
+                    return builder;
+                },
+                TranscriptSinkFactory = path =>
+                {
+                    var sink = new RecordingTranscriptSink(path);
+                    lock (gate)
+                        sinks.Add(sink);
+                    return sink;
+                }
+            });
+
+        // Act
+        var result = await runtime.RunAsync(
+            new AgentRequest(
+                "custom goal",
+                Parameters: new Dictionary<string, object>
+                {
+                    [AgentPropertyKeys.MarkdownTranscriptDirectory] = directory
+                }));
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Metadata[AgentResultMetadataKeys.MarkdownTranscriptStatus]
+            .Should().Be("Completed");
+        var path = result.Metadata[AgentResultMetadataKeys.MarkdownTranscriptPath]
+            .Should().BeOfType<string>().Subject;
+        builders.Should().ContainSingle();
+        sinks.Should().ContainSingle();
+        path.Should().Be(sinks[0].FilePath);
+        sinks[0].IsCompleted.Should().BeTrue();
+        sinks[0].Content.Should().Contain("custom answer");
+        Directory.Exists(directory).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_CreatesDistinctCustomTranscriptComponentsForConcurrentExecutions()
+    {
+        // Arrange
+        var directory = NewDirectory();
+        var builders = new List<RecordingTranscriptBuilder>();
+        var sinks = new List<RecordingTranscriptSink>();
+        var gate = new object();
+        var runtime = new AgentRuntime(
+            new TranscriptTestLlmClient(
+                new LlmResponse("first answer"),
+                new LlmResponse("second answer")),
+            new ToolRegistry(),
+            options: new AgentRuntimeOptions
+            {
+                TranscriptRedactor = static text => text,
+                TranscriptBuilderFactory = () =>
+                {
+                    var builder = new RecordingTranscriptBuilder();
+                    lock (gate)
+                        builders.Add(builder);
+                    return builder;
+                },
+                TranscriptSinkFactory = path =>
+                {
+                    var sink = new RecordingTranscriptSink(path);
+                    lock (gate)
+                        sinks.Add(sink);
+                    return sink;
+                }
+            });
+
+        // Act
+        var results = await Task.WhenAll(
+            runtime.RunAsync(new AgentRequest(
+                "first goal",
+                Parameters: new Dictionary<string, object>
+                {
+                    [AgentPropertyKeys.MarkdownTranscriptDirectory] = directory
+                })),
+            runtime.RunAsync(new AgentRequest(
+                "second goal",
+                Parameters: new Dictionary<string, object>
+                {
+                    [AgentPropertyKeys.MarkdownTranscriptDirectory] = directory
+                })));
+
+        // Assert
+        results.Should().OnlyContain(result => result.Success);
+        builders.Should().HaveCount(2);
+        builders.Select(builder => builder).Distinct().Should().HaveCount(2);
+        sinks.Should().HaveCount(2);
+        sinks.Select(sink => sink).Distinct().Should().HaveCount(2);
+        sinks.Should().OnlyContain(sink => sink.IsCompleted);
+        sinks.Select(sink => sink.Content).Should().Contain(content => content.Contains("first answer", StringComparison.Ordinal));
+        sinks.Select(sink => sink.Content).Should().Contain(content => content.Contains("second answer", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenCustomBuilderFactoryFails_ContinuesWithoutTranscript()
+    {
+        // Arrange
+        var directory = NewDirectory();
+        var runtime = new AgentRuntime(
+            new TranscriptTestLlmClient(new LlmResponse("answer")),
+            new ToolRegistry(),
+            options: new AgentRuntimeOptions
+            {
+                TranscriptRedactor = static text => text,
+                TranscriptBuilderFactory = () => throw new InvalidOperationException("fake builder failure")
+            });
+
+        // Act
+        var result = await runtime.RunAsync(
+            new AgentRequest(
+                "goal",
+                Parameters: new Dictionary<string, object>
+                {
+                    [AgentPropertyKeys.MarkdownTranscriptDirectory] = directory
+                }));
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Metadata[AgentResultMetadataKeys.MarkdownTranscriptStatus]
+            .Should().Be("Unavailable");
+        Directory.Exists(directory).Should().BeFalse();
+    }
+
+    [Fact]
     public void DecisionResult_RendersStatePropertiesBeforeSelectedPath()
     {
         // Arrange
