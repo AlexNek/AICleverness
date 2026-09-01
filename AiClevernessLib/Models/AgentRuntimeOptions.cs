@@ -1,3 +1,5 @@
+using AiCleverness.Runtime.Transcript;
+
 namespace AiCleverness.Models;
 
 /// <summary>
@@ -45,4 +47,14 @@ public sealed class AgentRuntimeOptions
     /// transcript persistence; explicit debug mode may bypass it.
     /// </summary>
     public Func<string, string>? TranscriptRedactor { get; set; }
+
+    /// <summary>
+    /// Creates a new transcript builder for each enabled execution. The returned builder must not be shared between executions.
+    /// </summary>
+    public Func<ITranscriptBuilder>? TranscriptBuilderFactory { get; set; }
+
+    /// <summary>
+    /// Creates a new transcript sink for each enabled execution. The argument is the intended logical transcript path.
+    /// </summary>
+    public Func<string, ITranscriptSink>? TranscriptSinkFactory { get; set; }
 }

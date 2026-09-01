@@ -1,7 +1,8 @@
 # Core Interfaces
 
-All public interfaces live in `AiCleverness.Abstractions`. This page lists
-them grouped by topic.
+Most public extension interfaces live in `AiCleverness.Abstractions`; transcript
+formatting and persistence contracts live in `AiCleverness.Runtime.Transcript`.
+This page lists them grouped by topic.
 
 ## Execution
 
@@ -80,6 +81,59 @@ them grouped by topic.
 | `IShutdownHook` / `IShutdownCoordinator` | Clean shutdown without losing running work |
 | `IWorkflowExecutor` | Runs workflows of connected steps |
 | `IRouterAgent` | Sends a request to the right agent |
+
+## Decision Trees
+
+| Interface | What it does |
+| --- | --- |
+| `IDecisionTreeLoader` | Loads and validates a declarative decision-tree definition from the application's source or storage |
+| `IDecisionAction` | Performs an application-defined action for an action node and returns `DecisionActionResult` |
+| `IDecisionPredicate` | Evaluates an application-defined predicate used to choose a transition |
+| `IDecisionDataPolicy` | Selects and bounds the data represented in a classification context |
+| `IDecisionLlmContextBuilder` | Builds the bounded LLM context used by classification nodes |
+
+Decision-tree execution is provided by the registered `DecisionTreeExecutor`
+class and configured with `AddDecisionTreeExecution`. The execution options
+configure tree budgets, model/failover behavior, data policy, transcript
+policy, and optional transcript factories. Decision actions can return both
+`Error` and `OutcomeSummary`; the latter is informational and is available to
+transcript builders without changing the action status.
+
+## Transcript Extension Contracts
+
+These public interfaces are in `AiCleverness.Runtime.Transcript` and are
+configured through `AgentRuntimeOptions` or `DecisionTreeExecutionOptions`.
+
+| Interface | What it does |
+| --- | --- |
+| `ITranscriptBuilder` | Renders each transcript section; supports headers, decision overviews, debug data, turns, model/tool sections, decision actions/classifications/LLM attempts, results, retries, status, final results, and final failures |
+| `ITranscriptSink` | Persists rendered sections through `FilePath`, `Append`, `Complete`, and `Dispose`; it can target a file or any other destination |
+| `TranscriptBuilderDecorator` | Delegates all builder methods to an inner builder and exposes virtual methods so applications can customize selected sections without reimplementing `ITranscriptBuilder` |
+
+A builder is selected with `TranscriptBuilderFactory` and a sink with
+`TranscriptSinkFactory`. Both delegates are invoked for every enabled
+execution. The sink factory receives the intended logical transcript path;
+custom sinks may use it as an identity while writing to a database, queue,
+object store, or memory. When no factory is configured, the default
+`MarkdownTranscriptBuilder` and `FileTranscriptSink` are used.
+
+For a small Markdown customization, derive from `TranscriptBuilderDecorator`.
+Its default constructor wraps a new `MarkdownTranscriptBuilder`, and its
+virtual methods delegate all unmodified sections automatically. Override only
+the section that needs different formatting, then return a fresh decorator from
+`TranscriptBuilderFactory`. Implement `ITranscriptBuilder` directly only when
+the application needs a completely different representation.
+
+Transcript components are execution-scoped. Factories must return fresh
+instances and must not return cached mutable objects. Applications must not
+register transcript builders, sinks, factory results, or transcript contexts
+as singletons. Rendering and persistence failures are best-effort failures:
+they disable transcript persistence for that execution but do not replace the
+primary agent or decision-tree result. Normal-mode values are redacted before
+custom builders/sinks receive them; explicit debug mode bypasses redaction and
+should be used only with controlled data. See [Decision transcript
+configuration](../execution/decision-trees.md#decision-transcripts) for
+complete examples.
 
 ## Observability
 

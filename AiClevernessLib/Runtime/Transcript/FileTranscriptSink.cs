@@ -5,7 +5,7 @@ namespace AiCleverness.Runtime.Transcript;
 /// <summary>
 /// UTF-8 append-and-flush sink for one transcript file.
 /// </summary>
-internal sealed class FileTranscriptSink : ITranscriptSink
+public sealed class FileTranscriptSink : ITranscriptSink
 {
     private const int FileBufferSizeBytes = 4096;
 

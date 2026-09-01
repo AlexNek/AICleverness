@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-01
+
 ### Added
+- Transcript output is extensible through per-execution builder and sink factories, with public Markdown/file defaults, readable decision-action names, separate action outcome summaries, isolated custom transcript state, and a reusable decorator for overriding selected Markdown sections without reimplementing the complete builder contract.
 - Decision transcripts now include a bounded `State properties` subsection for non-null decision-tree action state values, with deterministic formatting for nested dictionaries and enumerable values, bounded collection traversal with item/depth limits and reference-cycle detection, safe Markdown escaping, and normal-mode redaction/omission diagnostics.
 
 ### Changed

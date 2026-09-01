@@ -3,7 +3,7 @@ namespace AiCleverness.Runtime.Transcript;
 /// <summary>
 /// Per-execution transcript persistence sink.
 /// </summary>
-internal interface ITranscriptSink : IDisposable
+public interface ITranscriptSink : IDisposable
 {
     string FilePath { get; }
 

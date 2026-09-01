@@ -406,14 +406,20 @@ The demo action is intentionally application-local. Production applications shou
 
 ## Decision transcripts
 
-Decision-tree runs can use the same Markdown transcript runtime as agent runs. Configure an absolute directory through `DecisionTreeExecutionOptions`:
+Decision-tree transcripts are opt-in. When enabled, a run produces a Markdown transcript containing the decision-tree overview, node visits, action completions, classifications, LLM attempts, the terminal outcome, and resource usage. The same transcript extension points are also available to ordinary agent executions through `AgentRuntimeOptions`; the decision-tree configuration is separate because decision trees have their own policy limits and execution options.
+
+### Configure the default transcript
+
+Set an absolute directory through `DecisionTreeExecutionOptions`. A relative path is intentionally not accepted: transcript destinations should be explicit so a service does not unexpectedly write under whichever working directory hosts it.
 
 ```csharp
 services.AddDecisionTreeExecution(options =>
 {
     options.TranscriptDirectory = Path.GetFullPath("transcripts");
     options.TranscriptDebug = false;
-    options.TranscriptRedactor = text => text;
+    options.TranscriptRedactor = text =>
+        text.Replace("customer@example.invalid", "[REDACTED]", StringComparison.OrdinalIgnoreCase);
+
     options.DecisionTranscriptPolicy.MaxProducedItemsPerAction = 100;
     options.DecisionTranscriptPolicy.MaxContentLength = 4000;
     options.DecisionTranscriptPolicy.MaxMetadataEntries = 20;
@@ -425,7 +431,25 @@ services.AddDecisionTreeExecution(options =>
 });
 ```
 
-Normal mode requires `TranscriptRedactor`; content such as answers, observations, action errors, verdicts, and outcomes is passed through it before persistence. Debug mode is explicitly unredacted and bypasses that requirement:
+The default builder is `MarkdownTranscriptBuilder` and the default sink is `FileTranscriptSink`. The file name contains a local timestamp and a sanitized task/tree identity; the execution ID remains in the transcript content. `DecisionTreeResult` does not contain a transcript path because persistence is optional and sinks do not have to be files. The configured directory and the public journal/event records are the stable application-level ways to locate or observe the run.
+
+For ordinary agent runs, use the equivalent runtime options:
+
+```csharp
+services.AddAiClevernessRuntime(options =>
+{
+    options.TranscriptRedactor = text =>
+        text.Replace("customer@example.invalid", "[REDACTED]", StringComparison.OrdinalIgnoreCase);
+});
+```
+
+An agent request must opt in with the absolute transcript-directory request parameter. Decision-tree runs opt in with `DecisionTreeExecutionOptions.TranscriptDirectory`. If no directory is configured, the primary execution still runs normally and no transcript is persisted.
+
+### Normal and debug transcripts
+
+Normal mode is the safe default for persisted content. It requires `TranscriptRedactor`; goals, model content, tool arguments and results, answers, observations, action errors, verdicts, and outcome information are redacted before they are sent to the transcript builder. A redactor must return text safe for persistence and must be safe to call from concurrent executions.
+
+Debug mode is an explicit privacy decision. It bypasses the redactor and can include unredacted prompts, parameters, model responses, tool data, and decision data. Debug mode still applies every configured decision transcript size limit. Do not enable it for production data unless the destination and access controls are appropriate:
 
 ```csharp
 services.AddDecisionTreeExecution(options =>
@@ -435,16 +459,122 @@ services.AddDecisionTreeExecution(options =>
 });
 ```
 
-Decision transcripts contain node visits, action completions, classification results, the final decision outcome, and resource usage. Decision transcript policy limits apply after normal-mode redaction, including produced-data items/content, metadata, prepared messages, model responses, and the optional total decision-section character budget. When the total budget prevents a section from being written, the terminal result records the number of omitted sections; the terminal result is reserved space and is never silently marked as written without output. Transcript writes are best effort, but invalid policy values are rejected before execution. Debug mode bypasses redaction but remains subject to all configured decision transcript size limits. The public `DecisionTreeResult` does not expose a transcript path; applications can inspect the configured directory or consume the public journal/event records.
+Redaction is performed by the transcript runtime before normal-mode values reach a custom builder or sink. A custom builder is therefore not a substitute for configuring a redactor. A custom sink controls persistence, but it does not make debug output safe.
 
-The demo enables these settings with the existing switches:
+### Decision transcript limits
+
+`DecisionTranscriptPolicy` protects the decision-specific part of a transcript. Its limits cover produced-data items and content, metadata entries and key/value lengths, prepared messages, model responses, and the optional `MaxTotalCharacters` budget. Limits are applied after normal-mode redaction, so redaction can only reduce the persisted content. Invalid policy values are rejected before execution.
+
+When the total character budget omits a decision section, the terminal result records the omitted-section count. The terminal result has reserved space: it is not reported as written unless the builder actually produced output. Transcript persistence is best effort; reaching a transcript limit does not change the decision result.
+
+### Custom builders
+
+`ITranscriptBuilder` controls the representation of individual sections. It has methods for headers, decision overviews, debug information, turns, model content, tool decisions/results, decision actions/classifications/LLM attempts, terminal results, retries, status, final results, and final failures. Each method returns the content for one section. The built-in Markdown builder remains the default, but applications can return JSON fragments, HTML, plain text, or organization-specific Markdown.
+
+For a small formatting change, derive from `TranscriptBuilderDecorator` instead of implementing the complete interface. Its parameterless constructor wraps a new `MarkdownTranscriptBuilder`, and every section delegates to that builder unless you override it:
+
+```csharp
+public sealed class ApplicationTranscriptBuilder : TranscriptBuilderDecorator
+{
+    public override string DecisionAction(
+        string nodeId,
+        string actionKey,
+        string? nodeName,
+        DecisionActionStatus status,
+        string? outcomeSummary,
+        string? error,
+        string? producedData)
+    {
+        var markdown = base.DecisionAction(
+            nodeId,
+            actionKey,
+            nodeName,
+            status,
+            outcomeSummary,
+            error,
+            producedData);
+
+        return markdown.Replace(
+            "### Decision action:",
+            "### Application action:",
+            StringComparison.Ordinal);
+    }
+}
+
+services.AddDecisionTreeExecution(options =>
+{
+    options.TranscriptDirectory = Path.GetFullPath("transcripts");
+    options.TranscriptRedactor = text =>
+        text.Replace("customer@example.invalid", "[REDACTED]", StringComparison.OrdinalIgnoreCase);
+    options.TranscriptBuilderFactory = static () => new ApplicationTranscriptBuilder();
+});
+```
+
+This preserves the built-in Markdown behavior for headers, model/tool sections, classifications, terminal results, failures, and every other section. Override only the methods you need. The decorator can also wrap another `ITranscriptBuilder` through its constructor when the application wants to layer multiple customizations. If the application needs a completely different representation, it can still implement `ITranscriptBuilder` directly.
+
+Returning an empty string is a valid way for a custom format to omit a section; returning `null` is not supported. Builders should not retain state in static fields or be reused for another run.
+
+Action sections use `DecisionNode.Name` when it is present and non-empty, and fall back to `ActionKey` when it is absent. An action can separately provide a human-readable `DecisionActionResult.OutcomeSummary`; that summary describes what the action found, changed, or decided and is not treated as an error. `Error` remains reserved for an actual action failure. For example:
+
+```csharp
+return new DecisionActionResult(
+    ProducedData: data,
+    Properties: new Dictionary<string, string> { ["classification"] = "supported" },
+    Status: DecisionActionStatus.Success)
+{
+    OutcomeSummary = "The evidence supports the requested classification."
+};
+```
+
+### Custom sinks and logical identity
+
+`ITranscriptSink` controls where the builder output goes. It exposes the intended logical `FilePath`, `Append`, `Complete`, and `Dispose`. A sink can write to a database, queue, object store, test buffer, or another service instead of creating a local file:
+
+```csharp
+public sealed class MemoryTranscriptSink : ITranscriptSink
+{
+    private readonly StringBuilder _content = new();
+
+    public MemoryTranscriptSink(string filePath) => FilePath = filePath;
+
+    public string FilePath { get; }
+
+    public void Append(string content) => _content.Append(content);
+
+    public void Complete() { }
+
+    public void Dispose() { }
+
+    public string GetContent() => _content.ToString();
+}
+
+services.AddDecisionTreeExecution(options =>
+{
+    options.TranscriptDirectory = Path.GetFullPath("transcripts");
+    options.TranscriptRedactor = text => text;
+    options.TranscriptSinkFactory = static logicalPath =>
+        new MemoryTranscriptSink(logicalPath);
+});
+```
+
+`logicalPath` is an identity, not a requirement that the sink create that file. It lets a custom destination preserve the same timestamp/goal naming convention and gives `ITranscriptSink.FilePath` a stable value for diagnostics. A database-backed sink can use the path as a correlation label while storing the actual sections elsewhere.
+
+### Per-execution lifetime and failure behavior
+
+Both factories are invoked for each enabled execution. The returned builder and sink belong only to that execution, and transcript rendering is serialized within that execution before content is appended. Do not register a builder, sink, factory result, or mutable transcript context as a singleton, and do not return a cached instance from a factory. This is required even when the application runs only one execution today: concurrent executions must never append to or expose one another's state.
+
+A factory returning `null`, a builder exception, a sink exception, or a finalization exception disables transcript persistence for that execution and is logged as a persistence problem. It does not change the primary agent or decision-tree result. The runtime also disposes a sink if initialization fails. Treat transcript output as best-effort observability, not as the transaction boundary for the business operation.
+
+### Demo output
+
+The hermetic demo enables the same settings with the existing switches and does not call a network service:
 
 ```powershell
 dotnet run --project AiClevernessLib.Demo -- /t  # normal, redacted transcript
 dotnet run --project AiClevernessLib.Demo -- /d  # debug, unredacted transcript
 ```
 
-The demo prints the Feature 08 transcript path after scenario 8. Files are written under `AiClevernessLib.Demo/bin/Debug/net10.0/transcripts` for a Debug build.
+`--transcript` aliases `/t`; `--transcript-debug` and `--debug-transcript` alias `/d`. If both are supplied, debug mode wins. The demo prints the resolved transcript directory after scenario 8. In a Debug build, the default files are under `AiClevernessLib.Demo/bin/Debug/net10.0/transcripts` (or the matching configuration/target-framework directory).
 
 ## Current integration boundaries
 
