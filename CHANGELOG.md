@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Added 
 - `LlmResponse` now carries an optional `ReasoningContent` field so provider-supplied chain-of-thought reasoning (e.g. DeepSeek `reasoning_content`) flows through the runtime for observers, transcripts, and debug output. The field defaults to `null`, is purely informational, and does not change executor, planner, or tool-loop behavior; existing callers remain source- and binary-compatible.
 
 ## [1.8.0] - 2026-09-01
