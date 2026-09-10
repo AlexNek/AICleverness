@@ -143,6 +143,35 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_IncludesModelIdentifierInErrorWhenClassificationProviderIsUnavailable()
+    {
+        // Arrange
+        var pipeline = new ThrowingCompletionPipeline(
+            () => new HttpRequestException(
+                "The classification provider is unavailable.",
+                null,
+                HttpStatusCode.ServiceUnavailable));
+        var executor = CreateExecutor(
+            pipeline,
+            defaultOptions: new DecisionTreeExecutionOptions
+            {
+                EnableModelFailover = true,
+                Model = "fake-model-x",
+                ModelFallbackChain = ["fallback"]
+            });
+
+        // Act
+        var result = await executor.ExecuteAsync(CreateActions(), CreateTree());
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
+        result.Error.Should().Contain("The classification provider is unavailable.");
+        result.Error.Should().Contain("(model: fake-model-x)");
+        pipeline.CallCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_DoesNotAppendModelSuffixOnSuccessfulClassification()
     {
         // Arrange

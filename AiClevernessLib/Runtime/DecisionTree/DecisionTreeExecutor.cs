@@ -74,6 +74,7 @@ public sealed class DecisionTreeExecutor
         var transcript = CreateTranscript(tree, executionId);
         _transcript.Value = transcript;
         string? lastClassificationModel = null;
+        LlmCompletionExecutionContext? completionContext = null;
 
         try
         {
@@ -90,7 +91,7 @@ public sealed class DecisionTreeExecutor
                 OnExceeded = budget.OnExceeded
             };
             var conversation = CreateConversationManager();
-            var completionContext = DecisionTreeCompletionContextFactory.Create(_defaultOptions);
+            completionContext = DecisionTreeCompletionContextFactory.Create(_defaultOptions);
             var currentNodeId = tree.StartNodeId;
             var unknown = false;
             string? executionError = null;
@@ -307,9 +308,13 @@ public sealed class DecisionTreeExecutor
         catch (Exception exception)
         {
             UpdateDuration(state.ResourceUsage, stopwatch);
-            var error = lastClassificationModel is null
+            var model = lastClassificationModel is null
+                ? null
+                : completionContext?.AgentContext?.GetProperty<string>(AgentPropertyKeys.Model)
+                    ?? lastClassificationModel;
+            var error = model is null
                 ? exception.Message
-                : $"{exception.Message} (model: {lastClassificationModel})";
+                : $"{exception.Message} (model: {model})";
             return CreateResult(executionId, state, DecisionTreeOutcome.ValidationFailed, null, error);
         }
         finally
