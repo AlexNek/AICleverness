@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added 
+### Added
 - `LlmResponse` now carries an optional `ReasoningContent` field so provider-supplied chain-of-thought reasoning (e.g. DeepSeek `reasoning_content`) flows through the runtime for observers, transcripts, and debug output. The field defaults to `null`, is purely informational, and does not change executor, planner, or tool-loop behavior; existing callers remain source- and binary-compatible.
+
+### Changed
+- Decision-tree execution now appends the attempted model identifier to the result error when an LLM classification call fails (e.g. timeout or connection error), including the active fallback model when failover is exhausted, formatted as `<error> (model: <model>)`, so operators can diagnose model availability without consulting external configuration. The suffix is added only when a model was resolved for the failing attempt; successful runs and failures before a model is selected are unchanged.
 
 ## [1.8.0] - 2026-09-01
 
