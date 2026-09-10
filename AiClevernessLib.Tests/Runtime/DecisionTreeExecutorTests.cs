@@ -117,6 +117,55 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_IncludesModelIdentifierInErrorWhenClassificationCallThrows()
+    {
+        // Arrange
+        var pipeline = new ThrowingCompletionPipeline(
+            () => new TimeoutException("The classification request timed out."));
+        var executor = CreateExecutor(
+            pipeline,
+            defaultOptions: new DecisionTreeExecutionOptions
+            {
+                EnableModelFailover = true,
+                Model = "fake-model-x",
+                ModelFallbackChain = ["fallback"]
+            });
+
+        // Act
+        var result = await executor.ExecuteAsync(CreateActions(), CreateTree());
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Outcome.Should().Be(DecisionTreeOutcome.ValidationFailed);
+        result.Error.Should().Contain("The classification request timed out.");
+        result.Error.Should().Contain("(model: fake-model-x)");
+        pipeline.CallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DoesNotAppendModelSuffixOnSuccessfulClassification()
+    {
+        // Arrange
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
+        var executor = CreateExecutor(
+            pipeline,
+            defaultOptions: new DecisionTreeExecutionOptions
+            {
+                EnableModelFailover = true,
+                Model = "fake-model-x",
+                ModelFallbackChain = ["fallback"]
+            });
+
+        // Act
+        var result = await executor.ExecuteAsync(CreateActions(), CreateTree());
+
+        // Assert
+        result.Succeeded.Should().BeTrue();
+        result.Error.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ExecuteAsync_UsesNoContextOverloadAndNullModelByDefault()
     {
         var pipeline = new DecisionTreeCompletionPipeline()

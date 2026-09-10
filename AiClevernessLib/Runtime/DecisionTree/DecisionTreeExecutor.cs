@@ -73,6 +73,7 @@ public sealed class DecisionTreeExecutor
         var parameters = templateParameters ?? new Dictionary<string, string>(StringComparer.Ordinal);
         var transcript = CreateTranscript(tree, executionId);
         _transcript.Value = transcript;
+        string? lastClassificationModel = null;
 
         try
         {
@@ -179,6 +180,7 @@ public sealed class DecisionTreeExecutor
                             limits,
                             stopwatch,
                             completionContext,
+                            model => lastClassificationModel = model,
                             cancellationToken);
                         if (classification.BudgetExhausted)
                             return CreateResult(executionId, state, DecisionTreeOutcome.BudgetExhausted, null, "Decision resource budget exhausted.");
@@ -305,7 +307,10 @@ public sealed class DecisionTreeExecutor
         catch (Exception exception)
         {
             UpdateDuration(state.ResourceUsage, stopwatch);
-            return CreateResult(executionId, state, DecisionTreeOutcome.ValidationFailed, null, exception.Message);
+            var error = lastClassificationModel is null
+                ? exception.Message
+                : $"{exception.Message} (model: {lastClassificationModel})";
+            return CreateResult(executionId, state, DecisionTreeOutcome.ValidationFailed, null, error);
         }
         finally
         {
@@ -327,6 +332,7 @@ public sealed class DecisionTreeExecutor
         ResourceLimits limits,
         Stopwatch stopwatch,
         LlmCompletionExecutionContext? completionContext,
+        Action<string?> reportModel,
         CancellationToken cancellationToken)
     {
         string? lastRawContent = null;
@@ -360,16 +366,15 @@ public sealed class DecisionTreeExecutor
                     $"Classification context exceeded MaxContextTokens ({budget.MaxContextTokens}); the required user input was omitted.");
             }
 
+            var model = completionContext is null
+                ? null
+                : completionContext.AgentContext?.GetProperty<string>(AgentPropertyKeys.Model)
+                    ?? _defaultOptions!.Model;
+            reportModel(model);
             var request = new LlmCompletionRequest(
                 executionId,
                 messages,
-                new LlmCompletionOptions(
-                    0.1f,
-                    null,
-                    completionContext is null
-                        ? null
-                        : completionContext.AgentContext?.GetProperty<string>(AgentPropertyKeys.Model)
-                            ?? _defaultOptions!.Model),
+                new LlmCompletionOptions(0.1f, null, model),
                 attempt);
             var response = completionContext is null
                 ? await _completionPipeline.CompleteAsync(request, cancellationToken)
