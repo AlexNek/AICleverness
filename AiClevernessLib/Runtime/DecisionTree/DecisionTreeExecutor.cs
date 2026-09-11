@@ -454,6 +454,7 @@ public sealed class DecisionTreeExecutor
             _defaultOptions?.TraceId,
             _defaultOptions?.CorrelationId,
             timestamp);
+        var dataSummary = DecisionActionDataSummary.Create(producedData);
         await PublishAsync(
             journalEvent,
             new DecisionActionCompletedBusEvent(
@@ -464,7 +465,10 @@ public sealed class DecisionTreeExecutor
                 result.Error,
                 timestamp,
                 _defaultOptions?.TraceId,
-                _defaultOptions?.CorrelationId),
+                _defaultOptions?.CorrelationId)
+            {
+                DataSummary = dataSummary
+            },
             cancellationToken);
         _transcript.Value?.AppendDecisionAction(
             nodeId,

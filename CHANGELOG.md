@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Decision-tree action-completed bus events now include an optional bounded produced-data summary with item counts, distinct types, and content previews, while preserving the existing event constructor and transcript handling.
 - `LlmResponse` now carries an optional `ReasoningContent` field so provider-supplied chain-of-thought reasoning (e.g. DeepSeek `reasoning_content`) flows through the runtime for observers, transcripts, and debug output. The field defaults to `null`, is purely informational, and does not change executor, planner, or tool-loop behavior; existing callers remain source- and binary-compatible.
 
 ### Changed
@@ -160,7 +161,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Developer manual published as a documentation site via MkDocs Material and GitHub Pages
 - NuGet package ships a compact README with use cases and prominent links to the developer manual and the full repository README
 
-[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/AlexNek/AICleverness/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.8.0
 [1.7.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.7.0
 [1.6.0]: https://github.com/AlexNek/AICleverness/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/AlexNek/AICleverness/releases/tag/v1.5.0

@@ -375,6 +375,10 @@ The journal records are:
 
 The corresponding bus records have `BusEvent` suffixes. All records preserve the execution ID, timestamp, trace ID, and correlation ID.
 
+`DecisionActionCompletedBusEvent.DataSummary` is optional and is populated when the action produces data. It contains the total `ItemCount`, the first 10 distinct `Types`, and up to 5 `ContentPreviews`; type and preview display values are each limited to 80 characters, including the ellipsis when truncation is required. A null summary means that the action produced no data. This is bounded diagnostic metadata, not a replacement for detailed produced-data transcript output.
+
+`DecisionActionResult.OutcomeSummary` remains a separate action-defined human-readable transcript value and is not the same as `DataSummary`.
+
 `AddDecisionTreeExecution()` supplies in-memory implementations. Register custom implementations before it when persistence or a custom publisher is required; the default registrations use `TryAdd` semantics:
 
 ```csharp

@@ -102,6 +102,8 @@ bounded, declarative workflow independently of the executor and LLM provider.
 | `DecisionData` | A bounded piece of source data supplied to an action or classification |
 | `DecisionClassification` | `NodeId`, `Answer`, `Observation`, `Confidence`, `At` |
 | `DecisionActionResult` | `ProducedData`, `Properties`, `Status`, `Error`, and optional `OutcomeSummary` |
+| `DecisionActionDataSummary` | Bounded `ItemCount`, first 10 distinct `Types`, and up to 5 `ContentPreviews`; display values are at most 80 characters |
+| `DecisionActionCompletedBusEvent` | Publishable action-completion event with optional `DataSummary` diagnostic metadata |
 | `DecisionTreeResult` | `ExecutionId`, `Succeeded`, `Verdict`, `Outcome`, `Classifications`, `Usage`, `Error`, and execution-scoped `StateProperties` |
 | `DecisionTreeOutcome` | Terminal, budget, cancellation, or failure category for the execution |
 | `DecisionActionStatus` | Status reported by an application action, including success and failure states |

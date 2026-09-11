@@ -394,6 +394,54 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_EmitsActionCompletedBusEventWithProducedDataSummary()
+    {
+        // Arrange
+        var pipeline = new DecisionTreeCompletionPipeline()
+            .Enqueue("{\"answer\":\"supported\",\"observation\":\"evidence\",\"confidence\":\"high\"}");
+        var publisher = new RecordingExecutionEventPublisher();
+        var executor = CreateExecutor(pipeline, publisher: publisher);
+
+        // Act
+        var result = await executor.ExecuteAsync(CreateActions(), CreateTree());
+
+        // Assert
+        var busEvent = publisher.Events
+            .OfType<DecisionActionCompletedBusEvent>()
+            .Should()
+            .ContainSingle()
+            .Which;
+        busEvent.ExecutionId.Should().Be(result.ExecutionId);
+        busEvent.NodeId.Should().Be("collect");
+        busEvent.DataSummary.Should().NotBeNull();
+        busEvent.DataSummary!.ItemCount.Should().Be(1);
+        busEvent.DataSummary.Types.Should().Equal("evidence");
+        busEvent.DataSummary.ContentPreviews.Should().Equal("deterministic evidence");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_EmitsNullActionCompletedDataSummaryWhenActionProducesNoData()
+    {
+        // Arrange
+        var publisher = new RecordingExecutionEventPublisher();
+        var executor = CreateExecutor(publisher: publisher);
+        var action = new ConfigurableTestAction(
+            "action",
+            new DecisionActionResult(null, null, DecisionActionStatus.Success));
+
+        // Act
+        await executor.ExecuteAsync([action], CreateActionSuccessTree());
+
+        // Assert
+        var busEvent = publisher.Events
+            .OfType<DecisionActionCompletedBusEvent>()
+            .Should()
+            .ContainSingle()
+            .Which;
+        busEvent.DataSummary.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ExecuteAsync_EmitsClassificationJournalAndBusContracts()
     {
         var pipeline = new DecisionTreeCompletionPipeline()
