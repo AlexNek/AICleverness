@@ -66,7 +66,7 @@ public sealed class DefaultDecisionDataPolicyTests
     }
 
     [Fact]
-    public void Select_UsesFiniteMetadataMarkerWhenTruncationCannotProduceUniqueKey()
+    public void Select_PreservesMetadataWhenTruncationCannotProduceUniqueMarkerKey()
     {
         // Arrange
         var policy = new DefaultDecisionDataPolicy(
@@ -95,7 +95,7 @@ public sealed class DefaultDecisionDataPolicyTests
         // Assert
         selection.Items.Should().ContainSingle();
         selection.Items[0].Metadata.Should().ContainKey("[")
-            .WhoseValue.Should().Be("0; collisions 1");
+            .WhoseValue.Should().Be("first");
     }
 
     [Fact]

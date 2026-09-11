@@ -23,13 +23,13 @@ public sealed record DecisionActionDataSummary
     public IReadOnlyList<string> Types
     {
         get => _types;
-        init => _types = Copy(value);
+        init => _types = Copy(value, MaxTypeItems, MaxTypeLength);
     }
 
     public IReadOnlyList<string> ContentPreviews
     {
         get => _contentPreviews;
-        init => _contentPreviews = Copy(value);
+        init => _contentPreviews = Copy(value, MaxPreviewItems, MaxPreviewLength);
     }
 
     public void Deconstruct(
@@ -57,9 +57,9 @@ public sealed record DecisionActionDataSummary
         var distinctTypes = new HashSet<string>(StringComparer.Ordinal);
         for (var index = 0; index < data.Count && types.Count < MaxTypeItems; index++)
         {
-            var type = data[index].Type;
-            if (distinctTypes.Add(type))
-                types.Add(Truncate(type, MaxTypeLength));
+            var truncatedType = Truncate(data[index].Type, MaxTypeLength);
+            if (distinctTypes.Add(truncatedType))
+                types.Add(truncatedType);
         }
 
         var previews = new List<string>(Math.Min(data.Count, MaxPreviewItems));
@@ -69,10 +69,17 @@ public sealed record DecisionActionDataSummary
         return new DecisionActionDataSummary(data.Count, types, previews);
     }
 
-    private static IReadOnlyList<string> Copy(IReadOnlyList<string> values)
+    private static IReadOnlyList<string> Copy(
+        IReadOnlyList<string> values,
+        int maxItems,
+        int maxLength)
     {
         ArgumentNullException.ThrowIfNull(values);
-        return new ReadOnlyCollection<string>(values.ToArray());
+        var count = Math.Min(values.Count, maxItems);
+        var boundedValues = new string[count];
+        for (var index = 0; index < count; index++)
+            boundedValues[index] = Truncate(values[index], maxLength);
+        return new ReadOnlyCollection<string>(boundedValues);
     }
 
     private static string Truncate(string value, int maxLength)

@@ -160,16 +160,19 @@ public sealed class DefaultDecisionDataPolicy : IDecisionDataPolicy
             var uniqueKey = markerKey;
             var counter = 1;
             var attemptedKeys = new HashSet<string>(StringComparer.Ordinal);
-            while (bounded.ContainsKey(uniqueKey) && attemptedKeys.Add(uniqueKey))
+            var hasUniqueKey = !bounded.ContainsKey(uniqueKey);
+            while (!hasUniqueKey && attemptedKeys.Add(uniqueKey))
             {
                 uniqueKey = Limit($"{baseMarkerKey} {counter}", _options.MaxMetadataKeyLength, $"[metadata omitted {counter}]");
                 counter++;
+                hasUniqueKey = !bounded.ContainsKey(uniqueKey);
             }
 
             var message = collisionCount > 0
                 ? $"{omitted}; collisions {collisionCount}"
                 : omitted.ToString(CultureInfo.InvariantCulture);
-            bounded[uniqueKey] = message;
+            if (hasUniqueKey)
+                bounded.Add(uniqueKey, message);
         }
 
         return new ReadOnlyDictionary<string, string>(bounded);
