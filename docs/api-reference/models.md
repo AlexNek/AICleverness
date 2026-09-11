@@ -45,7 +45,7 @@ every public type and its properties.
 | Type | Properties |
 | --- | --- |
 | `LlmMessage` | `Role`, `Content`, `ToolCalls`, `ToolCallId` |
-| `LlmResponse` | `Content`, `ToolCalls`, `Usage` |
+| `LlmResponse` | `Content`, `ToolCalls`, `Usage`, optional `ReasoningContent` |
 | `LlmTokenUsage` | `PromptTokens`, `CompletionTokens` |
 
 ## Execution State

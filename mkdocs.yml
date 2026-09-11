@@ -51,9 +51,13 @@ nav:
       - Defining Tools: tools/defining-tools.md
       - Tool Execution: tools/tool-execution.md
       - Tool Idempotency: tools/tool-idempotency.md
+  - Browser Session:
+      - Overview: browser-session/overview.md
+      - LLM Integration: browser-session/llm-integration.md
   - Execution Control:
       - Planning: execution/planning.md
       - Decision Trees: execution/decision-trees.md
+      - Model Failover: execution/model-failover.md
       - Quality Gates: execution/quality-gates.md
       - Validators and Transformers: execution/post-processing.md
       - Agent Scoping: execution/agent-scoping.md

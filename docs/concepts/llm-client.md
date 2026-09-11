@@ -34,6 +34,15 @@ The parameters:
   results.
 - `Usage` — how many tokens the call used (`PromptTokens` and
   `CompletionTokens` inside `LlmTokenUsage`).
+- `ReasoningContent` — optional provider-supplied reasoning content, such as a
+  separate `reasoning_content` field. The runtime carries it through to
+  observers, transcripts, and debug output, but does not use it for execution,
+  planning, or tool-loop decisions. It is `null` when the provider does not
+  supply it.
+
+Provider adapters decide whether and how to map their provider-specific
+reasoning field to `ReasoningContent`. Treat the value as informational output,
+not as a replacement for `Content` or as a security boundary.
 
 ## Messages
 
