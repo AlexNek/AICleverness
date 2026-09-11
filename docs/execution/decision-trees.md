@@ -63,6 +63,22 @@ using var provider = services.BuildServiceProvider();
 
 When decision-tree model failover is enabled, `Model` is the explicit primary model for the first request and `ModelFallbackChain` is an ordered fallback-only list; do not include the primary in that list. The selected model and remaining fallback candidates are preserved across all classification nodes in one tree execution. Only failures recognized by the shared LLM error classifier (such as completion timeouts, HTTP 5xx, HTTP 429, and recognized rate-limit signals) advance to the next candidate. Disabled or incomplete failover configuration preserves the no-context completion behavior.
 
+### Failure diagnostics
+
+When an exception terminates a decision-tree execution after a classification model
+has been selected, `DecisionTreeResult.Error` includes the attempted model in this
+format:
+
+```text
+<error> (model: <model>)
+```
+
+With model failover enabled, `<model>` is the model active for the failing
+attempt, including the final fallback when the chain is exhausted. If no model
+was resolved before the failure, the error remains unchanged without the suffix.
+Successful executions and failures that occur before model selection are not
+modified.
+
 Custom `ILlmCompletionPipeline` implementations remain source-compatible through the default context overload, but must override that overload to consume execution services and apply model failover. A custom implementation that uses only the legacy overload intentionally receives no execution context or shared failover policy.
 
 `AddDecisionTreeExecution()` registers the default `ILlmCompletionPipeline`, a transient default conversation manager, the loader, parser, default classify context builder, in-memory journal, in-memory event publisher, and built-in predicates. `AddAiClevernessLlmClient<T>()` remains the provider-neutral LLM adapter used by the default decision completion pipeline.
@@ -374,6 +390,10 @@ The journal records are:
 - `DecisionClassificationCompletedEvent`
 
 The corresponding bus records have `BusEvent` suffixes. All records preserve the execution ID, timestamp, trace ID, and correlation ID.
+
+`DecisionActionCompletedBusEvent.DataSummary` is optional and is populated when the action produces data. It contains the total `ItemCount`, the first 10 distinct `Types`, and up to 5 `ContentPreviews`; type and preview display values are each limited to 80 characters, including the ellipsis when truncation is required. A null summary means that the action produced no data. This is bounded diagnostic metadata, not a replacement for detailed produced-data transcript output.
+
+`DecisionActionResult.OutcomeSummary` remains a separate action-defined human-readable transcript value and is not the same as `DataSummary`.
 
 `AddDecisionTreeExecution()` supplies in-memory implementations. Register custom implementations before it when persistence or a custom publisher is required; the default registrations use `TryAdd` semantics:
 

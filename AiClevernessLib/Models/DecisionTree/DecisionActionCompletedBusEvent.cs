@@ -16,5 +16,6 @@ public sealed record DecisionActionCompletedBusEvent(
     public string EventType => "DecisionActionCompleted";
     public string? TraceId { get; init; } = TraceId;
     public string? CorrelationId { get; init; } = CorrelationId;
+    public DecisionActionDataSummary? DataSummary { get; init; }
     public DateTimeOffset Timestamp { get; init; } = TimestampOverride ?? DateTimeOffset.UtcNow;
 }

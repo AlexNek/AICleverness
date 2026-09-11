@@ -11,7 +11,7 @@ public sealed class DecisionDataPolicyOptions
 
     private int _maxAggregateRepresentationLength = 12_000;
 
-    /// <summary>Maximum canonical representation length across represented source items.</summary>
+    /// <summary>Maximum canonical representation length across represented items, including diagnostic policy markers when they fit.</summary>
     public int MaxAggregateRepresentationLength
     {
         get => _maxAggregateRepresentationLength;
