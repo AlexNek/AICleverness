@@ -16,6 +16,8 @@ namespace AiCleverness.Runtime;
 [JsonSerializable(typeof(List<DecisionTransition>))]
 [JsonSerializable(typeof(DecisionNodeVisitedEvent))]
 [JsonSerializable(typeof(DecisionActionCompletedEvent))]
+[JsonSerializable(typeof(DecisionActionCompletedBusEvent))]
+[JsonSerializable(typeof(DecisionActionDataSummary))]
 [JsonSerializable(typeof(DecisionClassificationCompletedEvent))]
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(Dictionary<string, object>))]

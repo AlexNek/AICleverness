@@ -135,6 +135,47 @@ public sealed class DecisionActionDataSummaryTests
         summary.Types[0].Should().HaveLength(80);
     }
 
+    [Fact]
+    public void Constructor_CopiesCallerOwnedLists()
+    {
+        // Arrange
+        var types = new List<string> { "original-type" };
+        var previews = new List<string> { "original-preview" };
+        var summary = new DecisionActionDataSummary(1, types, previews);
+
+        // Act
+        types[0] = "changed-type";
+        previews[0] = "changed-preview";
+        types.Add("another-type");
+        previews.Add("another-preview");
+
+        // Assert
+        summary.Types.Should().Equal("original-type");
+        summary.ContentPreviews.Should().Equal("original-preview");
+    }
+
+    [Fact]
+    public void WithExpression_CopiesReplacementLists()
+    {
+        // Arrange
+        var replacementTypes = new List<string> { "replacement-type" };
+        var replacementPreviews = new List<string> { "replacement-preview" };
+        var summary = new DecisionActionDataSummary(1, ["original-type"], ["original-preview"]);
+
+        // Act
+        var updated = summary with
+        {
+            Types = replacementTypes,
+            ContentPreviews = replacementPreviews
+        };
+        replacementTypes[0] = "changed-type";
+        replacementPreviews[0] = "changed-preview";
+
+        // Assert
+        updated.Types.Should().Equal("replacement-type");
+        updated.ContentPreviews.Should().Equal("replacement-preview");
+    }
+
     private static DecisionData CreateData(string type, string content)
         => new()
         {

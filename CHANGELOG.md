@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Decision-tree action-completed bus events now include an optional bounded produced-data summary with item counts, distinct types, and content previews, while preserving the existing event constructor and transcript handling.
+- Decision-tree action-completed bus events now include an optional bounded produced-data summary with item counts, distinct types, and content previews, while preserving the existing event constructor and transcript handling; summaries defensively copy caller-provided collections, and decision-data policy markers remain finite and within the configured aggregate representation limit when they can fit.
 - `LlmResponse` now carries an optional `ReasoningContent` field so provider-supplied chain-of-thought reasoning (e.g. DeepSeek `reasoning_content`) flows through the runtime for observers, transcripts, and debug output. The field defaults to `null`, is purely informational, and does not change executor, planner, or tool-loop behavior; existing callers remain source- and binary-compatible.
 
 ### Changed

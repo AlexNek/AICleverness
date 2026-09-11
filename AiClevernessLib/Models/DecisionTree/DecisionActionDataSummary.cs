@@ -3,11 +3,45 @@ using System.Collections.ObjectModel;
 namespace AiCleverness.Models.DecisionTree;
 
 /// <summary>Bounded diagnostic information about data produced by a decision action.</summary>
-public sealed record DecisionActionDataSummary(
-    int ItemCount,
-    IReadOnlyList<string> Types,
-    IReadOnlyList<string> ContentPreviews)
+public sealed record DecisionActionDataSummary
 {
+    private IReadOnlyList<string> _types = Array.Empty<string>();
+    private IReadOnlyList<string> _contentPreviews = Array.Empty<string>();
+
+    public DecisionActionDataSummary(
+        int itemCount,
+        IReadOnlyList<string> types,
+        IReadOnlyList<string> contentPreviews)
+    {
+        ItemCount = itemCount;
+        Types = types;
+        ContentPreviews = contentPreviews;
+    }
+
+    public int ItemCount { get; init; }
+
+    public IReadOnlyList<string> Types
+    {
+        get => _types;
+        init => _types = Copy(value);
+    }
+
+    public IReadOnlyList<string> ContentPreviews
+    {
+        get => _contentPreviews;
+        init => _contentPreviews = Copy(value);
+    }
+
+    public void Deconstruct(
+        out int itemCount,
+        out IReadOnlyList<string> types,
+        out IReadOnlyList<string> contentPreviews)
+    {
+        itemCount = ItemCount;
+        types = Types;
+        contentPreviews = ContentPreviews;
+    }
+
     private const int MaxPreviewItems = 5;
     private const int MaxPreviewLength = 80;
     private const int MaxTypeItems = 10;
@@ -32,10 +66,13 @@ public sealed record DecisionActionDataSummary(
         for (var index = 0; index < data.Count && previews.Count < MaxPreviewItems; index++)
             previews.Add(Truncate(data[index].Content, MaxPreviewLength));
 
-        return new DecisionActionDataSummary(
-            data.Count,
-            new ReadOnlyCollection<string>(types),
-            new ReadOnlyCollection<string>(previews));
+        return new DecisionActionDataSummary(data.Count, types, previews);
+    }
+
+    private static IReadOnlyList<string> Copy(IReadOnlyList<string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return new ReadOnlyCollection<string>(values.ToArray());
     }
 
     private static string Truncate(string value, int maxLength)

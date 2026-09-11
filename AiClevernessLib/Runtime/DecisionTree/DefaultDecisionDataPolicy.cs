@@ -87,18 +87,31 @@ public sealed class DefaultDecisionDataPolicy : IDecisionDataPolicy
 
         if (omitted > 0 || perItemTruncated > 0 || aggregateTruncated > 0)
         {
-            selected.Add(
-                new DecisionData
-                {
-                    Id = MarkerId,
-                    Source = Limit(MarkerSource, _options.MaxFieldLength, "[source truncated]"),
-                    Type = Limit(MarkerType, _options.MaxFieldLength, "[type truncated]"),
-                    Content = CreateMarkerContent(
-                        omitted,
-                        perItemTruncated,
-                        aggregateTruncated,
-                        _options.MaxContentLengthPerItem)
-                });
+            var marker = new DecisionData
+            {
+                Id = MarkerId,
+                Source = Limit(MarkerSource, _options.MaxFieldLength, "[source truncated]"),
+                Type = Limit(MarkerType, _options.MaxFieldLength, "[type truncated]"),
+                Content = string.Empty
+            };
+            var markerSeparatorLength = selected.Count == 0 ? 0 : 2;
+            var markerFixedLength = CanonicalRepresentationLength(marker, string.Empty);
+            var markerContentLimit = _options.MaxAggregateRepresentationLength
+                - aggregateLength
+                - markerSeparatorLength
+                - markerFixedLength;
+            if (markerContentLimit >= 0)
+            {
+                selected.Add(
+                    marker with
+                    {
+                        Content = CreateMarkerContent(
+                            omitted,
+                            perItemTruncated,
+                            aggregateTruncated,
+                            Math.Min(_options.MaxContentLengthPerItem, markerContentLimit))
+                    });
+            }
         }
 
         return new DecisionDataSelection(
@@ -142,16 +155,17 @@ public sealed class DefaultDecisionDataPolicy : IDecisionDataPolicy
         {
             var baseMarkerKey = "[metadata entries omitted]";
             var markerKey = Limit(baseMarkerKey, _options.MaxMetadataKeyLength, "[metadata omitted]");
-            
-            // Generate a unique marker key if the base key already exists in bounded
+
+            // Try numbered keys, but stop if truncation makes a distinct key impossible.
             var uniqueKey = markerKey;
             var counter = 1;
-            while (bounded.ContainsKey(uniqueKey))
+            var attemptedKeys = new HashSet<string>(StringComparer.Ordinal);
+            while (bounded.ContainsKey(uniqueKey) && attemptedKeys.Add(uniqueKey))
             {
                 uniqueKey = Limit($"{baseMarkerKey} {counter}", _options.MaxMetadataKeyLength, $"[metadata omitted {counter}]");
                 counter++;
             }
-            
+
             var message = collisionCount > 0
                 ? $"{omitted}; collisions {collisionCount}"
                 : omitted.ToString(CultureInfo.InvariantCulture);

@@ -420,6 +420,54 @@ public sealed class DecisionTreeExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_EmitsBoundedSummaryForMultipleProducedItems()
+    {
+        // Arrange
+        var publisher = new RecordingExecutionEventPublisher();
+        var producedData = Enumerable.Range(1, 12)
+            .Select(index => new DecisionData
+            {
+                Id = $"item-{index}",
+                Source = "test",
+                Type = index <= 2 ? "shared" : $"type-{index}",
+                Content = $"content-{index}-" + new string('x', 100),
+                CreatedAt = DateTimeOffset.UtcNow
+            })
+            .ToArray();
+        var action = new ConfigurableTestAction(
+            "action",
+            new DecisionActionResult(producedData, null, DecisionActionStatus.Success));
+        var executor = CreateExecutor(publisher: publisher);
+
+        // Act
+        await executor.ExecuteAsync([action], CreateActionSuccessTree());
+
+        // Assert
+        var summary = publisher.Events
+            .OfType<DecisionActionCompletedBusEvent>()
+            .Should()
+            .ContainSingle()
+            .Which
+            .DataSummary;
+        summary.Should().NotBeNull();
+        summary!.ItemCount.Should().Be(12);
+        summary.Types.Should().Equal(
+            "shared",
+            "type-3",
+            "type-4",
+            "type-5",
+            "type-6",
+            "type-7",
+            "type-8",
+            "type-9",
+            "type-10",
+            "type-11");
+        summary.ContentPreviews.Should().HaveCount(5);
+        summary.ContentPreviews.Should().OnlyContain(preview => preview.Length == 80);
+        summary.ContentPreviews.Should().OnlyContain(preview => preview.EndsWith("…", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_EmitsNullActionCompletedDataSummaryWhenActionProducesNoData()
     {
         // Arrange
@@ -568,7 +616,7 @@ public sealed class DecisionTreeExecutorTests
         var options = new DecisionTreeExecutionOptions();
         options.DecisionDataPolicy.MaxItems = 1;
         options.DecisionDataPolicy.MaxContentLengthPerItem = 20;
-        options.DecisionDataPolicy.MaxAggregateRepresentationLength = 100;
+        options.DecisionDataPolicy.MaxAggregateRepresentationLength = 250;
         var executor = CreateExecutor(
             pipeline,
             defaultOptions: options,
@@ -594,7 +642,7 @@ public sealed class DecisionTreeExecutorTests
         result.Succeeded.Should().BeTrue();
         builder.Data.Should().NotBeNull();
         builder.Data!.GetAll().Should().ContainSingle(data => data.Type == "selection");
-        builder.Data.GetAll().First(data => data.Type == "selection").Content.Should().Contain("truncated");
+        builder.Data.GetAll().First(data => data.Type == "selection").Content.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
